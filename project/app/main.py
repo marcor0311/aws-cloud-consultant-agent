@@ -13,7 +13,7 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# Middleware CORS (por si habrá frontend)
+# Permitir solicitudes cross-origin a la API.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # En prod esto se cambia
