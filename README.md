@@ -1,37 +1,18 @@
-# Proyecto Multiagentes para Generacion de Terraform en AWS
+# Proyecto multiagente para generar Terraform en AWS
 
-![Frontend del proyecto](docs/frontend.png)
+Este repositorio contiene una API en FastAPI que recibe solicitudes estructuradas, genera infraestructura como código (IaC) y empaqueta el proyecto resultante en un archivo ZIP.
 
-## Descripcion
+## Flujo de la API
 
-Este repositorio implementa una solucion para generar proyectos Terraform en AWS a partir de un request estructurado enviado desde un frontend web.
+1. Recibe una solicitud mediante `POST /api/agent`.
+2. Valida y normaliza los datos.
+3. Ejecuta el flujo de agentes de planificación, recuperación, generación y construcción.
+4. Genera los archivos Terraform y copia los módulos locales requeridos.
+5. Guarda un ZIP descargable en `project/generated/`.
 
-La plataforma esta dividida en dos partes:
+## Solicitud de ejemplo
 
-- `PSWE-01`: frontend en React/Vite para construir y enviar el payload
-- `project`: backend en FastAPI para procesar la solicitud, generar IaC y empaquetar el resultado con una arquitectura multiagente
-
-## Funcionamiento general
-
-El flujo actual del backend sigue estas etapas:
-
-1. recibe un `POST /api/agent`
-2. valida y normaliza el request
-3. ejecuta un flujo secuencial de agentes
-4. genera archivos Terraform
-5. copia modulos locales cuando corresponde
-6. construye un `.zip` con el proyecto generado
-
-Los agentes principales son:
-
-- `PlannerAgent`
-- `RetrieverAgent`
-- `GeneratorAgent`
-- `BuilderAgent`
-
-## Entrada esperada
-
-El backend acepta el mismo formato que genera hoy el frontend:
+El endpoint acepta este formato:
 
 ```json
 {
@@ -48,47 +29,22 @@ El backend acepta el mismo formato que genera hoy el frontend:
 }
 ```
 
-A partir de `resources`, el backend deriva la estructura interna necesaria para el flujo de generacion.
+`environment` puede ser `dev`, `qa`, `staging` o `prod`. `cloud_provider` actualmente debe ser `aws` y se requiere al menos un recurso.
 
-## Recursos y modulos
+## Recursos y módulos
 
-El proyecto ya incluye soporte local para modulo S3 en:
-
-- `project/app/modules/aws/s3-bucket`
-
-Cuando la solicitud incluye un recurso `s3`, el sistema genera el proyecto Terraform usando ese modulo y lo copia dentro del output final.
-
-Los proyectos generados se escriben en:
-
-- `project/generated/`
-
-## Usando modules
-
-### S3 Bucket
-
-El módulo oficial para crear buckets en AWS S3 (`terraform-aws-modules/s3-bucket/aws`) incluye **más de 80 variables** posibles para configurar detalles como versioning, ACLs, políticas, cifrado, logging, CORS, lifecycle rules, replicación, entre muchas otras opciones avanzadas.
+El backend incluye un módulo local para buckets S3 en `project/app/modules/aws/s3-bucket`. Cuando la solicitud incluye un recurso `s3`, el proyecto Terraform generado incorpora ese módulo.
 
 ## API
 
-### `GET /`
-
-Verificacion basica del backend.
-
-### `POST /api/agent`
-
-Procesa el request y devuelve el resultado del flujo de generacion.
-
-### `GET /api/agent/download/{project_name}`
-
-Devuelve el archivo `.zip` generado para el proyecto solicitado.
+- `GET /`: verifica que el backend está disponible.
+- `POST /api/agent`: procesa la solicitud y devuelve el resultado del flujo de generación.
+- `GET /api/agent/download/{project_name}`: descarga el ZIP generado para el proyecto solicitado.
+- `GET /docs`: abre la documentación interactiva de FastAPI.
 
 ## Estructura principal
 
 ```text
-PSWE-01/
-  src/
-  .env.example
-
 project/
   app/
     agents/
@@ -108,17 +64,7 @@ project/
 
 ## Variables de entorno
 
-### Backend
-
-Archivo local:
-
-- `project/.env`
-
-Plantilla:
-
-- `project/.env.example`
-
-Variables esperadas:
+Copia `project/.env.example` a `project/.env` y configura las credenciales de Azure OpenAI:
 
 ```env
 AZURE_OPENAI_ENDPOINT="https://your-resource-name.cognitiveservices.azure.com/"
@@ -127,60 +73,22 @@ AZURE_OPENAI_DEPLOYMENT="gpt-5.4-mini"
 AZURE_OPENAI_API_VERSION="2024-12-01-preview"
 ```
 
-### Frontend
+No agregues el archivo `.env` real al control de versiones.
 
-Archivo local:
-
-- `PSWE-01/.env`
-
-Plantilla:
-
-- `PSWE-01/.env.example`
-
-Variable principal:
-
-```env
-VITE_API_BASE_URL=http://127.0.0.1:8000
-```
-
-## Como ejecutar el backend
+## Ejecutar el backend
 
 Desde la carpeta `project`:
 
 ```bash
+python -m venv venv
 source venv/bin/activate
 pip install -r app/requirements.txt
 python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Backend disponible en:
+El backend estará disponible en `http://127.0.0.1:8000` y su documentación interactiva en `http://127.0.0.1:8000/docs`.
 
-```text
-http://127.0.0.1:8000
-```
-
-Documentacion interactiva:
-
-```text
-http://127.0.0.1:8000/docs
-```
-
-## Como ejecutar el frontend
-
-Desde la carpeta `PSWE-01`:
-
-```bash
-npm install
-npm run dev
-```
-
-La aplicacion corre normalmente en:
-
-```text
-http://localhost:5173
-```
-
-## Validacion manual de Terraform
+## Validar Terraform generado
 
 Desde la carpeta de un proyecto generado:
 
@@ -191,22 +99,10 @@ terraform fmt -check
 terraform validate
 ```
 
-Si quieres inspeccionar el plan:
+Para inspeccionar el plan:
 
 ```bash
 terraform plan
 ```
 
-## Notas
-
-- El backend utiliza Azure OpenAI mediante variables de entorno configuradas localmente.
-- Los archivos `.env` reales no deben versionarse; el repositorio incluye archivos `.env.example`.
-- La validacion de Terraform se realiza manualmente desde terminal sobre el proyecto generado.
-
-## Referencia visual
-
-El siguiente diagrama resume la idea general de arquitectura y el enfoque planteado para el desarrollo:
-
-![Diagrama del proyecto](docs/diagrama.png)
-
-En la implementacion actual, el resultado final del flujo es un proyecto Terraform generado y empaquetado, mientras que la validacion de Terraform se ejecuta manualmente desde consola.
+La validación de Terraform se ejecuta manualmente sobre cada proyecto generado.
