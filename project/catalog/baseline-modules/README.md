@@ -13,3 +13,15 @@ The profiles are starting configurations, not guaranteed capacity tiers. Use mea
 ## Production use gates
 
 Before a module or profile is approved for production: pin Terraform/provider/module versions; configure remote encrypted state and approved identity; run formatting, initialization, validation, plan, module tests, security/policy scans, and cost review in CI; review the plan and architecture; record approval and rollback/recovery ownership. These catalog entries remain drafts until evidence is recorded. Example directories are not production workspaces and do not configure an organization's backend or credentials.
+
+## MCP access
+
+The project's read-only Consultant MCP exposes this catalog through three tools:
+
+| Tool | Use |
+|---|---|
+| `list_baseline_modules` | List resource baselines, version status, and their named technical profiles. |
+| `get_baseline_module` | Read one module's purpose, profile catalog, version notes, and audit record. Accepts an optional cataloged version. |
+| `get_baseline_profile` | Read one profile's class, pinned module version, documentation, and Terraform example files. |
+
+The server reads this directory at runtime. Run it from `project/` with `python -m app.mcp_server`; it serves Streamable HTTP on port `8001`. These tools only read catalog files. They do not run Terraform, access AWS credentials, or apply infrastructure. Draft status and production review gates are included in responses so an agent can distinguish a reference profile from an approved production baseline.

@@ -3,3 +3,5 @@ uvicorn
 pydantic
 python-dotenv
 openai
+mcp>=1.12,<2.0
+PyYAML>=6,<7
