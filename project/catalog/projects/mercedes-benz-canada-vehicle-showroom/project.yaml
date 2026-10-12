@@ -24,3 +24,17 @@ entrypoints:
   current_diagram: versions/1.1.0/architecture.drawio
   current_terraform: versions/1.1.0/terraform/
   current_audit: versions/1.1.0/audit-record.yaml
+catalog_id: mercedes-canada-vehicle-showcase
+company_id: mercedes-benz-canada
+title: "Exhibición digital de vehículos y contacto comercial"
+short_description: "Un sitio para explorar modelos, conocer la marca y contactar a Mercedes-Benz Canada."
+overview: "El proyecto plantea una experiencia web para que posibles clientes exploren vehículos, conozcan la empresa y soliciten información comercial. El expediente registra capacidades estimadas que no deben presentarse como telemetría histórica."
+start_date: "2025-10"
+date_confidence: illustrative
+visibility: public
+documentation_certainty: "historical_reference; documentation incomplete; production telemetry not verified"
+tags: [automotive, showcase, lead-generation, web]
+suggested_questions:
+  - "¿Qué puede explorar un posible cliente?"
+  - "¿Qué capacidad de tráfico se estimó?"
+  - "¿Cómo se contacta a un concesionario?"

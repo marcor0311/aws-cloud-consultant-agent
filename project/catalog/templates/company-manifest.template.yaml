@@ -1,0 +1,7 @@
+company_id: <stable-company-id>
+name: "<canonical company name>"
+country: "<country>"
+location: "<city, region>"
+industry: "<industry>"
+logo: null # Set only to an approved, repository-relative official asset path.
+logo_status: not_provided # official | not_provided

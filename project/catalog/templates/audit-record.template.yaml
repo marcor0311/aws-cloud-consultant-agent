@@ -1,0 +1,18 @@
+record_type: project_documentation_version
+project_id: <project-id>
+version: "1.0.0"
+source_type: consulting_project_reference
+status: current_documentation_snapshot # histórico: historical_documentation_snapshot
+diagram: architecture.drawio
+baseline_modules: []
+documentation_gaps: []
+catalog_terraform: {fmt: not_run, validate: not_run, plan: not_run}
+deployed_environment_terraform_status: not_recorded
+catalog_security_review: not_run
+deployed_environment_security_review: not_recorded
+documentation_approval: not_recorded
+deployed_environment_status: in_production
+deployed_release: not_recorded
+as_built_verification: not_recorded
+
+baseline_profiles: []

@@ -1,0 +1,35 @@
+project_id: <project-id>
+project_title: "<título descriptivo del sistema y la organización>"
+catalog_id: <stable-public-catalog-id>
+company_id: <company-id>
+title: "<título conciso del sistema>"
+short_description: "<descripción clara para la tarjeta de timeline>"
+overview: "<resumen breve orientado a usuarios y necesidad>"
+start_date: "YYYY-MM"
+date_confidence: illustrative # illustrative | confirmed | not_recorded
+visibility: public
+documentation_certainty: "historical_reference; documentation incomplete"
+tags: []
+suggested_questions: []
+project_type: consulting_project_reference
+organization: "<organización>"
+location: "<ciudad, región, país>"
+status: historical_reference
+production_status: in_production
+production_period: not_recorded
+as_built_documentation: incomplete
+business_owner: not_recorded
+latest_version: "1.0.0" # versión documental del catálogo
+deployed_version: not_recorded
+documentation_approval_status: not_recorded
+versions:
+  - version: "1.0.0"
+    status: current_documentation_snapshot
+entrypoints:
+  project_overview: README.md
+  brief: project-brief.md
+  change_log: CHANGELOG.md
+  current_architecture: versions/1.0.0/architecture.md
+  current_diagram: versions/1.0.0/architecture.drawio
+  current_terraform: versions/1.0.0/terraform/
+  current_audit: versions/1.0.0/audit-record.yaml

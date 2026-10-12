@@ -24,3 +24,17 @@ entrypoints:
   current_diagram: versions/1.1.0/architecture.drawio
   current_terraform: versions/1.1.0/terraform/
   current_audit: versions/1.1.0/audit-record.yaml
+catalog_id: inter-miami-merchandise-store
+company_id: inter-miami-cf
+title: "Comercio electrónico de merchandising oficial"
+short_description: "Una tienda en línea para descubrir y comprar ropa, uniformes y accesorios oficiales del club."
+overview: "El proyecto plantea una tienda digital para que los aficionados descubran productos oficiales, revisen disponibilidad y realicen pedidos. El expediente estima hasta 4.000 sesiones simultáneas; son cifras de planeación, no telemetría histórica verificada."
+start_date: "2025-03"
+date_confidence: illustrative
+visibility: public
+documentation_certainty: "historical_reference; documentation incomplete; production telemetry not verified"
+tags: [e-commerce, merchandising, sports, retail]
+suggested_questions:
+  - "¿Qué puede hacer la tienda para los aficionados?"
+  - "¿Qué capacidad de usuarios se estimó?"
+  - "¿Cómo se procesan los pedidos?"
