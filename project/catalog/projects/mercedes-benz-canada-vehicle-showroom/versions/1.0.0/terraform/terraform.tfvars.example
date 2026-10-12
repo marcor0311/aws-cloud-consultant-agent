@@ -1,0 +1,6 @@
+project_name = "mercedes-benz-canada-vehicle-showroom"
+environment = "dev"
+region = "ca-central-1"
+lambda_function_name = "replace-with-existing-mercedes-lead-api"
+lambda_invoke_arn = "arn:aws:lambda:ca-central-1:123456789012:function:replace-with-existing-mercedes-lead-api"
+bucket_name = "replace-with-unique-mercedes-showroom-dev"
