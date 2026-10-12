@@ -1,0 +1,6 @@
+project_name = "alpine-pass-valais-skipass-platform"
+environment = "dev"
+region = "eu-central-2"
+lambda_function_name = "replace-with-existing-ski-reservations-api"
+lambda_invoke_arn = "arn:aws:lambda:eu-central-2:123456789012:function:replace-with-existing-ski-reservations-api"
+bucket_name = "replace-with-unique-alpine-skipass-dev"

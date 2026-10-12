@@ -1,0 +1,26 @@
+project_id: verbier-4-vallees-skipass-operations
+project_title: "Plataforma SkiPass e integración operativa de cinco estaciones de Verbier 4 Vallées"
+project_type: consulting_project_reference
+organization: "Verbier 4 Vallées y operadores participantes; patrocinador y gobierno multioperador no registrados en este expediente"
+location: "Cantón de Valais, Suiza"
+status: historical_reference
+production_status: in_production
+production_period: not_recorded
+as_built_documentation: incomplete
+business_owner: not_recorded
+latest_version: "1.1.0" # Versión documental del catálogo, no release de producción
+deployed_version: not_recorded
+documentation_approval_status: not_recorded
+versions:
+  - version: "1.0.0"
+    status: historical_documentation_snapshot
+  - version: "1.1.0"
+    status: current_documentation_snapshot
+entrypoints:
+  project_overview: README.md
+  brief: project-brief.md
+  change_log: CHANGELOG.md
+  current_architecture: versions/1.1.0/architecture.md
+  current_diagram: versions/1.1.0/architecture.drawio
+  current_terraform: versions/1.1.0/terraform/
+  current_audit: versions/1.1.0/audit-record.yaml
