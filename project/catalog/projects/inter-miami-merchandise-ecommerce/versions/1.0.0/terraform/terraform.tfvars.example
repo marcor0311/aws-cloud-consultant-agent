@@ -1,0 +1,6 @@
+project_name = "inter-miami-merchandise-ecommerce"
+environment = "dev"
+region = "us-east-1"
+lambda_function_name = "replace-with-existing-ecommerce-api"
+lambda_invoke_arn = "arn:aws:lambda:us-east-1:123456789012:function:replace-with-existing-ecommerce-api"
+bucket_name = "replace-with-unique-intermiami-merch-dev"

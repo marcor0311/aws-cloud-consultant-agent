@@ -1,0 +1,27 @@
+record_type: project_documentation_version
+project_id: inter-miami-merchandise-ecommerce
+version: 1.1.0
+source_type: consulting_project_reference
+status: current_documentation_snapshot
+diagram: architecture.drawio
+baseline_modules: [aws-http-api 1.1.0, aws-private-object-storage 1.1.0, aws-dynamodb-single-table 1.1.0]
+documentation_gaps: [historical_traffic_and_team_source_not_recorded, as_built_external_integrations_not_recorded]
+catalog_terraform: {fmt: passed, validate: not_run, plan: not_run}
+deployed_environment_terraform_status: not_recorded
+catalog_security_review: not_run
+deployed_environment_security_review: not_recorded
+documentation_approval: not_recorded
+deployed_environment_status: in_production
+deployed_release: not_recorded
+as_built_verification: not_recorded
+
+baseline_profiles:
+  - module_id: aws-http-api
+    module_version: 1.1.0
+    profile_id: throttling_500rps_burst_1000
+  - module_id: aws-private-object-storage
+    module_version: 1.1.0
+    profile_id: private_versioned_365d
+  - module_id: aws-dynamodb-single-table
+    module_version: 1.1.0
+    profile_id: on_demand
