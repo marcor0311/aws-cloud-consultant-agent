@@ -1,0 +1,8 @@
+module_id: aws-private-object-storage
+purpose: Private S3 bucket baseline with TLS enforcement, encryption, and lifecycle profiles.
+latest_draft: 1.1.0
+approved_version: null
+versions:
+  - 1.0.0
+  - 1.1.0
+profile_examples: examples/profiles/

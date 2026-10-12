@@ -1,0 +1,8 @@
+module_id: aws-http-api
+purpose: API Gateway HTTP API with Lambda proxy integration, access logs, and throttling profiles.
+latest_draft: 1.1.0
+approved_version: null
+versions:
+  - 1.0.0
+  - 1.1.0
+profile_examples: examples/profiles/

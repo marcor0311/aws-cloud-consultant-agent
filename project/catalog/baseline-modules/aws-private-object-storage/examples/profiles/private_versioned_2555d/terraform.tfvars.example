@@ -1,0 +1,8 @@
+aws_region = "us-east-1"
+bucket_name = "replace-with-globally-unique-bucket-name"
+cors_allowed_origins = []
+tags = {
+  Environment = "example"
+  ManagedBy   = "Terraform"
+}
+kms_key_arn = null # Set an approved key ARN when required.

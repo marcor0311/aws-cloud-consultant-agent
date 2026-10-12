@@ -1,0 +1,14 @@
+record_type: baseline_module_version
+module_id: aws-dynamodb-single-table
+version: 1.1.0
+status: draft
+change_summary: "Adds validated capacity settings and optional TTL, deletion protection, and customer-managed KMS encryption."
+source_commit: null
+security_review: pending
+terraform_fmt: passed
+terraform_validate: not_run
+terraform_plan: not_run
+reviewer: null
+approval_status: pending_human_review
+approved_by: null
+approved_at: null

@@ -1,0 +1,8 @@
+module_id: aws-dynamodb-single-table
+purpose: DynamoDB single-table resource with recovery controls and on-demand/provisioned capacity profiles.
+latest_draft: 1.1.0
+approved_version: null
+versions:
+  - 1.0.0
+  - 1.1.0
+profile_examples: examples/profiles/

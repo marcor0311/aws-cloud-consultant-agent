@@ -1,0 +1,9 @@
+aws_region           = "us-east-1"
+api_name             = "replace-with-approved-api-name"
+lambda_function_name = "replace-with-existing-lambda-name"
+lambda_invoke_arn    = "arn:aws:lambda:us-east-1:123456789012:function:replace-with-existing-lambda-name"
+access_log_retention_days = 30
+tags = {
+  Environment = "example"
+  ManagedBy   = "Terraform"
+}
