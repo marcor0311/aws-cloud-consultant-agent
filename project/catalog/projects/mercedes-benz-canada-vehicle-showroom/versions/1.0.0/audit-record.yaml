@@ -1,0 +1,16 @@
+record_type: project_documentation_version
+project_id: mercedes-benz-canada-vehicle-showroom
+version: 1.0.0
+source_type: consulting_project_reference
+status: historical_documentation_snapshot
+diagram: architecture.drawio
+baseline_modules: [aws-http-api 1.0.0, aws-private-object-storage 1.0.0, aws-dynamodb-single-table 1.0.0]
+documentation_gaps: [historical_traffic_and_team_source_not_recorded, as_built_external_integrations_not_recorded]
+catalog_terraform: {fmt: passed, validate: not_run, plan: not_run}
+deployed_environment_terraform_status: not_recorded
+catalog_security_review: not_run
+deployed_environment_security_review: not_recorded
+documentation_approval: not_recorded
+deployed_environment_status: in_production
+deployed_release: not_recorded
+as_built_verification: not_recorded
