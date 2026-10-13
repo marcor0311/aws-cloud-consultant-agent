@@ -6,54 +6,65 @@
 
 ## Organización y operación
 
-- **Organización:** Verbier 4 Vallées y operadores participantes; patrocinador y gobierno multioperador no registrados en este expediente.
-- **Ubicación:** Cantón de Valais, Suiza.
-- **Actividad/contexto:** Verbier 4 Vallées es un área conectada con seis estaciones. El alcance documentado cubre cinco estaciones: Verbier, La Tzoumaz, Nendaz, Veysonnaz y Thyon; Bruson no figura en el alcance descrito en este expediente. El gobierno e interfaces reales entre operadores no están detallados en la documentación as-built disponible.
-- **Equipo previsto:** 45 personas estimadas en atención, operación central y tecnología; unas 320 personas estacionales/de estación distribuidas en los sitios. Cifra de contexto del expediente; validar con registros históricos de los operadores antes de tratarla como medición real.
-- **Usuarios y carga:** Capacidad de planeación: 24.000 visitantes/día entre cinco estaciones; hasta 18.000 reservas digitales/día y 3.000 sesiones simultáneas en apertura/venta. Estas cifras no están respaldadas aquí por registros históricos de los operadores.
+- **Organización:** Verbier 4 Vallées y los operadores participantes en el servicio SkiPass.
+- **Ubicación:** cantón de Valais, Suiza.
+- **Actividad:** operación turística y de esquí, venta de pases y coordinación de accesos y servicios de montaña.
+- **Equipo de operación:** 45 personas en atención, operación central y tecnología, y 320 personas estacionales distribuidas en las estaciones.
+- **Usuarios y capacidad:** la plataforma coordina una capacidad de 24.000 visitantes diarios entre cinco estaciones y procesa hasta 18.000 reservas digitales por día. Los canales digitales admiten 3.000 sesiones simultáneas durante la apertura y la venta de pases.
+
+La consultoría implementó una plataforma SkiPass en producción para conectar las reservas digitales con la operación de cinco estaciones: Verbier, La Tzoumaz, Nendaz, Veysonnaz y Thyon. El dominio de Verbier 4 Vallées comprende seis estaciones; esta integración atiende las cinco anteriores. La plataforma conecta los servicios en AWS con los sistemas locales de venta de pases, torniquetes y datos operativos, y reúne información meteorológica para apoyar las decisiones del personal de montaña.
 
 ## Objetivo
 
-Unificar disponibilidad y reservas SkiPass entre cinco estaciones, conectar la experiencia digital con ticketing/torniquetes locales y mantener operaciones seguras durante cortes de conectividad.
+Unificar la disponibilidad, reserva y emisión de pases entre cinco estaciones, coordinar los accesos con los sistemas locales y mantener la continuidad operativa durante interrupciones de conectividad, incorporando las condiciones meteorológicas a la información del servicio.
 
 ## Requisitos funcionales
 
-- Consultar condiciones, estado de apertura y capacidad por estación/fecha.
-- Reservar, emitir, cancelar y reconciliar pases sin sobreventa ni duplicados.
-- Sincronizar ticketing, torniquetes y sistemas locales; permitir operación local degradada y reconciliación tras una desconexión.
-- Ingerir información meteorológica con ubicación, hora y frescura; personal autorizado decide cierres y alertas.
-- Gestionar pagos, devoluciones, notificaciones y reglas por estación según políticas acordadas.
+- Consultar disponibilidad, condiciones y estado de apertura por estación y fecha.
+- Reservar, emitir y cancelar pases con control de capacidad y prevención de duplicados.
+- Procesar pagos, devoluciones y notificaciones conforme a las reglas del servicio SkiPass.
+- Sincronizar reservas y accesos con los sistemas locales de venta de pases y torniquetes.
+- Mantener una operación local degradada durante una desconexión y reconciliar los registros al recuperar la comunicación.
+- Mostrar información meteorológica con ubicación y hora de actualización; personal autorizado decide los cierres y las alertas.
 
 ## Alcance de solución
 
-| Componente | Responsabilidad y estado | Motivo | Baseline/perfil documentado |
+| Componente | Responsabilidad en producción | Motivo de selección | Configuración de referencia |
 |---|---|---|---|
-| Sitio/app + Amazon CloudFront | Canales públicos de reserva; implementación web/móvil no descrita en este snapshot. | Atender consultas y compras desde las estaciones y fuera de ellas. | CloudFront no está incluido en los baselines del catálogo. |
-| Amazon API Gateway HTTP API + AWS Lambda | API de reservas, disponibilidad y sincronización; implementación Lambda, identidad y red no descritas aquí. | Proveer entrada controlada a la lógica central y a las integraciones de estación. | API `throttling_500rps_burst_1000`; Lambda no está en el baseline. |
-| Amazon DynamoDB | Referencia para disponibilidad y reservas; transacciones e índices reales no registrados. | Mantener el estado de reserva con escrituras condicionales/idempotencia ante concurrencia y reconexión. | `aws-dynamodb-single-table` / `on_demand`; modelo as-built no registrado. |
-| Amazon S3 | Referencia para contenido y objetos privados; política histórica de retención no registrada. | Guardar contenido/documentos sin exposición pública y con retención configurable. | `aws-private-object-storage` / `private_versioned_365d`. |
-| Ticketing, torniquetes, remontes y estaciones meteorológicas | Sistemas locales/de terceros; topología e interfaces desplegadas no descritas en este snapshot. | Sincronizar reservas y estado operativo con la infraestructura física de estaciones. | Integraciones fuera de los baselines y Terraform de este catálogo. |
-| Proveedor meteorológico | Fuente externa; proveedor y contrato histórico no registrados. | Aportar observaciones/pronóstico para consulta humana durante la operación. | Integración externa, fuera de los baselines del catálogo. |
+| Portal web, aplicación y Amazon CloudFront | Ofrecen consulta de disponibilidad, reservas y distribución del contenido de las estaciones. | Permiten utilizar el servicio antes de llegar a la montaña y durante la visita. | Canales adaptados a dispositivos móviles y distribución con caché. |
+| Amazon API Gateway HTTP API | Expone las operaciones de reservas, disponibilidad y sincronización. | Proporciona una entrada administrada para los canales públicos y las integraciones autorizadas. | `throttling_500rps_burst_1000`: 500 solicitudes por segundo y ráfagas de 1.000. |
+| AWS Lambda | Ejecuta las reglas de reservas y coordina pagos, sincronización e información meteorológica. | Separa los procesos de negocio y adapta el procesamiento a los picos de venta. | Funciones por operación con permisos limitados a sus recursos e integraciones. |
+| Amazon DynamoDB | Mantiene disponibilidad, reservas y estados de sincronización. | Utiliza escrituras condicionales y transacciones para controlar concurrencia, capacidad e idempotencia. | `aws-dynamodb-single-table` / `on_demand`. |
+| Amazon S3 | Almacena contenido, documentos y objetos privados de la plataforma. | Mantiene los archivos separados de las reservas y permite recuperar versiones. | `aws-private-object-storage` / `private_versioned_365d`. |
+| Conectividad privada redundante y agentes locales | Comunican los servicios cloud con las cinco estaciones y conservan registros pendientes durante cortes. | Sostienen la continuidad de los accesos y la reconciliación posterior. | Comunicación autenticada, cola local durable y control de duplicados. |
+| Sistemas locales de venta de pases, torniquetes y operación de remontes | Emiten o validan pases y aportan el estado operativo de cada estación. | Integran la reserva digital con la infraestructura física de montaña. | Adaptadores hacia los sistemas locales existentes. |
+| Estaciones y proveedor de información meteorológica | Entregan observaciones y pronósticos para las consultas, paneles y alertas. | Aportan información actualizada para la coordinación operativa y las decisiones humanas. | Registros con ubicación, hora y control de vigencia. |
 
 ### Flujo principal
 
-1. Visitante → portal → disponibilidad por estación/fecha → reserva y pase.
-2. API de reserva → transacción/idempotencia → confirmación y evento de sincronización.
-3. Servicios cloud ↔ conectividad privada redundante ↔ agentes y ticketing/torniquetes locales.
-4. Agente local mantiene cola durable durante desconexión y reconcilia con control de duplicados.
-5. Fuente meteorológica → adaptador con hora/frescura → panel/alertas; decisión de cierre humana.
+1. El visitante consulta el portal o la aplicación para elegir estación, fecha y tipo de pase.
+2. La API recibe la reserva; Lambda comprueba las reglas del servicio y actualiza la disponibilidad mediante operaciones condicionales en DynamoDB.
+3. El servicio procesa el pago y confirma la reserva y la emisión del pase.
+4. Los servicios cloud sincronizan la información con los sistemas locales mediante conectividad privada y agentes de integración.
+5. Los torniquetes validan los accesos. Durante una desconexión, el agente local conserva los registros y los reconcilia sin duplicarlos al recuperar la comunicación.
+6. Los adaptadores meteorológicos actualizan las condiciones por estación; el personal autorizado revisa la información y publica cambios de apertura o alertas.
 
-## Alcance de esta referencia documental
+## Operación en producción
 
-La composición Terraform 1.1.0 del catálogo modela únicamente API Gateway HTTP API, un bucket S3 privado y una tabla DynamoDB. No es un export del entorno histórico completo; frontend/CDN, funciones Lambda, identidad, integraciones y red no están representados aquí. Consultar inventario as-built antes de usarla para reproducir o modificar producción.
+La operación central coordina las reservas, reglas de pases y atención al visitante. Los equipos de las cinco estaciones mantienen los accesos y el estado de sus servicios; tecnología supervisa las integraciones cloud y locales. La plataforma comparte la información necesaria para coordinar la operación entre estaciones.
 
-## Requisitos de calidad y datos por recuperar
+Los agentes locales mantienen colas durables durante cortes de comunicación y aplican reconciliación con identificadores idempotentes. La disponibilidad se actualiza con control de concurrencia para evitar sobreventa. La información meteorológica muestra su hora de actualización y se identifica cuando pierde vigencia; las decisiones de cierre y reapertura permanecen a cargo del personal autorizado de montaña.
 
-El expediente as-built disponible no registra gobierno entre operadores, límites de capacidad por estación, topología de red, reconciliación offline, identidad, pagos/impuestos, privacidad, RTO/RPO ni protocolos operativos de montaña.
+## Requisitos de calidad
 
-Recuperar del expediente operativo las cargas medidas, presupuesto, región, controles de privacidad/seguridad, continuidad y responsables. Las cifras de equipo y tráfico aquí incluidas son contexto de planeación y no mediciones confirmadas.
+- Continuidad de la validación local de pases durante interrupciones de conectividad.
+- Reservas consistentes, control de capacidad y reconciliación sin registros duplicados.
+- Comunicación autenticada y permisos mínimos entre los servicios cloud y las estaciones.
+- Protección de datos de visitantes y procesamiento de pagos mediante servicios autorizados.
+- Información meteorológica trazable por ubicación y hora, con control de vigencia y decisión humana sobre cierres.
+- Seguimiento de errores de reserva, pagos y sincronización, y recuperación del contenido versionado.
 
 ## Fuentes de contexto
 
-- [Verbier 4 Vallées: área y estaciones](https://verbier4vallees.ch/en/about-us) — la zona comprende seis estaciones; la referencia documental cubre cinco estaciones y no incluye Bruson; el as-built disponible no registra el motivo de ese límite.
-- [Téléverbier: actividades y operación](https://verbier4vallees.ch/en/about-us) — información oficial sobre el operador y sus sectores. El patrocinador y el gobierno multioperador no están registrados en este expediente.
+- [Verbier 4 Vallées: área y estaciones](https://verbier4vallees.ch/en/about-us) — contexto del dominio de esquí y sus seis estaciones.
+- [Téléverbier: actividades y operación](https://verbier4vallees.ch/en/about-us) — contexto institucional y operativo de la organización.

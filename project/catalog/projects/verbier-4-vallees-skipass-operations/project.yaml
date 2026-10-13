@@ -24,3 +24,17 @@ entrypoints:
   current_diagram: versions/1.1.0/architecture.drawio
   current_terraform: versions/1.1.0/terraform/
   current_audit: versions/1.1.0/audit-record.yaml
+catalog_id: verbier-skipass
+company_id: verbier-4-vallees
+title: "Sistema SkiPass y coordinación de cinco estaciones"
+short_description: "Reservas de pases y coordinación operativa entre cinco estaciones de esquí."
+overview: "El proyecto plantea reservas digitales de pases y coordinación entre cinco estaciones, conectando operaciones locales y sistemas centrales. La capacidad documentada es una estimación de planeación, no una medición histórica verificada."
+start_date: "2026-01"
+date_confidence: illustrative
+visibility: public
+documentation_certainty: "historical_reference; documentation incomplete; production telemetry not verified"
+tags: [ski, reservations, multi-site, integration]
+suggested_questions:
+  - "¿Cuántos visitantes diarios debe soportar?"
+  - "¿Cómo conecta las cinco estaciones?"
+  - "¿Qué papel tienen los datos meteorológicos?"
