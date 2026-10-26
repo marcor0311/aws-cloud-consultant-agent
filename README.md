@@ -21,7 +21,7 @@ El trabajo pasa por seis etapas, con una persona responsable y una entrega que p
 
 El caso ilustrativo recorre el trabajo de Stuart, Andrés, Camila y Diego para BMW Canadá: desde la solicitud inicial hasta el informe ejecutivo. FinOps contrasta una estimación de **USD 9.500 mensuales** con un presupuesto aprobado de **USD 10.000**. Son cifras del ejemplo, no una cotización real.
 
-[Ver el video del proceso actual](consultora-60s_2026-10-26_11-37-08.mp4) · [Consultar el guion](Video%20transcripcion/transcripcion.md)
+<video src="consultora-60s_2026-10-26_11-37-08.mp4" controls></video>
 
 ## 3. Transformación propuesta con agentes de IA
 
