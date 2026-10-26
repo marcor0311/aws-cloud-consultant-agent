@@ -19,7 +19,7 @@ El trabajo pasa por seis etapas, con una persona responsable y una entrega que p
 
 ## 2. Video del proceso actual
 
-<video src="https://github.com/user-attachments/assets/685a61ac-e4cb-435d-9bfa-ed9698702a7d" controls></video>
+https://github.com/user-attachments/assets/685a61ac-e4cb-435d-9bfa-ed9698702a7d
 
 ## 3. Transformación propuesta con agentes de IA
 
