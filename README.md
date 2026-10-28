@@ -30,3 +30,9 @@ El diagrama se lee de izquierda a derecha. En cada columna aparecen, de arriba a
 ![Propuesta de transformación con agentes de IA: seis etapas, puestos responsables, agentes y funcionalidades](docs/process-flow.png)
 
 Los ciclos de aclaraciones y ajustes descritos en el proceso actual también aplican a la propuesta. Los nombres y capacidades del diagrama representan el flujo objetivo con agentes; su presencia aquí no acredita que todas las integraciones estén implementadas.
+
+## 4. Oficina virtual
+
+El dashboard permite identificar la etapa del flujo de trabajo en la que se encuentra el agente y el equipo con el que colabora para ese proyecto.
+
+![Vista de la oficina virtual con el agente en el área de Arquitectura](docs/live-dashboard.png)
