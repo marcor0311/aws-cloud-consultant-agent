@@ -1,0 +1,112 @@
+{
+  "date_local": "2026-10-27",
+  "hardware": {
+    "chip": "Apple M3 Pro",
+    "ram_gib": 18,
+    "macos": "15.7.3"
+  },
+  "versions": {
+    "speech-to-speech": "1.1.0",
+    "mlx-audio": "0.6.2",
+    "mlx": "0.32.4",
+    "mlx-metal": "0.32.4",
+    "miniaudio": "1.71"
+  },
+  "tts": {
+    "model": "mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-4bit",
+    "speaker": "Ryan",
+    "language": "Spanish",
+    "playback_buffer_ms": 240
+  },
+  "live_transcription": {
+    "release_interval_s": 0.8,
+    "partials_before_speech_stopped": [
+      8,
+      4,
+      6,
+      5
+    ]
+  },
+  "conversation_checks": {
+    "spanish_audio_input": true,
+    "live_transcription": true,
+    "audible_response": true,
+    "speech_duration": true,
+    "context": true,
+    "explicit_cancel": true,
+    "recovery": true
+  },
+  "speech_quality": {
+    "passed": true,
+    "word_similarities": [
+      1.0,
+      0.9333333333333333,
+      0.9333333333333333
+    ],
+    "method": "synthetic TTS \u2192 independent Whisper decoding; lexical comparison",
+    "not_a_subjective_naturalness_score": true
+  },
+  "measurements": {
+    "engine": "huggingface/speech-to-speech",
+    "version": "1.1.0",
+    "mode": "benchmark",
+    "responses": 6,
+    "completed": 5,
+    "cancelled": 1,
+    "failed": 0,
+    "incomplete": 0,
+    "protocol_errors": 0,
+    "server_speech_end_to_audio_median_ms": 1845.7785829959903,
+    "memory": {
+      "rss_process_tree_peak_mib": 2776.3125,
+      "ollama_model_peak_mib": 1580.7199983596802,
+      "ollama_metal_peak_mib": 1580.7199983596802,
+      "available_min_mib": 4653.0625,
+      "swap_peak_mib": 4168.875,
+      "swap_start_mib": 4168.875,
+      "mlx_active_peak_mib": 3152.9619331359863,
+      "mlx_cache_peak_mib": 321.32539558410645,
+      "mlx_allocator_peak_mib": 3155.060047149658
+    },
+    "stage_median_ms": {
+      "stt": 266.58404199406505,
+      "llm": 560.4218750086147,
+      "tts_ttfa": 236.50187499879394
+    }
+  },
+  "voice_interruption": {
+    "input": "synthetic Spanish speech over native Realtime audio",
+    "hardware_audio_test": false,
+    "response_statuses": [
+      "completed",
+      "completed"
+    ],
+    "discarded_playback_seconds": 2.72,
+    "voice_onset_to_playback_clear_ms": 474.6201659872895,
+    "context": true
+  },
+  "hardware_audio": {
+    "input_source": "synthetic Kokoro phrase played on speakers and captured by actual Mac microphone",
+    "human_conversation_test": false,
+    "input_device": "MacBook Pro Microphone",
+    "output_device": "MacBook Pro Speakers",
+    "response_statuses": [
+      "completed"
+    ],
+    "speaker_self_interruptions": 0,
+    "actual_output_seconds": 3.744,
+    "audio_callback_counts": {
+      "input_frames": 229376,
+      "suppressed_frames": 70656,
+      "output_audio_frames": 59904,
+      "manual_interruptions": 0
+    }
+  },
+  "notes": [
+    "Inputs are synthetic; acoustic test uses real built-in Mac microphone and speakers.",
+    "Hardware audio test uses the final streaming gap protection and 650 ms echo tail.",
+    "Native e2e excludes the 240 ms playback buffer and acoustic device latency.",
+    "RSS, MLX allocator and Ollama allocations overlap; do not add them.",
+    "Available memory and swap belong to the entire machine."
+  ]
+}
