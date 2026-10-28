@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#e7e7e2">
+  <title>Oficina — Consultoría AWS</title>
+  <link rel="icon" href="./assets/cloud-agent.svg">
+  <link rel="stylesheet" href="./office-dashboard.css">
+  <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
+  <script type="module" src="./office-dashboard.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#office">Ir a la oficina 3D</a>
+  <main class="workspace">
+    <aside class="sidebar" aria-label="Espacios de la oficina">
+      <a class="identity" href="./office-dashboard.html">Consultoría AWS</a>
+      <nav class="room-nav" aria-label="Elegir un espacio">
+        <button type="button" class="room active" data-view="overview" aria-pressed="true">Vista general</button>
+        <button type="button" class="room" data-view="engagement" aria-pressed="false">Engagement</button>
+        <button type="button" class="room" data-view="boardroom" aria-pressed="false">Sala de juntas</button>
+        <button type="button" class="room" data-view="architecture" aria-pressed="false">Arquitectura</button>
+        <button type="button" class="room" data-view="finops" aria-pressed="false">FinOps</button>
+        <button type="button" class="room" data-view="infrastructure" aria-pressed="false">Infraestructura</button>
+        <button type="button" class="room" data-view="lounge" aria-pressed="false">Espacio común</button>
+      </nav>
+    </aside>
+    <section class="stage" aria-label="Oficina">
+      <div id="office" tabindex="-1" aria-label="Oficina virtual interactiva" aria-busy="true"></div>
+      <div class="load-state" id="load-state" role="status"><span class="loader" id="loader" aria-hidden="true"></span><p id="load-title">Cargando oficina…</p><p id="load-description"></p><button id="retry" type="button" hidden>Volver a intentar</button></div>
+      <div class="toolbar" role="group" aria-label="Controles de la oficina">
+        <button type="button" id="zoom-out" aria-label="Alejar" title="Alejar (−)" disabled>−</button>
+        <button type="button" id="zoom-in" aria-label="Acercar" title="Acercar (+)" disabled>+</button>
+        <span class="toolbar-divider"></span>
+        <button type="button" id="reset" aria-label="Restablecer vista general" title="Vista general" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9a7 7 0 1 1 0 6M5 4v5h5"/></svg></button>
+        <button type="button" id="top-view" aria-label="Ver desde arriba" title="Ver desde arriba" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5ZM3 12l9 5 9-5M3 16l9 5 9-5"/></svg></button>
+        <button type="button" id="labels" aria-label="Rótulos" aria-pressed="false" title="Mostrar u ocultar rótulos" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7V4h16v3M12 4v16M8 20h8"/></svg></button>
+        <span class="toolbar-divider"></span>
+        <button type="button" id="follow-agent" aria-label="Seguir agente" aria-pressed="false" title="Seguir agente" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4H4v4m12-4h4v4M4 16v4h4m12-4v4h-4M8 12h8m-4-4v8"/></svg></button>
+        <button type="button" id="pause" aria-label="Pausar" aria-pressed="false" title="Pausar" disabled><span id="pause-icon" aria-hidden="true">Ⅱ</span></button>
+        <button type="button" id="help" aria-label="Ayuda de navegación" title="Ayuda" aria-expanded="false" aria-controls="help-panel">?</button>
+      </div>
+      <section id="help-panel" class="help-panel" aria-label="Ayuda de navegación" hidden>
+        <div class="help-heading"><h2>Navegación</h2><button id="close-help" type="button" aria-label="Cerrar ayuda">×</button></div>
+        <p id="navigation-help">Arrastra para girar. Usa la rueda o pellizca para acercar. Botón derecho o dos dedos para desplazar.</p>
+        <p>Enfoca la oficina y usa las flechas, +, − e Inicio. El control de seguimiento acompaña al agente; girar la cámara o elegir un área sale del seguimiento.</p>
+      </section>
+      <span class="sr-only" id="announcement" role="status" aria-live="polite"></span>
+      <noscript><div class="noscript">Activa JavaScript para explorar la oficina 3D.</div></noscript>
+    </section>
+  </main>
+</body>
+</html>
