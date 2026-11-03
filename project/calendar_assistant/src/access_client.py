@@ -24,7 +24,7 @@ class AccessClient:
         self.challenge_id = ""
         self._lock = threading.RLock()
 
-    def _request(self, operation: str, **payload) -> dict:
+    def _request(self, endpoint: str, **payload) -> dict:
         base = os.getenv("CALENDAR_ACCESS_URL", "").rstrip("/")
         key = os.getenv("CALENDAR_ACCESS_SERVICE_KEY", "")
         parsed = urlsplit(base)
@@ -44,7 +44,7 @@ class AccessClient:
         ):
             return {"status": "unavailable"}
         request = Request(
-            f"{base}/{operation}",
+            f"{base}/{endpoint}",
             data=json.dumps({"session_id": self.session_id, **payload}).encode(),
             headers={
                 "Authorization": f"Bearer {key}",

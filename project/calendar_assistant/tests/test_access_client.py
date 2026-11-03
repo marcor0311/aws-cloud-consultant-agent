@@ -1,12 +1,88 @@
 import json
+from datetime import datetime
+from io import BytesIO
 from unittest.mock import Mock
 
 import pytest
 
+from src import access_client
 from src import calendar_mcp as calendar
 from src.access_client import AccessClient
 
 EMAIL = "persona@example.com"
+
+
+@pytest.fixture
+def authorization_transport(monkeypatch):
+    """Mock only the HTTP boundary, keeping the real _request argument binding."""
+    monkeypatch.setenv(
+        "CALENDAR_ACCESS_URL", "http://127.0.0.1:8990/api/calendar-access"
+    )
+    monkeypatch.setenv(
+        "CALENDAR_ACCESS_SERVICE_KEY", "test-service-key-abcdefghijklmnopqrstuvwxyz"
+    )
+    requests = []
+
+    def open_request(request, **kwargs):
+        requests.append(request)
+        return BytesIO(json.dumps({"status": "authorized", "email": EMAIL}).encode())
+
+    monkeypatch.setattr(
+        access_client, "build_opener", lambda *_: Mock(open=open_request)
+    )
+    return requests
+
+
+@pytest.mark.parametrize(
+    "operation", ["availability", "search", "book", "reschedule", "cancel"]
+)
+def test_authorization_posts_operation_in_json_without_colliding_with_endpoint(
+    authorization_transport, operation
+):
+    client = AccessClient()
+    client.email = EMAIL
+    client.require(operation, EMAIL)
+    request = authorization_transport[0]
+    assert request.full_url == "http://127.0.0.1:8990/api/calendar-access/authorize"
+    assert json.loads(request.data) == {
+        "session_id": client.session_id,
+        "email": EMAIL,
+        "operation": operation,
+    }
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        {},
+        {"fecha_solicitada": "mañana"},
+        {"fecha_solicitada": "mañana", "hora_solicitada": "08:30"},
+    ],
+)
+def test_availability_reaches_calendar_after_real_authorization_request(
+    monkeypatch, authorization_transport, arguments
+):
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            fixed = cls(2026, 11, 3, 7, tzinfo=calendar.TIME_ZONE)
+            return fixed.astimezone(tz) if tz else fixed.replace(tzinfo=None)
+
+    client = AccessClient()
+    client.email = EMAIL
+    monkeypatch.setattr(calendar, "_access", client)
+    monkeypatch.setattr(calendar, "datetime", FrozenDatetime)
+    google = Mock()
+    google.freebusy.return_value.query.return_value.execute.return_value = {
+        "calendars": {"primary": {"busy": []}}
+    }
+    monkeypatch.setattr(calendar, "_calendar_service", lambda: google)
+    result = calendar.consultar_horarios(correo_confirmado=EMAIL, **arguments)
+    assert result["dias_disponibles"]
+    assert json.loads(authorization_transport[0].data)["operation"] == "availability"
+    if arguments.get("hora_solicitada"):
+        assert result["horario_solicitado"]["inicio"] == "2026-11-04T08:30-06:00"
+    google.freebusy.return_value.query.assert_called_once()
 
 
 def test_call_identity_and_challenge_are_never_exposed_to_model(monkeypatch):
