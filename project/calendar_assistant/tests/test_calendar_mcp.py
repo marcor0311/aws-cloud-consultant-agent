@@ -92,6 +92,81 @@ def test_invalid_email_is_not_presented_as_confirmable():
     assert result["correo_normalizado"] == ""
 
 
+@pytest.mark.parametrize(
+    "clock,expected",
+    [
+        ("13:00", "a la una de la tarde"),
+        ("13:30", "a la una y media de la tarde"),
+        ("14:00", "a las dos de la tarde"),
+        ("08:30", "a las ocho y media de la mañana"),
+        ("12:00", "a las doce del mediodía"),
+    ],
+)
+def test_spoken_hours_use_words_and_correct_singular_article(clock, expected):
+    value = datetime.fromisoformat(f"2026-11-04T{clock}:00-06:00")
+    assert calendar._time_phrase(value) == expected
+
+
+@pytest.mark.parametrize(
+    "start,end,expected",
+    [
+        ("13:00", "13:30", "a la una de la tarde"),
+        ("13:30", "14:00", "a la una y media de la tarde"),
+        ("13:00", "15:00", "de la una a las tres de la tarde"),
+        ("08:00", "12:00", "de las ocho de la mañana a las doce del mediodía"),
+        ("08:30", "10:00", "de las ocho y media a las diez de la mañana"),
+    ],
+)
+def test_availability_ranges_have_natural_spoken_hours(start, end, expected):
+    current = datetime.fromisoformat(f"2026-11-04T{start}:00-06:00")
+    finish = datetime.fromisoformat(f"2026-11-04T{end}:00-06:00")
+    slots = []
+    while current < finish:
+        next_slot = current + timedelta(minutes=30)
+        slots.append({"inicio": current.isoformat(), "fin": next_slot.isoformat()})
+        current = next_slot
+    assert calendar._format_available_ranges(slots) == [expected]
+
+
+def test_requested_one_pm_is_spoken_as_a_la_una_in_calendar_response(calendar_api):
+    service, _ = calendar_api
+    service.freebusy.return_value.query.return_value.execute.return_value = {
+        "calendars": {"primary": {"busy": []}}
+    }
+    result = calendar.consultar_horarios("2026-11-02", "13:00", correo_confirmado=EMAIL)
+    assert result["estado"] == "requested_time_available"
+    assert "a la una de la tarde" in result["respuesta_para_decir"]
+    assert result["horario_solicitado"]["inicio"] == "2026-11-02T13:00-06:00"
+
+
+def test_unavailable_one_pm_also_uses_singular_article(calendar_api):
+    service, _ = calendar_api
+    service.freebusy.return_value.query.return_value.execute.return_value = {
+        "calendars": {
+            "primary": {
+                "busy": [
+                    {
+                        "start": "2026-11-02T13:00:00-06:00",
+                        "end": "2026-11-02T13:30:00-06:00",
+                    }
+                ]
+            }
+        }
+    }
+    result = calendar.consultar_horarios("2026-11-02", "13:00", correo_confirmado=EMAIL)
+    assert result["estado"] == "requested_time_unavailable"
+    assert "a la una de la tarde" in result["respuesta_para_decir"]
+
+
+def test_existing_meeting_uses_a_la_una_in_search_results(calendar_api):
+    _, events = calendar_api
+    events.list.return_value.execute.return_value = {
+        "items": [meeting(start="2026-11-02T13:00:00-06:00")]
+    }
+    result = calendar.buscar_reuniones(EMAIL)
+    assert result["reuniones"][0]["fecha_local"].endswith("a la una de la tarde")
+
+
 @pytest.mark.parametrize("google_organizer", [None, "calendar-owner@example.com"])
 def test_booking_requires_no_company_and_remains_findable_by_email(
     calendar_api, monkeypatch, google_organizer

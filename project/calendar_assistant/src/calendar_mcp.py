@@ -256,7 +256,77 @@ def _spoken_time(value: datetime) -> str:
 def _clock_only(value: datetime) -> str:
     local_time = value.astimezone(TIME_ZONE)
     hour = local_time.hour % 12 or 12
-    return f"{hour}:{local_time.minute:02d}"
+    hours = (
+        "doce",
+        "una",
+        "dos",
+        "tres",
+        "cuatro",
+        "cinco",
+        "seis",
+        "siete",
+        "ocho",
+        "nueve",
+        "diez",
+        "once",
+    )
+    clock = hours[hour % 12]
+    if local_time.minute == 0:
+        return clock
+    if local_time.minute == 30:
+        return f"{clock} y media"
+    if local_time.minute == 15:
+        return f"{clock} y cuarto"
+    # Legacy invitations can contain minutes outside the current half-hour slots.
+    small_numbers = (
+        "cero",
+        "uno",
+        "dos",
+        "tres",
+        "cuatro",
+        "cinco",
+        "seis",
+        "siete",
+        "ocho",
+        "nueve",
+        "diez",
+        "once",
+        "doce",
+        "trece",
+        "catorce",
+        "quince",
+        "dieciséis",
+        "diecisiete",
+        "dieciocho",
+        "diecinueve",
+        "veinte",
+        "veintiuno",
+        "veintidós",
+        "veintitrés",
+        "veinticuatro",
+        "veinticinco",
+        "veintiséis",
+        "veintisiete",
+        "veintiocho",
+        "veintinueve",
+    )
+    minute = local_time.minute
+    if minute < 30:
+        minutes = small_numbers[minute]
+    else:
+        minutes = {3: "treinta", 4: "cuarenta", 5: "cincuenta"}[minute // 10]
+        if minute % 10:
+            minutes += f" y {small_numbers[minute % 10]}"
+    return f"{clock} y {minutes}"
+
+
+def _time_phrase(
+    value: datetime, *, preposition: str = "a", period: bool = True
+) -> str:
+    local_time = value.astimezone(TIME_ZONE)
+    article = "la" if local_time.hour % 12 == 1 else "las"
+    clock = _spoken_time(local_time) if period else _clock_only(local_time)
+    return f"{preposition} {article} {clock}"
 
 
 def _format_available_ranges(slots: list[dict[str, str]]) -> list[str]:
@@ -275,20 +345,23 @@ def _format_available_ranges(slots: list[dict[str, str]]) -> list[str]:
     formatted = []
     for start, end in ranges:
         if end - start == MEETING_DURATION:
-            formatted.append(f"a las {_spoken_time(start)}")
+            formatted.append(_time_phrase(start))
         elif start.hour < 12 and end.hour == 12:
             formatted.append(
-                f"de {_clock_only(start)} de la mañana a {_spoken_time(end)}"
+                f"{_time_phrase(start, preposition='de')} {_time_phrase(end)}"
             )
         else:
             start_period = "de la mañana" if start.hour < 12 else "de la tarde"
             end_period = "de la mañana" if end.hour < 12 else "de la tarde"
             if start_period == end_period:
                 formatted.append(
-                    f"de {_clock_only(start)} a {_clock_only(end)} {end_period}"
+                    f"{_time_phrase(start, preposition='de', period=False)} "
+                    f"{_time_phrase(end, period=False)} {end_period}"
                 )
             else:
-                formatted.append(f"de {_spoken_time(start)} a {_spoken_time(end)}")
+                formatted.append(
+                    f"{_time_phrase(start, preposition='de')} {_time_phrase(end)}"
+                )
     return formatted
 
 
@@ -510,7 +583,7 @@ def consultar_horarios(
                         "fin": (slot + MEETING_DURATION).isoformat(timespec="minutes"),
                         "hora_local": (
                             f"{WEEKDAYS_ES[slot.weekday()]} {slot.day} de "
-                            f"{MONTHS_ES[slot.month - 1]} a las {_spoken_time(slot)}"
+                            f"{MONTHS_ES[slot.month - 1]} {_time_phrase(slot)}"
                         ),
                         "zona_horaria": TIME_ZONE_NAME,
                     }
@@ -557,7 +630,7 @@ def consultar_horarios(
             available,
             prefix=f"No hay espacio el {WEEKDAYS_ES[requested_day.weekday()]} "
             f"{requested_day.day} de {MONTHS_ES[requested_day.month - 1]} "
-            f"a las {_spoken_time(datetime.combine(requested_day, requested_time, TIME_ZONE))}.",
+            f"{_time_phrase(datetime.combine(requested_day, requested_time, TIME_ZONE))}.",
         )
     elif requested_day is not None:
         status = "availability_options"
@@ -830,7 +903,7 @@ def buscar_reuniones(
                 "fin": event_end.isoformat(timespec="minutes"),
                 "fecha_local": (
                     f"{WEEKDAYS_ES[event_start.weekday()]} {event_start.day} de "
-                    f"{MONTHS_ES[event_start.month - 1]} a las {_spoken_time(event_start)}"
+                    f"{MONTHS_ES[event_start.month - 1]} {_time_phrase(event_start)}"
                 ),
             }
         )
