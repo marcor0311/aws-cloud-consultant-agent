@@ -17,6 +17,7 @@ from app.models.calendar_access import (
 from app.services.calendar_access import CalendarAccessService
 from app.services.calendar_mailer import SMTPMailer, SMTPSettings
 from app.services.calendar_whitelist import HTTPWhitelist
+from app.services.gmail_mailer import GmailMailer, GmailSettings
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -44,9 +45,17 @@ def require_service(
 
 
 class EnvironmentMailer:
-    """Load the SMTP configuration only when a registered caller requests a code."""
+    """Load the selected provider only after checking the external registration."""
 
     def send_code(self, email: str, name: str, code: str, minutes: int):
+        provider = os.getenv("CALENDAR_MAIL_PROVIDER", "smtp").strip().lower()
+        if provider == "gmail":
+            GmailMailer(GmailSettings.from_environment()).send_code(
+                email, name, code, minutes
+            )
+            return
+        if provider != "smtp":
+            raise ValueError("El proveedor de correo no es válido.")
         settings = SMTPSettings(
             host=os.getenv("CALENDAR_SMTP_HOST", ""),
             port=int(os.getenv("CALENDAR_SMTP_PORT", "587")),

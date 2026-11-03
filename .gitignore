@@ -10,3 +10,4 @@ project/.env
 .env
 project/data/
 project/.venv-backend/
+project/secrets/

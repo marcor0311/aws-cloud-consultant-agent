@@ -12,6 +12,26 @@ from pathlib import Path
 TEMPLATE = Path(__file__).resolve().parents[1] / "templates" / "calendar_code.html"
 
 
+def build_code_message(
+    sender: str, sender_name: str, email: str, code: str, minutes: int
+) -> EmailMessage:
+    message = EmailMessage()
+    message["Subject"] = "Código de verificación"
+    message["From"] = formataddr((sender_name, sender))
+    message["To"] = email
+    message.set_content(
+        f"Código de verificación\n\n{code}\n\n"
+        f"Este código caduca en {minutes} minutos y solo puede utilizarse una vez.\n\n"
+        "Si no solicitaste este código, puedes ignorar este mensaje.\n\n"
+        "Mensaje automático. No respondas a este correo.\n"
+    )
+    content = TEMPLATE.read_text(encoding="utf-8")
+    values = {"code": html.escape(code), "minutes": str(minutes)}
+    content = re.sub(r"\{\{(code|minutes)\}\}", lambda m: values[m[1]], content)
+    message.add_alternative(content, subtype="html")
+    return message
+
+
 @dataclass(frozen=True)
 class SMTPSettings:
     host: str
@@ -43,25 +63,9 @@ class SMTPMailer:
     def build_message(
         self, email: str, name: str, code: str, minutes: int
     ) -> EmailMessage:
-        message = EmailMessage()
-        message["Subject"] = "Código de verificación"
-        message["From"] = formataddr((self.settings.sender_name, self.settings.sender))
-        message["To"] = email
-        message.set_content(
-            f"Código de verificación\n\n{code}\n\n"
-            f"Este código caduca en {minutes} minutos y solo puede utilizarse una vez.\n\n"
-            "Si no solicitaste este código, puedes ignorar este mensaje.\n\n"
-            "Mensaje automático. No respondas a este correo.\n"
+        return build_code_message(
+            self.settings.sender, self.settings.sender_name, email, code, minutes
         )
-        content = TEMPLATE.read_text(encoding="utf-8")
-        # Only the code and its lifetime appear in this neutral transactional email.
-        values = {
-            "code": html.escape(code),
-            "minutes": str(minutes),
-        }
-        content = re.sub(r"\{\{(code|minutes)\}\}", lambda m: values[m[1]], content)
-        message.add_alternative(content, subtype="html")
-        return message
 
     def send_code(self, email: str, name: str, code: str, minutes: int) -> None:
         message = self.build_message(email, name, code, minutes)

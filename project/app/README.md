@@ -31,6 +31,8 @@ configurar Azure OpenAI para usar las rutas de verificación del calendario.
 - `CALENDAR_WHITELIST_URL` y `CALENDAR_WHITELIST_API_KEY`: endpoint de consulta y
   credencial del sistema que administra los registros. No hay rutas locales para
   dar de alta o modificar esa whitelist.
+- `CALENDAR_MAIL_PROVIDER`: `gmail` para enviar por Gmail API o `smtp` para usar
+  un servidor SMTP. Si no se indica, se conserva SMTP.
 - `CALENDAR_SMTP_HOST`, `CALENDAR_SMTP_PORT`, `CALENDAR_SMTP_SECURITY`: servidor
   de correo y modo TLS (`starttls` con 587, o `ssl` con 465).
 - `CALENDAR_SMTP_USERNAME` y `CALENDAR_SMTP_PASSWORD`: credenciales SMTP, cuando
@@ -41,6 +43,67 @@ configurar Azure OpenAI para usar las rutas de verificación del calendario.
 
 Generar cada secreto por separado con `python -c 'import secrets; print(secrets.token_urlsafe(32))'`.
 No reutilizar la credencial externa de la whitelist para el agente.
+
+## Enviar con Gmail API
+
+Con Gmail no se necesitan contraseña de correo ni credenciales SMTP. Habilitar
+Gmail API en el mismo proyecto de Google Cloud que utiliza el cliente OAuth.
+Configurar en el `.env` privado del backend:
+
+```dotenv
+CALENDAR_MAIL_PROVIDER=gmail
+GOOGLE_ACCOUNT_EMAIL=<cuenta de Google autorizada>
+CALENDAR_GMAIL_CLIENT_FILE=calendar_assistant/secrets/google_oauth_client.json
+CALENDAR_GMAIL_TOKEN_FILE=secrets/gmail_token.json
+```
+
+Desde `project/`, autorizar una vez:
+
+```sh
+python -m app.authorize_gmail
+```
+
+El navegador solicita el permiso `gmail.send` para la cuenta configurada. El
+usuario debe aceptar el consentimiento de Google; habilitar la API no concede
+este permiso. No se solicita lectura del buzón. El cliente OAuth puede reutilizarse,
+pero el token de envío se guarda por separado en `project/secrets/`, excluido de
+Git y con permisos 600. El token de Calendar no se modifica.
+
+Gmail envía desde la cuenta autorizada o sus alias permitidos. Seleccionar esa
+misma cuenta en el consentimiento. El backend reutiliza la plantilla HTML y la
+alternativa de texto, renueva tokens vencidos y exige el identificador de aceptación
+de Gmail antes de informar éxito. No reintenta automáticamente un envío ambiguo.
+Se conservan los límites de códigos y reenvíos; también aplican las cuotas de Gmail.
+
+### Prueba manual antes de que exista la whitelist externa
+
+El envío de correo puede probarse con Gmail real y un endpoint local que reconoce
+solo un destinatario de prueba. Este endpoint no se carga en `app.main`, no modifica
+registros y exige una activación explícita. En el `.env` privado:
+
+```dotenv
+CALENDAR_DEMO_MODE=true
+CALENDAR_DEMO_EMAIL=<tu correo de prueba>
+CALENDAR_WHITELIST_URL=http://127.0.0.1:8991/lookup
+CALENDAR_WHITELIST_API_KEY=<clave independiente de al menos 32 caracteres>
+```
+
+Desde `project/`, ejecutar en dos terminales:
+
+```sh
+uvicorn app.dev_whitelist:app --host 127.0.0.1 --port 8991
+uvicorn app.main:app --host 127.0.0.1 --port 8990
+```
+
+En el agente, configurar `CALENDAR_ACCESS_URL=http://127.0.0.1:8990/api/calendar-access`
+y la misma `CALENDAR_ACCESS_SERVICE_KEY` del backend; iniciar `lk agent console`.
+El código llegará al destinatario configurado y se validará por el flujo habitual.
+Al conectar el servicio real, cambiar la URL y la credencial de la whitelist y
+eliminar `CALENDAR_DEMO_MODE` y `CALENDAR_DEMO_EMAIL`. Nunca desplegar el endpoint
+de prueba como registro real.
+
+Referencias: [envío por Gmail API](https://developers.google.com/workspace/gmail/api/guides/sending)
+y [permiso de envío](https://developers.google.com/workspace/gmail/api/auth/scopes).
 
 El template está en `templates/calendar_code.html`. Incluye únicamente el código,
 su vigencia y un aviso para quien no lo haya solicitado, además de una alternativa
@@ -56,7 +119,7 @@ Desde `project/`, en el entorno del backend:
 
 ```sh
 python -m pip install -r app/requirements-dev.txt
-python -m pytest tests/test_calendar_access.py -q
+python -m pytest tests -q
 ```
 
 Las pruebas usan una whitelist y un buzón ficticios; no envían correos ni acceden
@@ -71,6 +134,7 @@ uv run ruff format --check src tests
 uv run ruff check src tests
 ```
 
-La integración real requiere las credenciales del endpoint externo y de SMTP.
+La integración real requiere las credenciales del endpoint externo y la autorización
+de Gmail o la configuración de SMTP, según el proveedor elegido.
 SQLite soporta esta instalación local; varias réplicas necesitan compartir un
 almacenamiento transaccional para conservar los límites y la autorización.

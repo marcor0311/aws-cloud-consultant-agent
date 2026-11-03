@@ -2,6 +2,8 @@ fastapi
 uvicorn
 pydantic>=2,<3
 httpx>=0.27,<1
+google-auth[requests]>=2,<3
+google-auth-oauthlib>=1.2,<2
 python-dotenv
 openai
 PyYAML

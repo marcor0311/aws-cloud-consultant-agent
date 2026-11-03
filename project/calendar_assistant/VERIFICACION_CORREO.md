@@ -5,7 +5,8 @@ no importa, crea, edita ni habilita registros. Guarda únicamente los desafíos 
 verificación, las autorizaciones por llamada y los contadores de uso en SQLite.
 
 La integración está implementada con configuración pendiente de la API externa
-y de SMTP. Sin esa configuración, las herramientas de calendario rechazan el acceso.
+y del proveedor de correo (Gmail API o SMTP). Sin esa configuración, las
+herramientas de calendario rechazan el acceso.
 
 ## Flujo
 
@@ -16,7 +17,7 @@ y de SMTP. Sin esa configuración, las herramientas de calendario rechazan el ac
    de negocio para completar su registro. No se envía ningún código ni se accede
    al calendario. La whitelist no se modifica.
 4. Si está habilitado, el backend genera un código y envía el correo transaccional
-   HTML con alternativa de texto simple. `code_sent` indica aceptación por SMTP;
+   HTML con alternativa de texto simple. `code_sent` indica aceptación por Gmail o SMTP;
    no garantiza que haya llegado a la bandeja de entrada.
 5. Alisa solicita los seis dígitos y llama a `validar_codigo_correo`. El backend
    verifica el desafío y vuelve a consultar si el registro sigue habilitado.
@@ -125,7 +126,7 @@ incompleta usa 503. Las fallas de red también deben impedir el acceso.
 
 ## Configuración y verificación
 
-Consultar [el README del backend](../app/README.md) para iniciarlo, configurar SMTP
+Consultar [el README del backend](../app/README.md) para iniciarlo, autorizar Gmail o configurar SMTP
 y ejecutar sus pruebas. En `.env.local` del agente se necesita:
 
 ```dotenv
@@ -134,7 +135,9 @@ CALENDAR_ACCESS_SERVICE_KEY=<misma clave que en el backend>
 CALENDAR_ACCESS_ORIGIN_ID=calendar-assistant
 ```
 
-Las credenciales de la whitelist y SMTP permanecen exclusivamente en el backend.
+Las credenciales de la whitelist y del proveedor de correo permanecen en el backend.
+Gmail usa un token separado en `project/secrets/gmail_token.json`, con permiso de
+envío `gmail.send`; no utiliza el token de Calendar ni requiere leer el buzón.
 Nunca se devuelve el código generado al agente ni se registra explícitamente en
 nuestros logs. Al dictarlo, el código pasa por STT, el modelo y la herramienta:
 las transcripciones, trazas y grabaciones de LiveKit requieren una política de
