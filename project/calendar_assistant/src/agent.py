@@ -17,6 +17,7 @@ from livekit.agents import (
     mcp,
     room_io,
 )
+from livekit.agents.beta.tools import EndCallTool
 from livekit.plugins import ai_coustics
 
 logger = logging.getLogger("agent")
@@ -28,6 +29,21 @@ load_dotenv(PROJECT_DIR / ".env.local")
 
 class Assistant(Agent):
     def __init__(self) -> None:
+        end_call = EndCallTool(
+            delete_room=True,
+            ignore_on_enter=True,
+            extra_description=(
+                "Úsala cuando la persona se despida o indique claramente que ya terminó, "
+                "incluso antes de verificar su correo. No la uses por un agradecimiento "
+                "si aún tiene una pregunta, una gestión pendiente o pide esperar."
+            ),
+            end_instructions=(
+                "Despídete una sola vez, de forma breve, cálida y profesional en español. "
+                "No hagas más preguntas ni ofrezcas otra gestión. No afirmes haber realizado "
+                "acciones sin confirmación de las herramientas. Si ya te despediste, "
+                "no repitas la despedida."
+            ),
+        )
         super().__init__(
             # A Large Language Model (LLM) is your agent's brain, processing user input and generating a response
             # See all available models at https://docs.livekit.io/agents/models/llm/
@@ -55,7 +71,8 @@ class Assistant(Agent):
                             if key in os.environ
                         },
                     ),
-                )
+                ),
+                *end_call.tools,
             ],
             instructions=textwrap.dedent(
                 """\
@@ -107,6 +124,14 @@ class Assistant(Agent):
                 - Si un espacio ya no está libre, no lo reserves; vuelve a consultar y ofrece alternativas.
                 - Si necesita algo distinto a agendar, reagendar o cancelar una cita, indícale que puede contactar a Stuart en stuart arroba futura punto com.
                 - No afirmes que realizaste una acción que no está disponible.
+
+                # Cierre de la llamada
+
+                - Toda despedida definitiva debe hacerse con end_call, para que la llamada no quede abierta después del adiós.
+                - Si la persona se despide o indica que no necesita nada más, llama end_call como última acción. Puedes cerrar en cualquier momento, incluso sin nombre ni correo verificado.
+                - La herramienta genera la despedida y espera a que termine de escucharse antes de colgar. No digas una despedida por separado ni generes otra respuesta después de llamarla.
+                - No cuelgues solo porque agradece, pide esperar o dice que tiene otra pregunta. Tampoco cierres automáticamente al completar una cita: permite que indique si necesita algo más.
+                - Si una operación está en curso, espera su resultado antes de despedirte; no des por completada una acción sin confirmación.
 
                 # Herramientas
 

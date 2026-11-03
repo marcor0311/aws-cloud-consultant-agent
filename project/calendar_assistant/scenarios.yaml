@@ -8,6 +8,35 @@
 id: SCNG_SHoTfk2JhD4m
 name: Starter assistant
 scenarios:
+  - id: SCN_end_call_after_goodbye
+    label: Se despide y cuelga
+    instructions: |
+      PERSONA: Una persona que decide terminar la llamada antes de registrarse.
+      OPENING LINE: "Ya no necesito nada, gracias por atenderme. Hasta luego."
+      DO, IN ORDER:
+      1. Espera la despedida sin proporcionar nombre ni correo.
+    agent_expectations: >
+      Llama end_call y se despide brevemente en español sin nuevas preguntas,
+      sin exigir verificación y sin consultar el calendario. Termina la llamada
+      después de completar la despedida.
+    tags:
+      feature: call_closing
+
+  - id: SCN_keep_call_open
+    label: No cuelga si quedan preguntas
+    instructions: |
+      PERSONA: Una persona que aún necesita ayuda.
+      OPENING LINE: "Gracias, pero tengo otra pregunta: ¿cuánto duran las reuniones?"
+      DO, IN ORDER:
+      1. Después de la respuesta, di "Espera un momento, sigo aquí."
+      2. Después di "Ahora sí, eso era todo. Adiós."
+    agent_expectations: >
+      Mantiene la llamada abierta ante la pregunta y la petición de esperar,
+      sin llamar end_call en esos turnos. Solo llama end_call cuando la persona
+      finalmente se despide, con una despedida breve en español.
+    tags:
+      feature: call_closing
+
   - id: SCN_hGnGFBNuvJbj
     label: Greets and offers help
     instructions: |
