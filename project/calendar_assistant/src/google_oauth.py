@@ -1,4 +1,4 @@
-"""Authorize the local calendar MCP server to access Marco's Google Calendar."""
+"""Authorize the local calendar MCP server to access the configured Google account."""
 
 import os
 from pathlib import Path

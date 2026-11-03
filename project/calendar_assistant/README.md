@@ -94,10 +94,10 @@ lk agent console
 ## Google Calendar (local MCP)
 
 The assistant checks availability and creates 30-minute invitations in the
-primary calendar for `marco.rodriguezdev@gmail.com`. It offers Monday–Friday
+primary calendar of the authorized Google account. It offers Monday–Friday
 slots from 08:00 to 17:00
 in `America/Costa_Rica`, within the next 14 days, excluding 12:00–13:00 for
-lunch. Google sends invitations from Marco's account; the event
+lunch. Google sends invitations from the authorized account; the event
 identifies the meeting as one with Stuart.
 
 ### Configure Google OAuth once
@@ -105,7 +105,7 @@ identifies the meeting as one with Stuart.
 1. In [Google Cloud Console](https://console.cloud.google.com/), select or create
    a project and enable the Google Calendar API.
 2. Configure the OAuth consent screen. If the app is in testing mode, add
-   `marco.rodriguezdev@gmail.com` as a test user.
+   the account configured in your private `.env.local` as a test user.
 3. Create an OAuth client ID with application type **Desktop app** and download
    its JSON file to `project/calendar_assistant/secrets/google_oauth_client.json`.
 4. From this directory, install dependencies and authorize the calendar:
@@ -115,9 +115,17 @@ identifies the meeting as one with Stuart.
    uv run python src/google_oauth.py
    ```
 
-5. Sign in as `marco.rodriguezdev@gmail.com` and grant the requested access. The
+5. Set `GOOGLE_ACCOUNT_EMAIL` in your private `.env.local`, sign in with that
+   account and grant the requested access. The
    local token is saved as `secrets/google_calendar_token.json` and excluded from
    version control.
+
+The real account address belongs only in `.env.local` (or the deployment's secret
+configuration). Keep `.env.example` empty for that value. OAuth client credentials
+and tokens remain in the ignored `secrets/` directory. The actual calendar account
+is determined by the OAuth authorization and `GOOGLE_CALENDAR_ID`; the email
+configuration does not grant access. When Google returns an organizer address,
+that response takes precedence over the configured display fallback.
 
 The agent starts the local stdio MCP server automatically when it runs. To
 exercise the voice flow, use `lk agent console`. Google Calendar tools are

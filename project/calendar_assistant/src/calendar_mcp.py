@@ -122,7 +122,7 @@ def _calendar_service():
     if not token_file.is_file():
         raise RuntimeError(
             "Google Calendar aún no está autorizado. Ejecuta `uv run "
-            "python src/google_oauth.py` y autoriza la cuenta de Marco."
+            "python src/google_oauth.py` y autoriza la cuenta configurada."
         )
 
     credentials = Credentials.from_authorized_user_file(str(token_file), SCOPES)
@@ -694,7 +694,9 @@ def agendar_reunion(
         "duracion_minutos": "30",
         "zona_horaria": TIME_ZONE_NAME,
         "invitacion_enviada_a": email,
-        "organizador": "marco.rodriguezdev@gmail.com",
+        "organizador": created.get("organizer", {}).get(
+            "email", os.getenv("GOOGLE_ACCOUNT_EMAIL", "").strip()
+        ),
         "evento_id": created.get("id", ""),
         "enlace": created.get("htmlLink", ""),
     }

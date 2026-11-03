@@ -92,16 +92,24 @@ def test_invalid_email_is_not_presented_as_confirmable():
     assert result["correo_normalizado"] == ""
 
 
-def test_booking_requires_no_company_and_remains_findable_by_email(calendar_api):
+@pytest.mark.parametrize("google_organizer", [None, "calendar-owner@example.com"])
+def test_booking_requires_no_company_and_remains_findable_by_email(
+    calendar_api, monkeypatch, google_organizer
+):
     service, events = calendar_api
     service.freebusy.return_value.query.return_value.execute.return_value = {
         "calendars": {"primary": {"busy": []}}
     }
-    events.insert.return_value.execute.return_value = {"id": "new-meeting"}
+    monkeypatch.setenv("GOOGLE_ACCOUNT_EMAIL", "configured-owner@example.com")
+    created = {"id": "new-meeting"}
+    if google_organizer:
+        created["organizer"] = {"email": google_organizer}
+    events.insert.return_value.execute.return_value = created
     result = calendar.agendar_reunion(
         inicio=NEW_START, nombre="Persona", correo_confirmado=EMAIL
     )
     assert result["estado"] == "agendada"
+    assert result["organizador"] == (google_organizer or "configured-owner@example.com")
     body = events.insert.call_args.kwargs["body"]
     assert body["summary"] == "Reunión con Stuart — Persona"
     assert "Empresa:" not in body["description"]
