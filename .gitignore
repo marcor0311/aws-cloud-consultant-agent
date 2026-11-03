@@ -8,3 +8,5 @@ project/generated/
 *.zip
 project/.env
 .env
+project/data/
+project/.venv-backend/

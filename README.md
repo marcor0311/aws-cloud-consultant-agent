@@ -36,3 +36,7 @@ Los ciclos de aclaraciones y ajustes descritos en el proceso actual también apl
 El dashboard permite identificar la etapa del flujo de trabajo en la que se encuentra el agente y el equipo con el que colabora para ese proyecto.
 
 ![Vista de la oficina virtual con el agente en el área de Arquitectura](docs/live-dashboard.png)
+
+## 5. Asistente de calendario
+
+El proyecto inicial de LiveKit Agents para Python está en [`project/calendar_assistant`](project/calendar_assistant/README.md).

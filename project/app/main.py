@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes.agent_routes import router
+from app.routes.calendar_access_routes import router as calendar_access_router
 from dotenv import load_dotenv
 
 # Cargar variables de entorno desde .env
@@ -24,6 +25,7 @@ app.add_middleware(
 
 # Registrar rutas de agentes
 app.include_router(router, prefix="/api", tags=["Agentes"])
+app.include_router(calendar_access_router, prefix="/api")
 
 # Endpoint raíz para verificar que el backend funciona
 @app.get("/")
