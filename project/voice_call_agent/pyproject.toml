@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "voice-call-agent"
+version = "0.1.0"
+description = "Conversación local en español con interrupciones y transportes de audio intercambiables"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "httpx>=0.28,<0.29",
+  "kokoro>=0.9.4,<0.10",
+  "mlx-whisper>=0.4.2,<0.5",
+  "numpy>=1.26,<3",
+  "onnxruntime>=1.20,<2",
+  "psutil>=7,<8",
+  "silero-vad>=6,<7",
+  "sounddevice>=0.5,<0.6",
+  "soundfile>=0.13,<0.14",
+  "soxr>=0.5,<2",
+  "transformers>=4.51,<5",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10", "pytest-asyncio>=0.25,<2", "ruff>=0.11,<1"]
+
+[project.scripts]
+voice-call = "voice_call_agent.cli:main"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
