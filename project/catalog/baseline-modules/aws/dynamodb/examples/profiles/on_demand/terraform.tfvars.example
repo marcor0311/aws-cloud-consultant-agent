@@ -1,0 +1,8 @@
+aws_region = "us-east-1"
+table_name = "replace-with-approved-table-name"
+tags = {
+  Environment = "example"
+  ManagedBy   = "Terraform"
+}
+kms_key_arn = null # Set an approved key ARN when required.
+ttl_attribute_name = null # Set only when the data model has an approved TTL attribute.
