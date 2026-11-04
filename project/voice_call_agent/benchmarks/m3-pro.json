@@ -1,0 +1,236 @@
+{
+  "hardware": "Apple M3 Pro",
+  "physical_cores": 11,
+  "unified_memory_bytes": 19327352832,
+  "input": "Spanish synthetic speech generated with Kokoro ef_dora",
+  "physical_audio_devices_used": false,
+  "models_warmed_before_turns": true,
+  "runs": [
+    {
+      "scenario": "two_turns",
+      "summary": {
+        "metadata": {
+          "python": "3.12.9",
+          "machine": "arm64",
+          "platform": "macOS-15.7.3-arm64-arm-64bit",
+          "model": "qwen3:1.7b-q4_K_M",
+          "whisper": "mlx-community/whisper-small-mlx",
+          "voice": "ef_dora",
+          "sink": "wav_file_available_not_audible",
+          "context_tokens": 4096
+        },
+        "turns": 2,
+        "completed": 2,
+        "interrupted": 0,
+        "errors": 0,
+        "barge_in_events": 0,
+        "first_audio_p50_ms": 1815.2519994910108,
+        "first_audio_p95_ms": 1817.8670246445108,
+        "memory": {
+          "python_rss_peak_mib": 1976.234375,
+          "ollama_rss_sum_peak_mib": 30.140625,
+          "ollama_model_peak_mib": 1580.7199983596802,
+          "ollama_metal_peak_mib": 1580.7199983596802,
+          "system_used_peak_mib": 8864.765625,
+          "swap_used_peak_mib": 1547.3125,
+          "system_available_min_mib": 3305.515625,
+          "mlx_peak_allocated_mib": 1377.6375141143799
+        }
+      },
+      "turns": [
+        {
+          "turn": 1,
+          "status": "completed",
+          "first_audio_ms": 1818.1575829948997,
+          "endpoint_ms": 482.7175829996122,
+          "speech_seconds": 4.7039999999979045,
+          "played_audio_seconds": 4.425,
+          "stt_ms": 234.53124999650754,
+          "llm_first_token_ms": 132.10562500171363,
+          "llm_total_ms": 388.7425419961801,
+          "ollama": {
+            "eval_count": 22,
+            "eval_duration": 256606000,
+            "prompt_eval_count": 169,
+            "load_duration": 3022916
+          },
+          "tts_first_chunk_ms": 724.6042500046315,
+          "turn_processing_ms": 1336.4870420045918
+        },
+        {
+          "turn": 2,
+          "status": "completed",
+          "first_audio_ms": 1812.3464159871219,
+          "endpoint_ms": 481.63270798977464,
+          "speech_seconds": 2.81600000000617,
+          "played_audio_seconds": 4.95,
+          "stt_ms": 210.5790410132613,
+          "llm_first_token_ms": 74.64320900908206,
+          "llm_total_ms": 318.24750000669155,
+          "ollama": {
+            "eval_count": 21,
+            "eval_duration": 243101000,
+            "prompt_eval_count": 213,
+            "load_duration": 1858583
+          },
+          "tts_first_chunk_ms": 814.5447910064831,
+          "turn_processing_ms": 1331.9958750071237
+        }
+      ],
+      "context_checks": []
+    },
+    {
+      "scenario": "barge_in",
+      "summary": {
+        "metadata": {
+          "python": "3.12.9",
+          "machine": "arm64",
+          "platform": "macOS-15.7.3-arm64-arm-64bit",
+          "model": "qwen3:1.7b-q4_K_M",
+          "whisper": "mlx-community/whisper-small-mlx",
+          "voice": "ef_dora",
+          "sink": "wav_realtime_simulation",
+          "context_tokens": 4096
+        },
+        "turns": 2,
+        "completed": 1,
+        "interrupted": 1,
+        "errors": 0,
+        "barge_in_events": 1,
+        "first_audio_p50_ms": 1800.8094169927062,
+        "first_audio_p95_ms": 1800.8094169927062,
+        "memory": {
+          "python_rss_peak_mib": 2160.203125,
+          "ollama_rss_sum_peak_mib": 30.3125,
+          "ollama_model_peak_mib": 1580.7199983596802,
+          "ollama_metal_peak_mib": 1580.7199983596802,
+          "system_used_peak_mib": 8854.796875,
+          "swap_used_peak_mib": 1547.3125,
+          "system_available_min_mib": 3320.09375,
+          "mlx_peak_allocated_mib": 1377.6375141143799
+        }
+      },
+      "turns": [
+        {
+          "turn": 1,
+          "status": "interrupted",
+          "first_audio_ms": 1935.7741249987157,
+          "endpoint_ms": 482.149000003119,
+          "speech_seconds": 4.7039999999979045,
+          "played_audio_seconds": 0.0,
+          "stt_ms": 268.35070800734684,
+          "llm_first_token_ms": 64.13425000209827,
+          "llm_total_ms": 334.6192080061883,
+          "ollama": {
+            "eval_count": 23,
+            "eval_duration": 270006000,
+            "prompt_eval_count": 169,
+            "load_duration": 10085333
+          },
+          "tts_first_chunk_ms": 863.3681250066729,
+          "reason": "barge_in",
+          "turn_processing_ms": 2114.811167004518
+        },
+        {
+          "turn": 2,
+          "status": "completed",
+          "first_audio_ms": 1800.8094169927062,
+          "endpoint_ms": 481.534249993274,
+          "speech_seconds": 2.81600000000617,
+          "played_audio_seconds": 4.95,
+          "stt_ms": 196.0277909965953,
+          "llm_first_token_ms": 71.88179199874867,
+          "llm_total_ms": 320.97183300356846,
+          "ollama": {
+            "eval_count": 21,
+            "eval_duration": 245344000,
+            "prompt_eval_count": 203,
+            "load_duration": 1390250
+          },
+          "tts_first_chunk_ms": 804.3920409982093,
+          "turn_processing_ms": 6934.09187499492
+        }
+      ],
+      "context_checks": [
+        {
+          "event": "context_check",
+          "at": 96397.806515666,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "scenario": "second_name_and_project",
+      "summary": {
+        "metadata": {
+          "python": "3.12.9",
+          "machine": "arm64",
+          "platform": "macOS-15.7.3-arm64-arm-64bit",
+          "model": "qwen3:1.7b-q4_K_M",
+          "whisper": "mlx-community/whisper-small-mlx",
+          "voice": "ef_dora",
+          "sink": "wav_file_available_not_audible",
+          "context_tokens": 4096
+        },
+        "turns": 2,
+        "completed": 2,
+        "interrupted": 0,
+        "errors": 0,
+        "barge_in_events": 0,
+        "first_audio_p50_ms": 1617.0445414973074,
+        "first_audio_p95_ms": 1712.0534163499542,
+        "memory": {
+          "python_rss_peak_mib": 2027.609375,
+          "ollama_rss_sum_peak_mib": 30.390625,
+          "ollama_model_peak_mib": 1580.7199983596802,
+          "ollama_metal_peak_mib": 1580.7199983596802,
+          "system_used_peak_mib": 8666.90625,
+          "swap_used_peak_mib": 1547.3125,
+          "system_available_min_mib": 3207.0625,
+          "mlx_peak_allocated_mib": 1377.6375141143799
+        }
+      },
+      "turns": [
+        {
+          "turn": 1,
+          "status": "completed",
+          "first_audio_ms": 1511.4791249943664,
+          "endpoint_ms": 482.18320799060166,
+          "speech_seconds": 4.351999999998952,
+          "played_audio_seconds": 3.025,
+          "stt_ms": 283.74858299503103,
+          "llm_first_token_ms": 59.606708004139364,
+          "llm_total_ms": 240.5100829928415,
+          "ollama": {
+            "eval_count": 16,
+            "eval_duration": 180111000,
+            "prompt_eval_count": 169,
+            "load_duration": 2447000
+          },
+          "tts_first_chunk_ms": 517.1635000006063,
+          "turn_processing_ms": 1030.2252499968745
+        },
+        {
+          "turn": 2,
+          "status": "completed",
+          "first_audio_ms": 1722.6099580002483,
+          "endpoint_ms": 482.4008750001667,
+          "speech_seconds": 2.144000000000233,
+          "played_audio_seconds": 4.625,
+          "stt_ms": 202.4237089935923,
+          "llm_first_token_ms": 77.75525000761263,
+          "llm_total_ms": 314.8141670098994,
+          "ollama": {
+            "eval_count": 20,
+            "eval_duration": 236785000,
+            "prompt_eval_count": 205,
+            "load_duration": 1387834
+          },
+          "tts_first_chunk_ms": 735.0979159964481,
+          "turn_processing_ms": 1241.5077920013573
+        }
+      ],
+      "context_checks": []
+    }
+  ]
+}

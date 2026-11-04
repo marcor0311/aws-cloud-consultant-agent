@@ -1,0 +1,60 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hf-voice-call-agent"
+version = "0.1.0"
+description = "Prototipo español sobre Hugging Face Speech-to-Speech con métricas locales"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "speech-to-speech[kokoro,whisper-mlx]==1.1.0",
+  "httpx>=0.28,<0.29",
+  "psutil>=7,<8",
+  "PyYAML>=6,<7",
+  "websockets>=14,<17",
+  "soundfile>=0.13,<0.14",
+  "sounddevice>=0.5,<0.6",
+  "numpy>=2,<3",
+  "soxr>=0.5,<2",
+  "mlx>=0.32,<0.33; sys_platform == 'darwin'",
+  "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
+]
+
+[project.scripts]
+hf-voice = "hf_voice.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hf_voice"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10", "pytest-asyncio>=0.25,<2", "ruff>=0.11,<1"]
+
+[tool.uv]
+link-mode = "copy"
+# Lightning pins tiktoken 0.3.3, which has no Python 3.12 arm64 wheel.
+# The current tokenizer preserves its Whisper encoding API; covered by the audio benchmark.
+# HF 1.1.0 pins mlx-audio 0.4.7. Qwen streaming needs the later decoder
+# bias correction (#1003) and full-text conditioning correction (#1036).
+override-dependencies = [
+  "tiktoken>=0.8,<1",
+  "mlx-audio==0.6.2",
+  "mlx==0.32.4",
+  "mlx-metal==0.32.4",
+  "miniaudio==1.71",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

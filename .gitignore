@@ -8,3 +8,9 @@ project/generated/
 *.zip
 project/.env
 .env
+.env.*
+!.env.example
+whitelist.md
+project/data/
+project/.venv-backend/
+project/secrets/

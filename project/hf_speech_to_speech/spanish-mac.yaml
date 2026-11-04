@@ -1,0 +1,78 @@
+schema_version: 1
+
+blocks:
+  vad:
+    kind: vad
+    backend: silero
+    settings:
+      thresh: 0.6
+      min_silence_ms: 480
+      min_speech_ms: 256
+      speech_pad_ms: 160
+      max_speech_ms: 20000.0
+      enable_realtime_transcription: true
+      realtime_processing_pause: 0.8
+  stt:
+    kind: stt
+    backend: whisper-mlx
+    settings:
+      stt_model_name: small
+      stt_device: mps
+      language: es
+  llm:
+    kind: llm
+    backend: chat-completions
+    settings:
+      model_name: voice-call-es:1.7b
+      responses_api_base_url: http://127.0.0.1:11434/v1
+      responses_api_api_key: ollama
+      responses_api_disable_thinking: true
+      responses_api_reasoning_effort: none
+      responses_api_audio_max_tokens: 160
+      responses_api_audio_temperature: 0.0
+      chat_size: 6
+      compact_history: false
+      stream_batch_sentences: 1
+      init_chat_prompt: >-
+        Eres un asistente de voz que conversa en español. Responde de forma breve,
+        normalmente en una o dos frases, sin markdown ni listas.
+        Conserva el contexto: el nombre y los datos del usuario pertenecen al
+        usuario, no a ti. Responde en segunda persona al dirigirte al usuario.
+        Utiliza únicamente datos explícitos del historial; si falta un dato,
+        pide aclaración. Atiende la nueva indicación si el usuario te interrumpe.
+        Contesta directamente la pregunta más reciente sin repetir preguntas
+        anteriores ni ofrecer recordar datos que ya conoces.
+        Usa un español cotidiano y gramatical, como un colega atento.
+        No termines cada respuesta con una pregunta genérica si no aporta nada.
+        Si te preguntan su nombre, responde "Te llamas..." usando el historial.
+        /no_think
+  tts:
+    kind: tts
+    backend: qwen3
+    settings:
+      qwen3_tts_model_name: mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-4bit
+      qwen3_tts_mlx_quantization: 4bit
+      qwen3_tts_language: Spanish
+      qwen3_tts_speaker: Ryan
+      qwen3_tts_streaming_chunk_size: 8
+      qwen3_tts_max_new_tokens: 512
+
+pipelines:
+  spanish:
+    num_pipelines: 1
+    options:
+      enable_live_transcription: true
+      live_transcription_update_interval: 0.8
+    stages: {vad: vad, stt: stt, llm: llm, tts: tts}
+
+runtime:
+  log_level: info
+  log_transcripts: false
+  torch_num_threads: 2
+  server:
+    host: 127.0.0.1
+    port: 8777
+  client:
+    url: ws://127.0.0.1:8778/v1/realtime
+    voice: Ryan
+    block_mic_during_playback: true
