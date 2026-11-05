@@ -1,21 +1,58 @@
 # Consultoría de arquitectura AWS
 
-Nueva iteración del proyecto para el curso **PSWE-07 Procesos y Administración de Software**. Este documento presenta el proceso actual de la consultora, un video del caso ilustrativo y la propuesta de transformación con agentes de inteligencia artificial.
+AWS Cloud Consultant Agent es un sistema multiagente en desarrollo para apoyar
+los puestos de una consultora en proyectos de nube. Los agentes utilizan
+herramientas, ejecutan tareas y coordinan entregas entre negocio, arquitectura,
+FinOps e ingeniería, desde la solicitud del cliente hasta el informe y cierre
+de la fase de consultoría. Las personas revisan y aprueban los resultados.
 
-Repositorio original: [marcor0311/aws-cloud-consultant-agent](https://github.com/marcor0311/aws-cloud-consultant-agent).
+El equipo consume las herramientas del sistema mediante MCP desde
+ChatGPT/Claude y Codex/Claude Code. La agenda y el correo se integran mediante
+las API de Google Calendar y Gmail.
+
+> **Segunda iteración del proyecto**
+>
+> El repositorio original,
+> [Proyecto-Multiagentes-Tendencias-en-Ingenieria-del-Software](https://github.com/marcor0311/Proyecto-Multiagentes-Tendencias-en-Ingenieria-del-Software),
+> se desarrolló para el curso
+> **PSWE-01 Tendencias en Ingeniería del Software**.
+>
+> Esta segunda iteración corresponde al curso
+> **PSWE-07 Procesos y Administración de Software**.
+
+## Repositorios relacionados
+
+El proyecto utiliza estos repositorios como insumos para el diseño y la
+organización de los proyectos de consultoría:
+
+| Repositorio | Propósito |
+| --- | --- |
+| [aws-cloud-consultant-baseline-modules](https://github.com/marcor0311/aws-cloud-consultant-baseline-modules) | Catálogo de módulos Terraform versionados para diseñar e implementar las arquitecturas AWS. |
+| [aws-cloud-consulting-project-template](https://github.com/marcor0311/aws-cloud-consulting-project-template) | Estructura inicial para crear un repositorio independiente por proyecto, con sus áreas numeradas. |
+
+## Contexto del sistema
+
+![C4 nivel 1: contexto objetivo de AWS Cloud Consultant Agent](docs/c4-context.svg)
 
 ## 1. Proceso actual: del cliente al informe ejecutivo
 
-El trabajo pasa por seis etapas, con una persona responsable y una entrega que permite continuar a la siguiente.
+El video muestra un proceso manual: cada persona prepara su parte y entrega
+los insumos a la siguiente. La coordinación de reuniones, el traslado de
+información y la recopilación de resultados dependen del equipo.
 
-1. **Descubrimiento y alcance — Engagement Manager.** Recibe la solicitud del cliente, comparte su agenda y confirma la reunión o coordina su reprogramación. En la reunión recoge necesidades, presupuesto, plazos y requisitos de servicio, seguridad y datos. Organiza las notas, consulta proyectos anteriores y prepara la propuesta para la dirección ejecutiva.
-2. **Priorización y aprobación — Dirección ejecutiva.** Revisa el valor y la prioridad del proyecto, aclara el alcance y define el presupuesto de nube. Si necesita más información, devuelve la propuesta al Engagement Manager; cuando aprueba avanzar, entrega los insumos al arquitecto.
-3. **Diseño de arquitectura — Cloud Solutions Architect.** Define el diagrama AWS, los recursos, los módulos de línea base y los supuestos de uso. Realiza una estimación inicial y entrega la propuesta a FinOps. Su responsabilidad es el diseño; la programación de Terraform corresponde a ingeniería.
-4. **Cumplimiento presupuestario — FinOps Analyst.** Contrasta los recursos y supuestos con AWS Pricing Calculator y valida que el costo estimado cumpla con el presupuesto aprobado. Documenta la revisión y aprueba los costos o solicita ajustes al arquitecto. Si cumplir exige cambiar el alcance o el presupuesto, la decisión vuelve a la dirección ejecutiva.
-5. **Implementación y validación local — Cloud Infrastructure Engineer.** Desarrolla Terraform con los módulos seleccionados, revisa el código y ejecuta pruebas de configuración, seguridad y cumplimiento de la arquitectura. Valida el despliegue en el entorno local de pruebas, conserva evidencias y prepara el plan de despliegue. Entrega el proyecto y los resultados al Engagement Manager.
-6. **Informe final — Engagement Manager.** Reúne los tiempos de cada etapa y entre entregas, junto con los documentos de respaldo, y prepara un informe ejecutivo en PDF para la dirección.
+1. **Descubrimiento (Engagement Manager).** El cliente escribe por correo; el responsable comparte su agenda y confirma la reunión. Después recoge las necesidades, el presupuesto y los plazos, organiza sus notas y revisa proyectos anteriores para preparar la propuesta.
 
-**Resultado:** infraestructura como código validada localmente y preparada para desplegarse. El despliegue en una cuenta AWS real requiere la autorización correspondiente; el mantenimiento y los cambios posteriores pertenecen a otro flujo.
+2. **Priorización (Executive Leadership).** El Engagement Manager presenta la propuesta y la dirección evalúa si continuar. Si la aprueba, prioriza el proyecto, autoriza el presupuesto de nube y pasa los insumos al arquitecto. Si la descarta, el proceso termina y el Engagement Manager informa al cliente que no se continuará con el proyecto.
+
+3. **Diseño (Cloud Solutions Architect).** El arquitecto dibuja la solución AWS, selecciona los módulos de línea base y prepara una primera estimación. Entrega el diagrama, los recursos y los supuestos de uso a FinOps.
+
+4. **Costos (FinOps Analyst).** Estima los costos de los recursos en AWS Pricing Calculator y prepara un Excel con el desglose, las proyecciones y los escenarios de costos. Contrasta ambos insumos con el presupuesto aprobado y entrega la estimación de la calculadora y el Excel validados a ingeniería.
+
+5. **Implementación (Cloud Infrastructure Engineer).** Programa Terraform, revisa el código y ejecuta pruebas de configuración, seguridad y cumplimiento del diseño. Realiza el despliegue local, guarda las evidencias y prepara el plan de despliegue.
+
+6. **Informe (Engagement Manager).** Recibe el proyecto y los resultados de ingeniería, reúne los documentos y los tiempos de cada etapa y entre entregas. Prepara el informe ejecutivo y lo presenta a dirección.
+
+> **Resultado:** infraestructura validada localmente y preparada para desplegarse; el equipo de desarrollo puede continuar con la aplicación.
 
 ## 2. Video del proceso actual
 
@@ -23,20 +60,16 @@ https://github.com/user-attachments/assets/7f10b3d4-1c70-4ffb-8118-c16bec2319a3
 
 ## 3. Transformación propuesta con agentes de IA
 
-La propuesta incorpora un agente de apoyo en cada etapa y conserva la revisión y las decisiones de las personas responsables. Cada entrega al siguiente equipo comparte el contexto del proyecto, los documentos y las aprobaciones, evitando volver a recopilar la misma información.
+La propuesta se define en [los issues de agentes](issues.md): incorpora apoyo de IA en cada etapa y conserva la revisión y las decisiones de las personas responsables. Cada entrega al siguiente equipo comparte el contexto del proyecto, los documentos y las aprobaciones, evitando volver a recopilar la misma información.
 
-El diagrama se lee de izquierda a derecha. En cada columna aparecen, de arriba abajo: **proceso → puesto → agente → funcionalidad**. El mismo **Client Engagement Agent** apoya al Engagement Manager tanto en el descubrimiento como en el informe final.
+El diagrama se lee de izquierda a derecha. Cada columna muestra **proceso → puesto → agente → funcionalidad**. El agendamiento y la preparación usan agentes separados, al igual que el proyecto y los baselines. EM se refiere al Engagement Manager.
 
 ![Propuesta de transformación con agentes de IA: seis etapas, puestos responsables, agentes y funcionalidades](docs/process-flow.png)
 
-Los ciclos de aclaraciones y ajustes descritos en el proceso actual también aplican a la propuesta. Los nombres y capacidades del diagrama representan el flujo objetivo con agentes; su presencia aquí no acredita que todas las integraciones estén implementadas.
+La consulta del histórico de proyectos por MCP ya está desarrollada y se utiliza desde ChatGPT, Claude o web. Los issues detallan las responsabilidades, herramientas y entregas de la propuesta, e indican las funcionalidades pendientes.
 
 ## 4. Oficina virtual
 
 El dashboard permite identificar la etapa del flujo de trabajo en la que se encuentra el agente y el equipo con el que colabora para ese proyecto.
 
 ![Vista de la oficina virtual con el agente en el área de Arquitectura](docs/live-dashboard.png)
-
-## 5. Asistente de calendario
-
-El proyecto inicial de LiveKit Agents para Python está en [`project/calendar_assistant`](project/calendar_assistant/README.md).

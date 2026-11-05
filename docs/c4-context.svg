@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 930" width="1200" height="930" role="img" aria-labelledby="title description" font-family="Arial, Helvetica, sans-serif" style="max-width:100%;height:auto;background:white">
+  <title id="title">AWS Cloud Consultant Agent: contexto C4 nivel 1</title>
+  <desc id="description">El equipo usa ChatGPT o Claude y Codex o Claude Code para consumir el sistema multiagente por MCP. El sistema utiliza las API de GitHub y Google. El cliente gestiona sus reuniones con el sistema.</desc>
+  <rect width="1200" height="930" fill="white" />
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#526178" />
+    </marker>
+  </defs>
+  <text x="60" y="47" font-size="25" fill="#172b4d" font-weight="600" text-anchor="start">AWS Cloud Consultant Agent</text>
+  <text x="60" y="73" font-size="14" fill="#526178" font-weight="400" text-anchor="start">C4 nivel 1: contexto objetivo</text>
+  <line x1="60" y1="94" x2="1140" y2="94" stroke="#dce3eb" />
+  <path d="M490,225 L360,225" fill="none" stroke="#526178" stroke-width="1.6" marker-end="url(#arrow)" />
+  <text x="425" y="209" font-size="13" fill="#526178" font-weight="400" text-anchor="middle">Solicita asistencia</text>
+  <path d="M710,225 L840,225" fill="none" stroke="#526178" stroke-width="1.6" marker-end="url(#arrow)" />
+  <text x="775" y="209" font-size="13" fill="#526178" font-weight="400" text-anchor="middle">Trabaja en proyectos</text>
+  <path d="M230,290 L230,352 L510,352 L510,430" fill="none" stroke="#526178" stroke-width="1.6" marker-end="url(#arrow)" />
+  <text x="370" y="334" font-size="13" fill="#526178" font-weight="400" text-anchor="middle">Solicita acciones de consultoría</text>
+  <text x="370" y="369" font-size="12" fill="#526178" font-weight="400" text-anchor="middle">[MCP]</text>
+  <path d="M970,290 L970,352 L690,352 L690,430" fill="none" stroke="#526178" stroke-width="1.6" marker-end="url(#arrow)" />
+  <text x="830" y="334" font-size="13" fill="#526178" font-weight="400" text-anchor="middle">Solicita acciones de consultoría</text>
+  <text x="830" y="369" font-size="12" fill="#526178" font-weight="400" text-anchor="middle">[MCP]</text>
+  <path d="M420,505 L300,505" fill="none" stroke="#526178" stroke-width="1.6" marker-end="url(#arrow)" />
+  <text x="360" y="469" font-size="13" fill="#526178" font-weight="400" text-anchor="middle">Gestiona</text>
+  <text x="360" y="487" font-size="13" fill="#526178" font-weight="400" text-anchor="middle">artefactos</text>
+  <text x="360" y="522" font-size="12" fill="#526178" font-weight="400" text-anchor="middle">[API]</text>
+  <path d="M780,505 L900,505" fill="none" stroke="#526178" stroke-width="1.6" marker-end="url(#arrow)" />
+  <text x="840" y="469" font-size="13" fill="#526178" font-weight="400" text-anchor="middle">Integra servicios</text>
+  <text x="840" y="487" font-size="13" fill="#526178" font-weight="400" text-anchor="middle">de Google</text>
+  <text x="840" y="522" font-size="12" fill="#526178" font-weight="400" text-anchor="middle">[API]</text>
+  <path d="M600,678 L600,580" fill="none" stroke="#526178" stroke-width="1.6" marker-end="url(#arrow)" />
+  <text x="618" y="633" font-size="13" fill="#526178" font-weight="400" text-anchor="start">Solicita servicios de consultoría</text>
+  <g id="chat">
+    <rect x="100" y="160" width="260" height="130" rx="5" fill="#64748b" />
+    <text x="230.0" y="198" font-size="18" fill="white" font-weight="600" text-anchor="middle">ChatGPT / Claude</text>
+    <text x="230.0" y="221" font-size="12" fill="#e8eef5" font-weight="400" text-anchor="middle">[Software System]</text>
+    <text x="230.0" y="249" font-size="14" fill="white" font-weight="400" text-anchor="middle">Cliente conversacional</text>
+  </g>
+  <g id="usuario">
+    <rect x="490" y="160" width="220" height="130" rx="22" fill="#08427b" />
+    <circle cx="600.0" cy="134" r="26" fill="#08427b" />
+    <text x="600.0" y="198" font-size="18" fill="white" font-weight="600" text-anchor="middle">Usuario</text>
+    <text x="600.0" y="221" font-size="12" fill="#e8eef5" font-weight="400" text-anchor="middle">[Person]</text>
+    <text x="600.0" y="249" font-size="14" fill="white" font-weight="400" text-anchor="middle">Equipo de consultoría</text>
+  </g>
+  <g id="codigo">
+    <rect x="840" y="160" width="260" height="130" rx="5" fill="#64748b" />
+    <text x="970.0" y="198" font-size="18" fill="white" font-weight="600" text-anchor="middle">Codex / Claude Code</text>
+    <text x="970.0" y="221" font-size="12" fill="#e8eef5" font-weight="400" text-anchor="middle">[Software System]</text>
+    <text x="970.0" y="249" font-size="14" fill="white" font-weight="400" text-anchor="middle">Cliente de desarrollo</text>
+  </g>
+  <g id="github">
+    <rect x="60" y="440" width="240" height="130" rx="5" fill="#64748b" />
+    <text x="180.0" y="478" font-size="18" fill="white" font-weight="600" text-anchor="middle">GitHub</text>
+    <text x="180.0" y="501" font-size="12" fill="#e8eef5" font-weight="400" text-anchor="middle">[Software System]</text>
+    <text x="180.0" y="529" font-size="14" fill="white" font-weight="400" text-anchor="middle">Repositorios y</text>
+    <text x="180.0" y="549" font-size="14" fill="white" font-weight="400" text-anchor="middle">colaboración</text>
+  </g>
+  <g id="plataforma">
+    <rect x="420" y="430" width="360" height="150" rx="5" fill="#1168bd" />
+    <text x="600.0" y="468" font-size="19" fill="white" font-weight="600" text-anchor="middle">AWS Cloud Consultant Agent</text>
+    <text x="600.0" y="491" font-size="12" fill="#e8eef5" font-weight="400" text-anchor="middle">[Software System]</text>
+    <text x="600.0" y="519" font-size="14" fill="white" font-weight="400" text-anchor="middle">Sistema multiagente para</text>
+    <text x="600.0" y="539" font-size="14" fill="white" font-weight="400" text-anchor="middle">proyectos de nube</text>
+  </g>
+  <g id="google">
+    <rect x="900" y="440" width="240" height="130" rx="5" fill="#64748b" />
+    <text x="1020.0" y="478" font-size="18" fill="white" font-weight="600" text-anchor="middle">API de Google</text>
+    <text x="1020.0" y="501" font-size="12" fill="#e8eef5" font-weight="400" text-anchor="middle">[Software System]</text>
+    <text x="1020.0" y="529" font-size="14" fill="white" font-weight="400" text-anchor="middle">Servicios de Google</text>
+  </g>
+  <g id="cliente">
+    <rect x="490" y="730" width="220" height="120" rx="22" fill="#686868" />
+    <circle cx="600.0" cy="704" r="26" fill="#686868" />
+    <text x="600.0" y="768" font-size="18" fill="white" font-weight="600" text-anchor="middle">Cliente</text>
+    <text x="600.0" y="791" font-size="12" fill="#e8eef5" font-weight="400" text-anchor="middle">[Person]</text>
+    <text x="600.0" y="819" font-size="14" fill="white" font-weight="400" text-anchor="middle">Participa en proyectos</text>
+    <text x="600.0" y="839" font-size="14" fill="white" font-weight="400" text-anchor="middle">de nube</text>
+  </g>
+  <line x1="60" y1="881" x2="1140" y2="881" stroke="#dce3eb" />
+  <rect x="60" y="900" width="12" height="12" rx="2" fill="#08427b" />
+  <text x="81" y="911" font-size="12" fill="#526178" font-weight="400" text-anchor="start">Persona interna</text>
+  <rect x="285" y="900" width="12" height="12" rx="2" fill="#686868" />
+  <text x="306" y="911" font-size="12" fill="#526178" font-weight="400" text-anchor="start">Persona externa</text>
+  <rect x="510" y="900" width="12" height="12" rx="2" fill="#1168bd" />
+  <text x="531" y="911" font-size="12" fill="#526178" font-weight="400" text-anchor="start">Sistema en estudio</text>
+  <rect x="795" y="900" width="12" height="12" rx="2" fill="#64748b" />
+  <text x="816" y="911" font-size="12" fill="#526178" font-weight="400" text-anchor="start">Sistema externo</text>
+</svg>
