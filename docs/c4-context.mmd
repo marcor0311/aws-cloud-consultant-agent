@@ -1,0 +1,23 @@
+%% Generar la imagen del README con: python3 scripts/render-c4.py
+C4Context
+    title C4 nivel 1 - AWS Cloud Consultant Agent (contexto objetivo)
+
+    System_Ext(chat, "ChatGPT / Claude", "Cliente conversacional")
+    Person(usuario, "Usuario", "Equipo de consultoría")
+    System_Ext(codigo, "Codex / Claude Code", "Cliente de desarrollo")
+
+    System_Ext(github, "GitHub", "Repositorios y<br/>colaboración")
+    System(plataforma, "AWS Cloud Consultant<br/>Agent", "Sistema multiagente para<br/>proyectos de nube")
+    System_Ext(google, "API de Google", "Servicios de Google")
+
+    Person_Ext(cliente, "Cliente", "Participa en proyectos<br/>de nube")
+
+    Rel(usuario, chat, "Solicita asistencia")
+    Rel(usuario, codigo, "Trabaja en proyectos")
+    Rel(chat, plataforma, "Solicita acciones de consultoría", "MCP")
+    Rel(codigo, plataforma, "Solicita acciones de consultoría", "MCP")
+    Rel(plataforma, github, "Gestiona<br/>artefactos", "API")
+    Rel(plataforma, google, "Integra servicios<br/>de Google", "API")
+    Rel(cliente, plataforma, "Solicita servicios de consultoría")
+
+    UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")

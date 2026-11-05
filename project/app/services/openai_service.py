@@ -1,8 +1,11 @@
 import os
-from dotenv import load_dotenv
+
 from openai import AzureOpenAI
 
-load_dotenv()  # Lee .env en la raíz del proyecto
+from app.config import load_environment
+
+load_environment()
+
 
 def is_openai_configured() -> bool:
     return all(
@@ -14,6 +17,7 @@ def is_openai_configured() -> bool:
         ]
     )
 
+
 def _build_client() -> AzureOpenAI:
     return AzureOpenAI(
         azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
@@ -21,7 +25,10 @@ def _build_client() -> AzureOpenAI:
         api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
     )
 
-def ask_azure_openai(message: str, system_prompt: str | None = None, max_completion_tokens: int = 300) -> str:
+
+def ask_azure_openai(
+    message: str, system_prompt: str | None = None, max_completion_tokens: int = 300
+) -> str:
     deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT")
     client = _build_client()
     messages = []
@@ -37,6 +44,7 @@ def ask_azure_openai(message: str, system_prompt: str | None = None, max_complet
     )
 
     return response.choices[0].message.content or ""
+
 
 def safe_ask_azure_openai(
     message: str,
