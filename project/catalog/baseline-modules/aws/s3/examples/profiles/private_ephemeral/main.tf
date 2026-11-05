@@ -1,0 +1,14 @@
+provider "aws" {
+  region = var.aws_region
+}
+
+module "baseline" {
+  source = "../../../versions/1.1.0"
+
+  bucket_name                        = var.bucket_name
+  versioning_enabled                 = false
+  noncurrent_version_expiration_days = null
+  cors_allowed_origins               = var.cors_allowed_origins
+  kms_key_arn                        = var.kms_key_arn
+  tags                               = var.tags
+}

@@ -1,0 +1,6 @@
+brew "python@3.12"
+brew "uv"
+brew "portaudio"
+brew "espeak-ng"
+brew "ffmpeg"
+brew "ollama"
