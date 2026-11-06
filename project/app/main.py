@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import load_environment
 from app.routes.agent_routes import router
 from app.routes.calendar_access_routes import router as calendar_access_router
+from app.delivery.api import router as delivery_router
 
 load_environment()
 
@@ -26,6 +27,7 @@ app.add_middleware(
 # Registrar rutas de agentes
 app.include_router(router, prefix="/api", tags=["Agentes"])
 app.include_router(calendar_access_router, prefix="/api")
+app.include_router(delivery_router, prefix="/api")
 
 
 # Endpoint raíz para verificar que el backend funciona

@@ -1,5 +1,7 @@
 # Consultoría de arquitectura AWS
 
+Avance local de ingeniería e informe: [Entrega 1 (#21 y #22)](docs/delivery-1.md).
+
 AWS Cloud Consultant Agent es un sistema multiagente en desarrollo para apoyar
 los puestos de una consultora en proyectos de nube. Los agentes utilizan
 herramientas, ejecutan tareas y coordinan entregas entre negocio, arquitectura,
