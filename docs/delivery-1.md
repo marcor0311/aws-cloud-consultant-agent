@@ -2,6 +2,8 @@
 
 Incremento local de los issues #21 y #22. No cierra sus alcances completos.
 
+Para reproducir el avance desde cero, seguir [Cómo probar la entrega 1](como-probar-entrega-1.md).
+
 ```mermaid
 flowchart LR
     A[Arquitectura y FinOps simulados] --> B[Agente de ingeniería]
