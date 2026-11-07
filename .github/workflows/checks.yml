@@ -1,0 +1,63 @@
+name: Local component checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: project/backend
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.14'
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m ruff format --check app tests
+      - run: python -m ruff check app tests
+      - run: python -m pytest -q
+
+  calendar-assistant:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: project/agents/1. calendar assistant
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v1
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.14'
+      - run: uv sync --locked
+      - run: uv run --locked ruff format --check src tests demos
+      - run: uv run --locked ruff check src tests demos
+      - run: uv run --locked pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test project/frontend/tests/*.test.mjs
+
+  offline-workflow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v1
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.14'
+      - run: make setup-backend setup-agent
+      - name: LiveKit to preparation, human review and SQL handoff with offline providers
+        run: make test-demo

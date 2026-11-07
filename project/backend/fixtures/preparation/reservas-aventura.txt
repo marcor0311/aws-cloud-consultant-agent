@@ -1,0 +1,22 @@
+TRANSCRIPCIÓN FICTICIA — DEMOSTRACIÓN LOCAL
+Proyecto: Reservas Sierra Aventura
+Fecha simulada: 10 de noviembre de 2026, 14:00–14:30, Costa Rica.
+Participantes: Diego Mora, cliente ficticio; Stuart, Engagement Manager.
+No participa ningún agente en la reunión.
+
+[00:00] Stuart: Diego, ¿qué les gustaría mejorar con este proyecto?
+[00:50] Diego: Operamos actividades de aventura y vendemos pases por teléfono y en recepción. Necesitamos reservas por fecha y control de cupos para evitar sobreventas.
+[03:00] Stuart: ¿Qué debe recibir el visitante después de reservar?
+[03:20] Diego: Cada reserva debe generar un pase con código QR y el personal debe poder validar ese pase al ingresar.
+[06:00] Stuart: ¿Qué ocurre cuando no hay conexión en el acceso?
+[06:30] Diego: La conexión en la entrada es inestable. Necesitamos evaluar una alternativa de validación temporal sin conexión, pero todavía no definimos sus reglas ni los conflictos que podría provocar.
+[10:15] Stuart: ¿Cuáles son los sistemas que ya utilizan?
+[10:50] Diego: Tenemos un sistema de caja. La integración de caja y la política de cancelaciones deben aclararse antes del diseño.
+[14:00] Stuart: ¿Cómo están definiendo presupuesto y fechas?
+[14:25] Diego: Dirección aprobó un máximo de doce mil dólares para evaluar el piloto. No tenemos fecha de salida acordada y esa cifra no es una estimación de operación mensual.
+[18:00] Stuart: ¿Qué evidencia esperarían del piloto?
+[18:20] Diego: Queremos demostrar una reserva sin sobreventa y la validación de un pase en la entrada. Tenemos que definir todavía las pruebas de concurrencia y la política ante pases duplicados.
+[22:00] Stuart: Voy a contrastarlo con el antecedente académico de operaciones de skipass. Lo usaremos como referencia ficticia, no como una solución ya validada para ustedes.
+[25:00] Diego: Me sirve. Mantengamos separado lo confirmado de las opciones que necesitamos explorar.
+[29:00] Stuart: Prepararé el resumen, ideas para la presentación y un guion inicial. Lo revisaremos antes de entregarlo a dirección.
+[30:00] Fin de la reunión ficticia.
