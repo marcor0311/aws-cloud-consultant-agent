@@ -5,7 +5,7 @@ from typing import Any
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from app.bootstrap import create_runtime
+from app.architecture.models import ArchitecturePackage
 from app.core.config import load_environment
 from app.integrations.errors import ProviderError
 from app.persistence.workflow import Busy
@@ -104,6 +104,59 @@ def create_server(service, runtime=None):
         return call(service.metrics, expediente_id)
 
     if runtime:
+
+        @server.tool()
+        def consultar_catalogo_baselines() -> list[dict]:
+            """Lista módulos Terraform reales, perfiles y estado de aprobación; no genera IaC."""
+            return call(runtime.architecture.catalog_modules)
+
+        @server.tool()
+        def iniciar_arquitectura(
+            expediente_id: str, entrada_id: str, propuesta: dict[str, Any]
+        ) -> dict:
+            """Valida una propuesta arquitectónica para revisión humana; no genera Terraform."""
+            try:
+                package = ArchitecturePackage.model_validate(propuesta)
+            except ValueError as error:
+                raise ToolError(str(error)) from None
+            return call(
+                runtime.architecture.start,
+                expediente_id,
+                entrada_id,
+                package.model_dump(mode="json"),
+            )
+
+        @server.tool()
+        def consultar_arquitectura(expediente_id: str) -> dict:
+            """Consulta la revisión, documentos y decisión pendiente del diseño."""
+            return call(runtime.architecture.get, expediente_id)
+
+        @server.tool()
+        def corregir_arquitectura(
+            expediente_id: str, revision: int, propuesta: dict[str, Any]
+        ) -> dict:
+            """Crea una revisión nueva después de cambios solicitados por el arquitecto."""
+            return call(
+                runtime.architecture.replace, expediente_id, revision, propuesta
+            )
+
+        @server.tool()
+        def revisar_arquitectura(
+            expediente_id: str,
+            revision: int,
+            artifact_sha256: str,
+            decision: str,
+            comentarios: str = "",
+        ) -> dict:
+            """Aprueba o devuelve la revisión y hash exactos mediante decisión humana explícita."""
+            return call(
+                runtime.architecture.review,
+                expediente_id,
+                revision,
+                artifact_sha256,
+                decision,
+                comentarios,
+            )
 
         @server.tool()
         def agente_preparacion(proyecto_id: str = "") -> dict:
@@ -213,6 +266,8 @@ def create_server(service, runtime=None):
 
 
 def main():
+    from app.bootstrap import create_runtime
+
     load_environment()
     runtime = create_runtime(WorkflowSettings.from_environment())
     try:

@@ -1,0 +1,221 @@
+{
+  "contract_version": "1.0",
+  "target_stage": 4,
+  "handoff_status": "ready",
+  "blocking_reasons": [],
+  "revision": 1,
+  "artifact_sha256": "f372607a6d76810a21a2985d5b9e15815d9e356f3d303b5de5ddda2048b6a3fc",
+  "source_issue": "https://github.com/marcor0311/aws-cloud-consultant-agent/issues/19",
+  "architecture_schema_version": "1.1",
+  "architecture": {
+    "schema_version": "1.1",
+    "project_id": "documentos-demo",
+    "source_issue": "https://github.com/marcor0311/aws-cloud-consultant-agent/issues/19",
+    "region": "us-east-1",
+    "environment": "dev",
+    "requirements": [
+      {
+        "requirement_id": "REQ-001",
+        "description": "Almacenar documentos privados con cifrado y versionado.",
+        "source": "docs/01-discovery/summary.md"
+      }
+    ],
+    "resources": [
+      {
+        "resource_id": "documents",
+        "aws_service": "Amazon S3",
+        "purpose": "Almacenar documentos privados del proyecto.",
+        "dependencies": [],
+        "sizing_assumptions": [
+          "100 GB de almacenamiento promedio",
+          "100000 solicitudes GET por mes"
+        ]
+      }
+    ],
+    "baselines": [
+      {
+        "module_id": "s3",
+        "repository": "https://github.com/marcor0311/aws-cloud-consultant-baseline-modules.git",
+        "commit": "2450a17830d40439e4eb673d1459140b52d9b93f",
+        "candidate_version": "0.1.0",
+        "approval_status": "draft",
+        "profile": "default",
+        "configuration": {
+          "versioning_enabled": true,
+          "kms_key_arn": "required-from-project"
+        }
+      }
+    ],
+    "missing_baselines": [
+      "kms"
+    ],
+    "decisions": [
+      {
+        "adr_id": "ADR-001",
+        "title": "Usar Amazon S3 para documentos",
+        "decision": "Usar almacenamiento de objetos privado, cifrado y versionado.",
+        "alternatives": [
+          "Amazon EFS"
+        ],
+        "tradeoffs": [
+          "S3 no ofrece semántica de filesystem POSIX."
+        ]
+      }
+    ],
+    "security_controls": [
+      {
+        "control_id": "SEC-001",
+        "description": "Bloquear acceso público y exigir conexiones TLS.",
+        "policy_as_code_path": "docs/03-architecture/policies/s3.rego"
+      }
+    ],
+    "cost_assumptions": [
+      {
+        "resource_id": "documents",
+        "metric": "almacenamiento promedio",
+        "quantity": "100",
+        "unit": "GB-month"
+      }
+    ],
+    "economic_contract": {
+      "contract_version": "1.0",
+      "budget": {
+        "status": "known",
+        "amount": "75.00",
+        "currency": "USD",
+        "period": "month",
+        "source": {
+          "source_type": "client",
+          "source_reference": "https://github.com/marcor0311/aws-cloud-consultant-agent/issues/19",
+          "notes": "Presupuesto mensual indicado para este ejemplo reproducible."
+        }
+      },
+      "pricing_inputs": [
+        {
+          "resource_id": "documents",
+          "aws_service": "Amazon S3",
+          "service_code": "AmazonS3",
+          "region": "us-east-1",
+          "dimensions": [
+            {
+              "dimension_id": "standard-storage",
+              "metric": "storage",
+              "quantity": "100",
+              "unit": "GB-month",
+              "period": "month",
+              "source": {
+                "source_type": "requirement",
+                "source_reference": "REQ-001",
+                "notes": null
+              },
+              "requirement_ids": [
+                "REQ-001"
+              ],
+              "missing_reason": null,
+              "pricing_attributes": {
+                "storage_class": "STANDARD"
+              }
+            },
+            {
+              "dimension_id": "get-requests",
+              "metric": "get_requests",
+              "quantity": "100000",
+              "unit": "requests/month",
+              "period": "month",
+              "source": {
+                "source_type": "architecture",
+                "source_reference": "ADR-001",
+                "notes": "Supuesto de dimensionamiento que debe confirmar el cliente."
+              },
+              "requirement_ids": [
+                "REQ-001"
+              ],
+              "missing_reason": null,
+              "pricing_attributes": {
+                "request_type": "GET"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "diagram_mermaid": "flowchart LR\n  client[Aplicación] --> documents[Amazon S3]\n  kms[AWS KMS] --> documents",
+    "risks": [
+      "El costo final depende del volumen de solicitudes y transferencia."
+    ],
+    "open_questions": [
+      "Confirmar el periodo de retención de versiones anteriores."
+    ]
+  },
+  "economic_contract": {
+    "contract_version": "1.0",
+    "budget": {
+      "status": "known",
+      "amount": "75.00",
+      "currency": "USD",
+      "period": "month",
+      "source": {
+        "source_type": "client",
+        "source_reference": "https://github.com/marcor0311/aws-cloud-consultant-agent/issues/19",
+        "notes": "Presupuesto mensual indicado para este ejemplo reproducible."
+      }
+    },
+    "pricing_inputs": [
+      {
+        "resource_id": "documents",
+        "aws_service": "Amazon S3",
+        "service_code": "AmazonS3",
+        "region": "us-east-1",
+        "dimensions": [
+          {
+            "dimension_id": "standard-storage",
+            "metric": "storage",
+            "quantity": "100",
+            "unit": "GB-month",
+            "period": "month",
+            "source": {
+              "source_type": "requirement",
+              "source_reference": "REQ-001",
+              "notes": null
+            },
+            "requirement_ids": [
+              "REQ-001"
+            ],
+            "missing_reason": null,
+            "pricing_attributes": {
+              "storage_class": "STANDARD"
+            }
+          },
+          {
+            "dimension_id": "get-requests",
+            "metric": "get_requests",
+            "quantity": "100000",
+            "unit": "requests/month",
+            "period": "month",
+            "source": {
+              "source_type": "architecture",
+              "source_reference": "ADR-001",
+              "notes": "Supuesto de dimensionamiento que debe confirmar el cliente."
+            },
+            "requirement_ids": [
+              "REQ-001"
+            ],
+            "missing_reason": null,
+            "pricing_attributes": {
+              "request_type": "GET"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "documents": [
+    "adrs.md",
+    "architecture-package.json",
+    "architecture.md",
+    "architecture.mmd",
+    "pricing-inputs.json",
+    "requirements.md",
+    "security.md"
+  ]
+}

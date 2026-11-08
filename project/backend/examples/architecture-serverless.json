@@ -1,0 +1,83 @@
+{
+  "schema_version": "1.1",
+  "project_id": "api-pedidos-demo",
+  "source_issue": "https://github.com/marcor0311/aws-cloud-consultant-agent/issues/19",
+  "region": "us-east-1",
+  "environment": "test",
+  "requirements": [
+    {"requirement_id": "REQ-001", "description": "Exponer una API con 500000 solicitudes mensuales.", "source": "docs/01-discovery/summary.md"},
+    {"requirement_id": "REQ-002", "description": "Persistir pedidos con capacidad bajo demanda.", "source": "docs/01-discovery/summary.md"},
+    {"requirement_id": "REQ-003", "description": "Conservar logs de acceso cifrados durante 90 días.", "source": "docs/01-discovery/summary.md"}
+  ],
+  "resources": [
+    {"resource_id": "orders-api", "aws_service": "Amazon API Gateway", "purpose": "Exponer la API HTTP de pedidos.", "dependencies": ["orders-function", "api-access-logs"], "sizing_assumptions": ["500000 solicitudes por mes", "5 GB mensuales de transferencia saliente"]},
+    {"resource_id": "orders-function", "aws_service": "AWS Lambda", "purpose": "Procesar las solicitudes de la API.", "dependencies": ["orders-table"], "sizing_assumptions": ["500000 invocaciones mensuales", "200 ms promedio y 512 MB por invocación"]},
+    {"resource_id": "orders-table", "aws_service": "Amazon DynamoDB", "purpose": "Persistir pedidos usando capacidad bajo demanda.", "dependencies": ["application-key"], "sizing_assumptions": ["500000 escrituras y 1000000 lecturas por mes", "5 GB de almacenamiento promedio", "Elementos de 1 KB"]},
+    {"resource_id": "api-access-logs", "aws_service": "Amazon CloudWatch Logs", "purpose": "Conservar logs de acceso de API Gateway.", "dependencies": ["application-key"], "sizing_assumptions": ["1 GB de ingestión mensual", "0.5 GB-month de almacenamiento promedio"]},
+    {"resource_id": "application-key", "aws_service": "AWS KMS", "purpose": "Cifrar DynamoDB y los logs de acceso.", "dependencies": [], "sizing_assumptions": ["Una clave administrada por el cliente", "1500000 solicitudes criptográficas mensuales"]}
+  ],
+  "baselines": [
+    {"module_id": "api-gateway", "repository": "https://github.com/marcor0311/aws-cloud-consultant-baseline-modules.git", "commit": "2450a17830d40439e4eb673d1459140b52d9b93f", "candidate_version": "0.1.0", "approval_status": "draft", "profile": "jwt", "configuration": {}},
+    {"module_id": "dynamodb", "repository": "https://github.com/marcor0311/aws-cloud-consultant-baseline-modules.git", "commit": "2450a17830d40439e4eb673d1459140b52d9b93f", "candidate_version": "0.1.0", "approval_status": "draft", "profile": "on-demand", "configuration": {}}
+  ],
+  "missing_baselines": ["lambda", "kms", "cloudwatch-logs"],
+  "decisions": [
+    {"adr_id": "ADR-001", "title": "Usar servicios administrados bajo demanda", "decision": "Usar API Gateway HTTP, Lambda y DynamoDB bajo demanda, con logs cifrados.", "alternatives": ["Servicios en contenedores"], "tradeoffs": ["El costo depende del volumen de solicitudes y de los logs generados."]}
+  ],
+  "security_controls": [
+    {"control_id": "SEC-001", "description": "Autenticar solicitudes mediante JWT y cifrar datos y logs en reposo.", "policy_as_code_path": null}
+  ],
+  "cost_assumptions": [
+    {"resource_id": "orders-api", "metric": "solicitudes", "quantity": 500000, "unit": "requests/month"},
+    {"resource_id": "orders-function", "metric": "invocaciones", "quantity": 500000, "unit": "requests/month"},
+    {"resource_id": "orders-table", "metric": "lecturas", "quantity": 1000000, "unit": "operations/month"},
+    {"resource_id": "api-access-logs", "metric": "ingestión", "quantity": 1, "unit": "GB/month"},
+    {"resource_id": "application-key", "metric": "clave", "quantity": 1, "unit": "keys/month"}
+  ],
+  "economic_contract": {
+    "contract_version": "1.1",
+    "budget": {"status": "known", "amount": "150.00", "currency": "USD", "period": "month", "source": {"source_type": "client", "source_reference": "https://github.com/marcor0311/aws-cloud-consultant-agent/issues/19", "notes": "Presupuesto de demostración, no presupuesto de un cliente real."}},
+    "pricing_inputs": [
+      {
+        "service_type": "api_gateway", "resource_id": "orders-api", "aws_service": "Amazon API Gateway", "service_code": "AmazonApiGateway", "region": "us-east-1", "api_type": "HTTP",
+        "dimensions": [
+          {"dimension_id": "http-requests", "metric": "api_requests", "quantity": "500000", "unit": "requests/month", "source": {"source_type": "requirement", "source_reference": "REQ-001"}, "requirement_ids": ["REQ-001"]},
+          {"dimension_id": "internet-transfer", "metric": "data_transfer_out", "quantity": "5", "unit": "GB/month", "source": {"source_type": "architecture", "source_reference": "ADR-001", "notes": "Supuesto de demostración de 10 KB por respuesta."}, "requirement_ids": ["REQ-001"], "destination": "internet"}
+        ]
+      },
+      {
+        "service_type": "lambda", "resource_id": "orders-function", "aws_service": "AWS Lambda", "service_code": "AWSLambda", "region": "us-east-1",
+        "dimensions": [
+          {"dimension_id": "function-invocations", "metric": "invocations", "quantity": "500000", "unit": "requests/month", "source": {"source_type": "architecture", "source_reference": "ADR-001", "notes": "Una invocación por solicitud API en el ejemplo."}, "requirement_ids": ["REQ-001"]},
+          {"dimension_id": "function-duration", "metric": "compute_duration", "quantity": "100000000", "unit": "milliseconds/month", "source": {"source_type": "architecture", "source_reference": "ADR-001", "notes": "500000 invocaciones por 200 ms promedio."}, "requirement_ids": ["REQ-001"], "memory_mb": 512, "architecture": "arm64"}
+        ]
+      },
+      {
+        "service_type": "dynamodb", "resource_id": "orders-table", "aws_service": "Amazon DynamoDB", "service_code": "AmazonDynamoDB", "region": "us-east-1", "billing_mode": "PAY_PER_REQUEST",
+        "dimensions": [
+          {"dimension_id": "on-demand-reads", "metric": "read_requests", "quantity": "1000000", "unit": "operations/month", "source": {"source_type": "requirement", "source_reference": "REQ-002"}, "requirement_ids": ["REQ-002"], "average_item_size_kb": "1", "read_consistency": "eventual"},
+          {"dimension_id": "on-demand-writes", "metric": "write_requests", "quantity": "500000", "unit": "operations/month", "source": {"source_type": "requirement", "source_reference": "REQ-002"}, "requirement_ids": ["REQ-002"], "average_item_size_kb": "1"},
+          {"dimension_id": "table-storage", "metric": "table_storage", "quantity": "5", "unit": "GB-month", "source": {"source_type": "architecture", "source_reference": "ADR-001", "notes": "Supuesto de demostración para el almacenamiento promedio."}, "requirement_ids": ["REQ-002"], "table_class": "STANDARD"},
+          {"dimension_id": "continuous-backup", "metric": "pitr_storage", "quantity": "5", "unit": "GB-month", "source": {"source_type": "architecture", "source_reference": "ADR-001", "notes": "El baseline habilita recuperación a un punto en el tiempo."}, "requirement_ids": ["REQ-002"]}
+        ]
+      },
+      {
+        "service_type": "cloudwatch_logs", "resource_id": "api-access-logs", "aws_service": "Amazon CloudWatch Logs", "service_code": "AmazonCloudWatch", "region": "us-east-1",
+        "dimensions": [
+          {"dimension_id": "access-log-ingestion", "metric": "log_ingestion", "quantity": "1", "unit": "GB/month", "source": {"source_type": "architecture", "source_reference": "ADR-001", "notes": "Supuesto de demostración basado en 500000 solicitudes."}, "requirement_ids": ["REQ-003"], "log_class": "STANDARD"},
+          {"dimension_id": "access-log-storage", "metric": "archive_storage", "quantity": "0.5", "unit": "GB-month", "source": {"source_type": "architecture", "source_reference": "ADR-001", "notes": "Promedio mensual supuesto para 90 días de retención."}, "requirement_ids": ["REQ-003"], "log_class": "STANDARD"}
+        ]
+      },
+      {
+        "service_type": "kms", "resource_id": "application-key", "aws_service": "AWS KMS", "service_code": "awskms", "region": "us-east-1",
+        "dimensions": [
+          {"dimension_id": "customer-key", "metric": "customer_managed_keys", "quantity": "1", "unit": "keys/month", "source": {"source_type": "architecture", "source_reference": "ADR-001", "notes": "Los baselines requieren una clave KMS existente."}, "requirement_ids": ["REQ-002", "REQ-003"]},
+          {"dimension_id": "symmetric-requests", "metric": "api_requests", "quantity": "1500000", "unit": "requests/month", "source": {"source_type": "architecture", "source_reference": "ADR-001", "notes": "Supuesto de demostración; debe reemplazarse con telemetría real."}, "requirement_ids": ["REQ-002", "REQ-003"], "operation_group": "symmetric"}
+        ]
+      }
+    ]
+  },
+  "diagram_mermaid": "flowchart LR\n  client[Cliente] --> api[API Gateway]\n  api --> fn[Lambda]\n  fn --> table[DynamoDB]\n  api --> logs[CloudWatch Logs]\n  kms[AWS KMS] --> table\n  kms --> logs",
+  "risks": ["Los volúmenes son supuestos de demostración y deben validarse con el cliente."],
+  "open_questions": []
+}

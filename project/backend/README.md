@@ -153,6 +153,9 @@ reales al agente.
   etapas y servicio compartido por HTTP/MCP.
 - `app/preparation/`: grafo posterior a la reunión, estado, nodos, modelos y
   servicios; sus colaboradores se inyectan desde `app/bootstrap.py`.
+- `app/architecture/`: contrato y grafo del Cloud Architecture Agent; valida
+  recursos, decisiones, seguridad, supuestos de costo y selecciones baseline.
+  Exige aprobación humana y no genera Terraform ni despliega recursos.
 - `app/persistence/`: SQL compartido, savers de checkpoints y bloqueo local.
 - `app/integrations/`: Google, Slack, IA y mocks; OAuth de la demo en `ai/oauth.py`.
 - `app/api/` y `app/mcp_server.py`: entradas sobre los mismos servicios.
@@ -222,3 +225,40 @@ El SQL de OTP está en `app/verification/repository.py`; los servicios reciben
 `VerificationRepository`. Las operaciones de continuidad de los grafos se reciben
 por `WorkflowExecution` (`app/workflow/ports.py`) y su adaptador está en
 `app/integrations/langgraph.py`. El schema OTP y los thread IDs existentes se conservan.
+
+## Cloud Architecture Agent — issue #19
+
+El primer incremento recibe una propuesta estructurada elaborada con el arquitecto,
+consulta los `module.yaml` y `audit-record.yaml` del repositorio hermano de
+baselines y produce requisitos, arquitectura, diagrama Mermaid, ADRs y seguridad.
+Las selecciones conservan repositorio, commit, versión candidata, perfil y estado
+de aprobación. Un módulo pendiente no puede declararse aprobado.
+
+Las herramientas MCP son `consultar_catalogo_baselines`, `iniciar_arquitectura`,
+`consultar_arquitectura`, `corregir_arquitectura` y `revisar_arquitectura`. La
+última exige la revisión y SHA-256 pendientes exactos. Al aprobar, el grafo crea
+el handoff de etapa 3 a etapa 4 y avanza el proceso principal a FinOps. No ejecuta
+`terraform apply`, no genera archivos `.tf` y no necesita credenciales AWS.
+
+La demostración visible y sin conexiones externas se ejecuta desde
+`project/backend/`:
+
+```powershell
+.\.venv\Scripts\python.exe -m app.architecture.demo
+```
+
+Exporta los documentos y `handoff-finops.json` en
+`data/architecture-demo/`. El archivo `demo-result.json` identifica el agente,
+estado final, revisión, hash, baseline seleccionado y confirma que no se generó
+Terraform ni se utilizaron credenciales AWS.
+
+Para conectar Codex se usa el servidor STDIO dedicado:
+
+```powershell
+.\.venv\Scripts\python.exe -m app.architecture.mcp_server
+```
+
+No se inicia manualmente cuando está registrado en Codex: Codex lanza el proceso
+y descubre únicamente las cinco herramientas de Arquitectura. El servidor usa
+SQLite local bajo `data/architecture-mcp/`, consulta el repositorio hermano de
+baselines y no necesita claves de OpenAI o AWS.

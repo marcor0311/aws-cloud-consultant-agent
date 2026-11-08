@@ -35,6 +35,7 @@ class WorkflowRuntime:
         references,
         worker_lock,
         resources,
+        architecture=None,
         mock_clock=None,
         client_lookup=None,
     ):
@@ -43,6 +44,7 @@ class WorkflowRuntime:
         self.google, self.notifier, self.drafter = google, notifier, drafter
         self.search, self.read_reference = references.search, references.read_reference
         self.worker_lock, self.stack = worker_lock, resources
+        self.architecture = architecture
         self.mock_clock, self.client_lookup = mock_clock, client_lookup
 
     def close(self):
