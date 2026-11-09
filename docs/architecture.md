@@ -1,8 +1,8 @@
 # Arquitectura local del proyecto
 
 El repositorio contiene el backend, el agente de voz y la interfaz. La organización
-distingue el código implementado de las carpetas documentales de agentes pendientes.
-Las seis etapas son estados del proceso y su número no determina los runtimes. Los datos conservan sus rutas originales; las credenciales locales se centralizan fuera del repositorio.
+se limita a código implementado. Las seis etapas son estados del proceso, no seis
+carpetas de agentes por crear. Los datos conservan sus rutas originales; las credenciales locales se centralizan fuera del repositorio.
 
 ## Estructura de project/
 
@@ -29,17 +29,12 @@ project/
 │   ├── fixtures/               # Datos ficticios versionados
 │   └── tests/                  # Pruebas agrupadas por responsabilidad
 ├── agents/
-│   ├── 1. calendar assistant/
-│   │   ├── src/                # Entrada, reglas, adaptadores y herramientas de voz
-│   │   ├── prompts/
-│   │   ├── demos/              # Runner de voz con modelo y transporte ficticios
-│   │   ├── tests/
-│   │   └── agent.json
-│   ├── 2. meeting assistant/    # Entrada, instrucciones y plantilla de apertura
-│   ├── 3. architecture agent/   # Responsabilidad documentada; runtime pendiente
-│   ├── 4. finops agent/         # Responsabilidad documentada; runtime pendiente
-│   ├── 5. terraform agent/      # Referencia al avance en backend/app/delivery
-│   └── 6. project closure agent/ # Referencia al borrador; cierre pendiente
+│   └── 1. calendar assistant/
+│       ├── src/                # Entrada, reglas, adaptadores y herramientas de voz
+│       ├── prompts/
+│       ├── demos/              # Runner de voz con modelo y transporte ficticios
+│       ├── tests/
+│       ├── agent.json
 ├── frontend/
 │   ├── office-dashboard.html
 │   ├── src/                    # JavaScript y CSS

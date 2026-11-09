@@ -1,6 +1,5 @@
 # Agentes del proceso
 
-El registro incluye agentes implementados y carpetas documentales de trabajo.
 Los agentes con runtime independiente viven en su carpeta con código, instrucciones,
 modelos, dependencias y pruebas locales propias. Los agentes implementados como
 grafos del backend se registran aquí y se ejecutan mediante su worker, sin duplicar código.
@@ -9,10 +8,6 @@ grafos del backend se registran aquí y se ejecutan mediante su worker, sin dupl
 | --- | --- | --- | --- | --- |
 | 1 | [Calendar Assistant](1.%20calendar%20assistant/README.md) | `calendar_assistant` | Agendar, reagendar y cancelar reuniones verificadas | Engagement Manager: agendamiento |
 | 2 | [Meeting Assistant](2.%20meeting%20assistant/README.md) | `meeting_assistant` | Registrar decisión y cola en PostgreSQL, crear desde template y entregar el issue al arquitecto | Dirección: apertura de proyecto |
-| 3 | [Architecture Agent](3.%20architecture%20agent/README.md) | `architecture_agent` | Diseño aprobado y entrega a FinOps; runtime pendiente | Arquitectura |
-| 4 | [FinOps Agent](4.%20finops%20agent/README.md) | `finops_agent` | Validación y entrega de costos; runtime pendiente | FinOps |
-| 5 | [Terraform Agent](5.%20terraform%20agent/README.md) | `terraform_agent` | Entrega técnica; avance determinista en el backend | Ingeniería |
-| 6 | [Project Closure Agent](6.%20project%20closure%20agent/README.md) | `project_closure_agent` | Informe ejecutivo; borrador en backend, aprobación y cierre pendientes | Informe y cierre |
 
 El agente de preparación ejecutiva se implementa en `backend/app/preparation/`,
 con estado, nodos y grafo propios, y se ejecuta mediante `make workflow`. Su MCP
@@ -29,17 +24,10 @@ puede necesitar varios agentes. La preparación ejecutiva del primer issue está
 en `backend/app/preparation`, ejecutada por el worker de LangGraph; no pertenece
 al agente de agenda. `backend/app/workflow` coordina los contratos de las seis etapas.
 
-Las carpetas 3–6 documentan las responsabilidades y el estado de cada agente;
-no implican runtimes independientes. Arquitectura y FinOps están pendientes.
-Terraform y Project Closure referencian los nodos de la entrega 1 en
-`backend/app/delivery/`, separados del proceso principal, sin duplicar su código.
-Los nombres de estas carpetas son los aprobados para el repositorio; corresponden
-a Cloud Architecture Agents, Cloud FinOps Agent, Terraform Engineering Agent y
-Client Engagement Agent del diagrama de proceso.
-
-Cuando se implemente un runtime independiente, sus reglas vivirán en `src/domain`,
-los adaptadores en `src/integrations` y las herramientas en `src/tools`. La
-conversación estará en `prompts/` y la identidad y modelos en `agent.json`. Los datos de clientes, OTP y correo transaccional pertenecen al
+Los siguientes agentes se incorporan cuando exista una implementación. Cada uno
+agrupa sus reglas en `src/domain`, adaptadores en `src/integrations` y herramientas
+en `src/tools`. La conversación vive en `prompts/` y la identidad y modelos en
+`agent.json`. Los datos de clientes, OTP y correo transaccional pertenecen al
 [backend](../backend/README.md); la oficina virtual pertenece al
 [frontend](../frontend/README.md).
 
