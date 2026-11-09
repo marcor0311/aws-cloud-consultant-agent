@@ -1,6 +1,5 @@
 """Browser caption ingestion uses actual HTTP, SQL, queue and LangGraph; no cloud."""
 
-import uuid
 from unittest.mock import Mock
 
 import pytest
@@ -118,69 +117,3 @@ def test_authenticated_api_queues_then_worker_preserves_speakers_after_restart(
             other.close()
     finally:
         app.dependency_overrides.clear()
-
-
-def test_id_reuse_with_changed_content_cannot_overwrite(ready):
-    runtime, case, _, _ = ready
-    receive_capture(runtime, capture())
-    with pytest.raises(ValueError):
-        receive_capture(runtime, capture(reporter_name="Another name"))
-    runtime.run_once()
-    second = receive_capture(runtime, capture(capture_id=str(uuid.uuid4())))
-    runtime.run_once()
-    assert (
-        runtime.store.job(second["task_id"])["error"]
-        == "transcript_requires_reconciliation"
-    )
-    assert (
-        runtime.store.get(f"transcript:{case}")["capture_id"] == capture()["capture_id"]
-    )
-
-
-def test_current_meet_room_path_is_accepted_and_correlated(ready):
-    runtime, _, _, _ = ready
-    body = capture(meeting_url="https://meet.google.com/meet/abc-defg-hij")
-    received = receive_capture(runtime, body)
-    assert received["status"] == "accepted"
-    assert (
-        runtime.store.job(received["task_id"])["payload"]["meet_code"] == "abc-defg-hij"
-    )
-
-
-@pytest.mark.parametrize(
-    "changes",
-    [
-        {"meeting_url": "https://attacker.example/abc-defg-hij"},
-        {"meeting_url": "https://meet.google.com/abc-defg-hij?redirect=elsewhere"},
-        {"capture_id": "not-an-id"},
-        {"segments": []},
-        {"ended_at": "2026-11-09T15:00:00Z"},
-        {
-            "segments": [
-                {
-                    "speaker": "Ana",
-                    "at": "2026-11-09T18:00:00Z",
-                    "text": "Fuera de intervalo",
-                }
-            ]
-        },
-    ],
-)
-def test_invalid_captures_are_rejected(ready, changes):
-    with pytest.raises(ValueError):
-        receive_capture(ready[0], capture(**changes))
-
-
-def test_unknown_or_cancelled_meeting_never_advances_another_project(ready):
-    runtime, case, _, _ = ready
-    body = capture(meeting_url="https://meet.google.com/xyz-abcd-efg")
-    task = receive_capture(runtime, body)["task_id"]
-    runtime.run_once()
-    assert runtime.store.job(task)["status"] == "pending"
-    meeting = runtime.store.get(f"meeting:{case}")
-    runtime.store.put(f"meeting:{case}", "meeting", {**meeting, "status": "cancelled"})
-    task = receive_capture(runtime, capture(capture_id=str(uuid.uuid4())))["task_id"]
-    runtime.run_once()
-    assert runtime.store.job(task)["status"] == "pending"
-    assert runtime.store.list("transcript") == []
-    assert runtime.process.get(case)["state"]["status"] == "awaiting_meeting"

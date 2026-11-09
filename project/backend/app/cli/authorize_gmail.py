@@ -4,7 +4,7 @@ from pathlib import Path
 
 from google_auth_oauthlib.flow import InstalledAppFlow
 
-from app.core.config import PROJECT_DIR, load_environment
+from app.core.config import load_environment
 from app.notifications.gmail import (
     GMAIL_SEND_SCOPE,
     GmailSettings,
@@ -18,12 +18,12 @@ def authorize() -> Path:
     settings = GmailSettings.from_environment()
     client_file = configured_path(
         "CALENDAR_GMAIL_CLIENT_FILE",
-        "agents/1. calendar assistant/secrets/google_oauth_client.json",
+        "google/oauth-client.json",
     )
     if not client_file.is_file():
         raise RuntimeError("No encuentro el cliente OAuth configurado para Gmail.")
-    calendar_token = (
-        PROJECT_DIR / "agents/1. calendar assistant/secrets/google_calendar_token.json"
+    calendar_token = configured_path(
+        "GOOGLE_OAUTH_TOKEN_FILE", "google/calendar-token.json"
     )
     if settings.token_file.resolve() in {
         client_file.resolve(),
@@ -62,7 +62,9 @@ def main():
         raise SystemExit(
             "No se completó la autorización de Gmail. Revisa el consentimiento y vuelve a intentarlo."
         ) from None
-    print("Gmail autorizado. Token guardado en secrets/ con permisos restringidos.")
+    print(
+        "Gmail autorizado. Token guardado en el directorio privado externo con permisos restringidos."
+    )
 
 
 if __name__ == "__main__":

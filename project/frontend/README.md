@@ -38,17 +38,15 @@ El agente es una nube flotante de volumen continuo, con ojos discretos y una exp
 - `src/commons-space.js`: mesa comunal vertical y bancos alrededor del árbol central.
 - `src/commons-seating.js`: modelos reutilizables de sillas y butacas tapizadas.
 - `src/cloud-agent.js`: modelo y animación del agente.
-- `tests/office-navigation.test.mjs`: regresiones de obstáculos, accesos y puertas.
 
 Los controles permiten acercar, alejar, restablecer, mirar desde arriba, alternar rótulos, seguir al agente y pausar. Girar la cámara o seleccionar otra área sale del seguimiento. La ayuda se abre solo al solicitarla. La preferencia de movimiento reducido inicia el agente en pausa; la animación se suspende en pestañas ocultas.
 
 ## Verificación
 
-```sh
-make test-frontend
-```
-
-Las pruebas cubren desvíos alrededor de muebles, accesos demasiado estrechos, puertas abiertas y cerradas, límites del suelo, destinos obstruidos y la elevación y el regreso desde las sillas. Los cambios de distribución deben comprobarse también en navegador recorriendo el circuito completo, incluidas las salidas de las oficinas. Durante las visitas a las sillas se comprueba el volumen del agente en 3D, además del margen de circulación en el suelo.
+La suite automatizada se concentra en agentes, persistencia y handoffs; se
+eliminaron las pruebas aisladas de navegación y asientos. Los cambios de
+distribución se revisan en navegador recorriendo el circuito completo, incluidas
+las salidas de las oficinas y las visitas a las sillas.
 
 Las referencias visuales seleccionadas se reúnen en [REFERENCIAS.md](REFERENCIAS.md). La búsqueda mantiene como base el árbol central, los asientos alrededor y la mesa vertical; las posibles incorporaciones se estudian en los márgenes del espacio común.
 

@@ -256,7 +256,8 @@ class WorkflowStore:
                 )
                 db.execute(
                     insert(events).values(
-                        id=f"created:{handoff_id}",
+                        id="handoff-created:"
+                        + hashlib.sha256(handoff_id.encode()).hexdigest(),
                         case_id=case_id,
                         kind="handoff.created",
                         at=self.clock(),
@@ -264,7 +265,10 @@ class WorkflowStore:
                             "handoff_id": handoff_id,
                             "from_actor": from_actor,
                             "to_actor": to_actor,
+                            "from_phase": from_phase,
+                            "to_phase": to_phase,
                             "revision": revision,
+                            "artifact_sha256": artifact_sha256,
                         },
                     )
                 )
@@ -292,14 +296,21 @@ class WorkflowStore:
                 ).mappings()
             ]
 
-    def accept_handoff(self, handoff_id, actor, accepted_at=None):
+    def accept_handoff(
+        self,
+        handoff_id,
+        actor,
+        accepted_at=None,
+        *,
+        acting_for=None,
+    ):
         with self.engine.begin() as db:
             row = (
                 db.execute(select(handoffs).where(handoffs.c.id == handoff_id))
                 .mappings()
                 .first()
             )
-            if not row or row["to_actor"] != actor:
+            if not row or row["to_actor"] != (acting_for or actor):
                 raise ValueError("La entrega no está asignada a este responsable.")
             if row["accepted_at"] is not None:
                 return dict(row)
@@ -311,11 +322,15 @@ class WorkflowStore:
             )
             db.execute(
                 insert(events).values(
-                    id=f"accepted:{handoff_id}",
+                    id="accepted:" + hashlib.sha256(handoff_id.encode()).hexdigest(),
                     case_id=row["case_id"],
                     kind="handoff.accepted",
                     at=acceptance_time,
-                    payload={"handoff_id": handoff_id, "actor": actor},
+                    payload={
+                        "handoff_id": handoff_id,
+                        "actor": actor,
+                        "acting_for": acting_for,
+                    },
                 )
             )
         result = self.handoff(handoff_id)

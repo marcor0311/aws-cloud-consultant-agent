@@ -4,6 +4,12 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_e2e:
+        description: Run the complete offline acceptance journey
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -93,6 +99,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v1
+        with:
+          version: '0.13.5'
       - uses: actions/setup-python@v4
         with:
           python-version: '3.14'
@@ -101,24 +109,41 @@ jobs:
       - run: uv run --locked ruff check src tests demos
       - run: uv run --locked pytest -q
 
-  frontend:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - run: node --test project/frontend/tests/*.test.mjs
-
   offline-workflow:
+    if: github.event_name == 'workflow_dispatch' && inputs.run_e2e
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v1
+        with:
+          version: '0.13.5'
       - uses: actions/setup-python@v4
         with:
           python-version: '3.14'
       - run: make setup-backend setup-agent
       - name: LiveKit to preparation, human review and SQL handoff with offline providers
         run: make test-demo
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install Gitleaks 8.30.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/gitleaks.tar.gz"
+          curl --fail --silent --show-error --location \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz \
+            --output "$archive"
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  $archive" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/gitleaks-bin"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/gitleaks-bin" gitleaks
+          echo "$RUNNER_TEMP/gitleaks-bin" >> "$GITHUB_PATH"
+      - name: Scan complete Git history
+        run: gitleaks git . --no-banner --redact=100

@@ -1,0 +1,1004 @@
+{
+  "source_sha256": "0019ae3df47960274205946122a226067a91cc7c248dd0be178e52e21a4dd870",
+  "summary": "Nike encarga el sitio oficial de la carrera del 13 de diciembre de 2026 en Terrazas Lindora, con información, venta y tiquetes para 5K, 10K y 15K. Esta primera etapa debe entregar AWS operativo a nombre de Nike y conexiones verificadas; la programación del producto tiene fases posteriores. Stuart evaluará la viabilidad del calendario y los costos antes de comprometer la entrega. La reunión fija límites de datos, pagos y continuidad; no acredita una solución implementada ni aprobada.",
+  "summary_sources": [
+    "S02",
+    "S08",
+    "S11",
+    "S13",
+    "S48",
+    "S49",
+    "S50"
+  ],
+  "objectives": [
+    {
+      "text": "Informar y completar 3.000 inscripciones confirmadas, incluidas 200 cortesías; conciliar inscritos y cobros.",
+      "sources": [
+        "S02",
+        "S06"
+      ],
+      "status": "confirmed"
+    },
+    {
+      "text": "Enviar el tiquete de cada corredor y sostener información pública durante interrupciones transaccionales.",
+      "sources": [
+        "S07",
+        "S30",
+        "S34"
+      ],
+      "status": "confirmed"
+    },
+    {
+      "text": "Entregar nube operativa e integrada, dentro de partidas separadas y con conformidad escrita.",
+      "sources": [
+        "S11",
+        "S48"
+      ],
+      "status": "confirmed"
+    }
+  ],
+  "topics": [
+    {
+      "title": "Oferta, cupos y resultado",
+      "points": [
+        {
+          "text": "3.000 cupos: 1.500 de 5K, 1.000 de 10K y 500 de 15K. Precios finales: ₡18.000, ₡22.000 y ₡26.000; Nike absorbe comisiones. Incluyen camiseta, chip, número, medalla e hidratación. Cortesías incluidas: 100, 70 y 30. Hasta cinco personas por compra.",
+          "sources": [
+            "S06",
+            "S07"
+          ],
+          "status": "confirmed"
+        },
+        {
+          "text": "Rutas descargables, retornos, hidratación, reglamento, paquete y preguntas frecuentes. Salidas desde Terrazas Lindora: 15K a las 05:30, 10K a las 05:45 y 5K a las 06:00. Presencia de Nike y Gatorade; prioridad de uso desde teléfono.",
+          "sources": [
+            "S02",
+            "S04"
+          ],
+          "status": "confirmed"
+        }
+      ]
+    },
+    {
+      "title": "Datos y autoridad de venta",
+      "points": [
+        {
+          "text": "AWS conserva textos, mapas, precios y totales anónimos. Nike conserva identidad, contacto, nacimiento, talla, consentimiento, emergencia, órdenes, estados y pendientes de correo. Tampoco se permiten copias, registros o mensajes personales en nube.",
+          "sources": [
+            "S15",
+            "S16",
+            "S18"
+          ],
+          "status": "confirmed"
+        },
+        {
+          "text": "El total público es informativo. Nike verifica y reserva cupos por distancia durante diez minutos; las cortesías requieren código y descuentan cupo. No cobrar sin autoridad disponible ni superar 3.000 confirmados.",
+          "sources": [
+            "S20"
+          ],
+          "status": "confirmed"
+        }
+      ]
+    },
+    {
+      "title": "Pago y conciliación",
+      "points": [
+        {
+          "text": "EasyPay: débito, crédito y Apple Pay con Visa o MasterCard emitidas por BAC o Banco Nacional, incluso dentro de Apple Pay. Informar un medio no admitido antes del cobro. El proveedor debe probar compatibilidad y condiciones.",
+          "sources": [
+            "S22",
+            "S24"
+          ],
+          "status": "confirmed"
+        },
+        {
+          "text": "Si el pago se aprobó y Nike pierde conexión, recuperar la notificación de EasyPay y conciliar con la orden ya existente en Nike. No volver a cobrar ni emitir tiquete hasta confirmar en Nike; verificar reenvío de notificaciones con EasyPay.",
+          "sources": [
+            "S32"
+          ],
+          "status": "confirmed"
+        }
+      ]
+    },
+    {
+      "title": "Correo y circuito fiscal",
+      "points": [
+        {
+          "text": "Nike envía tiquetes dentro de dos minutos tras confirmar la inscripción y permite reenvío sin nueva compra. Si falla el correo, los pendientes quedan en Nike. El tiquete no espera la recuperación de Hacienda o Gatorade.",
+          "sources": [
+            "S18",
+            "S34"
+          ],
+          "status": "confirmed"
+        },
+        {
+          "text": "Nike controla emisión y estados fiscales; comunica con Hacienda y envía comprobante y respuesta a Finanzas de Nike y Gatorade, en instalaciones propias, y factura al comprador. Es una excepción autorizada a compartir datos; no habilita entregar la base de corredores. Sin respuesta fiscal se aplica la contingencia de Fiscal; Nike retiene y reintenta entregas pendientes.",
+          "sources": [
+            "S24",
+            "S26",
+            "S28"
+          ],
+          "status": "confirmed"
+        }
+      ]
+    },
+    {
+      "title": "Continuidad, recuperación y demanda",
+      "points": [
+        {
+          "text": "Información pública 24×7, objetivo 99,9 % mensual. RTO solicitado: 30 minutos normales y diez en apertura/carrera; Nike declara hasta 45 y EasyPay hasta 30. Nike pausa ventas de 23:00 a 23:20. Se acepta suspender ventas manteniendo información; no hay garantía de recuperación transaccional en diez minutos.",
+          "sources": [
+            "S36",
+            "S38",
+            "S40"
+          ],
+          "status": "confirmed"
+        },
+        {
+          "text": "RPO: hasta quince minutos de contenido repetible y cero pérdida tolerada de pagos aprobados o inscripciones confirmadas. Previsiones diarias/simultáneas: 18 nov 2.000/200 por diez min; 20 nov 10.000/1.000 por quince min; 13 dic 20.000/2.000 por treinta min. Normal: 500 diarios, 800 al acercarse la carrera. Son previsiones de personas, no ventas ni pruebas ejecutadas.",
+          "sources": [
+            "S42",
+            "S44"
+          ],
+          "status": "confirmed"
+        }
+      ]
+    },
+    {
+      "title": "Operación y conformidad",
+      "points": [
+        {
+          "text": "Atención inicial crítica en cinco minutos a cualquier hora; consultas en una hora de 08:00 a 18:00, Costa Rica. Atender no equivale a recuperar. No Name coordina nube y escalamiento; Nike mantiene sus sistemas, logística y atención a corredores.",
+          "sources": [
+            "S46"
+          ],
+          "status": "confirmed"
+        },
+        {
+          "text": "Valeria valida información y recorrido; Tecnología de Nike, infraestructura y conexiones; Finanzas, costos y trazabilidad. La conformidad es escrita. La aceptación del producto posterior incluye compra, correo y fallas; no se confunde con la entrega de nube.",
+          "sources": [
+            "S48"
+          ],
+          "status": "confirmed"
+        }
+      ]
+    }
+  ],
+  "scope_in": [
+    {
+      "text": "AWS operativo a nombre de Nike, conectividad y evidencia de ausencia de persistencia de datos restringidos.",
+      "sources": [
+        "S11",
+        "S48"
+      ],
+      "status": "confirmed"
+    },
+    {
+      "text": "Plataforma para contenido oficial y conexiones con Nike, EasyPay, correo y circuito fiscal autorizado; verificar interfaces sin anticipar programación terminada.",
+      "sources": [
+        "S04",
+        "S08",
+        "S18",
+        "S24",
+        "S26",
+        "S28",
+        "S48"
+      ],
+      "status": "confirmed"
+    },
+    {
+      "text": "Mantenimiento, atención y escalamiento de nube del 18 de noviembre al 20 de diciembre, con cobertura de anuncio y carrera.",
+      "sources": [
+        "S11",
+        "S46"
+      ],
+      "status": "confirmed"
+    }
+  ],
+  "scope_out": [
+    {
+      "text": "Logística y atención a corredores a cargo de Nike. Programación completa en fases posteriores; organización de carrera excluida del presupuesto digital.",
+      "sources": [
+        "S04",
+        "S08",
+        "S09",
+        "S46"
+      ],
+      "status": "confirmed"
+    },
+    {
+      "text": "Sin datos restringidos en AWS, otros bancos, SINPE ni transferencias manuales. Gatorade recibe solo la copia fiscal autorizada.",
+      "sources": [
+        "S18",
+        "S22",
+        "S24",
+        "S26",
+        "S28"
+      ],
+      "status": "confirmed"
+    }
+  ],
+  "journey": [
+    "Consultar rutas, horarios y precios finales",
+    "Reservar cupo en Nike por diez minutos",
+    "Pagar o aplicar cortesía autorizada",
+    "Confirmar en Nike y enviar el tiquete"
+  ],
+  "metrics": [
+    {
+      "label": "Publicación / 18 nov",
+      "value": 2000,
+      "unit": "personas en el día de publicación",
+      "context": "Previsión: 200 simultáneas durante diez minutos.",
+      "source": "S44",
+      "quote": "dos mil"
+    },
+    {
+      "label": "Anuncio / 20 nov",
+      "value": 10000,
+      "unit": "personas en el día del anuncio",
+      "context": "Previsión: 1.000 simultáneas durante quince minutos.",
+      "source": "S44",
+      "quote": "diez mil"
+    },
+    {
+      "label": "Carrera / 13 dic",
+      "value": 20000,
+      "unit": "personas durante el día de carrera",
+      "context": "Previsión: 2.000 simultáneas durante media hora; principalmente mapas y horarios.",
+      "source": "S44",
+      "quote": "veinte mil"
+    }
+  ],
+  "decisions": [
+    {
+      "text": "Primera etapa: infraestructura AWS a nombre de Nike y conexiones verificadas. Programación posterior; la viabilidad debe confirmarse antes de comprometer fechas.",
+      "sources": [
+        "S08",
+        "S11",
+        "S13",
+        "S48"
+      ],
+      "status": "confirmed"
+    },
+    {
+      "text": "AWS guarda contenido público y totales no identificables. Personas, órdenes, pagos, correo y pendientes quedan en Nike; la prohibición incluye logs, copias y colas.",
+      "sources": [
+        "S15",
+        "S18"
+      ],
+      "status": "confirmed"
+    },
+    {
+      "text": "Nike controla cupos y reserva diez minutos. Sin verificación o pago disponible se suspende la venta y se mantiene la información; un pago incierto se concilia sin volver a cobrar.",
+      "sources": [
+        "S20",
+        "S30",
+        "S30",
+        "S32"
+      ],
+      "status": "confirmed"
+    },
+    {
+      "text": "Se acepta explicitar la pausa transaccional por dependencias. El 99,9 % mensual es objetivo de información pública; el RTO de ventas se evalúa por separado.",
+      "sources": [
+        "S36",
+        "S38",
+        "S39",
+        "S40"
+      ],
+      "status": "confirmed"
+    }
+  ],
+  "actions": [
+    {
+      "task": "Contenidos, políticas, contactos y coordinación de accesos de prueba",
+      "owner": "Diego Solano",
+      "due": "9 nov 2026",
+      "sources": [
+        "S48"
+      ]
+    },
+    {
+      "task": "Confirmar viabilidad, alcance y dependencias antes de comprometer fechas",
+      "owner": "Stuart / No Name",
+      "due": "Antes del compromiso",
+      "sources": [
+        "S13",
+        "S49",
+        "S50"
+      ]
+    },
+    {
+      "task": "Inicio 9 nov; avance 12 nov; AWS operativo solicitado 16 nov",
+      "owner": "No Name / Tecnología Nike",
+      "due": "9, 12 y 16 nov",
+      "sources": [
+        "S13",
+        "S48"
+      ]
+    },
+    {
+      "task": "Revisión completa 17 nov; publicación 18 nov; venta 20 nov a las 06:00",
+      "owner": "Equipos de entrega y validación",
+      "due": "Viabilidad por confirmar",
+      "sources": [
+        "S13",
+        "S48"
+      ]
+    }
+  ],
+  "risks": [
+    {
+      "text": "Calendario comprimido: Stuart debe presentar viabilidad y alternativas antes de aceptar fechas; el anuncio no se mueve.",
+      "sources": [
+        "S13",
+        "S48"
+      ],
+      "status": "proposed"
+    },
+    {
+      "text": "Ventas dependen de Nike y EasyPay: validar recuperación, durabilidad y conciliación antes de prometer RTO o RPO transaccional.",
+      "sources": [
+        "S32",
+        "S38",
+        "S40",
+        "S42"
+      ],
+      "status": "proposed"
+    },
+    {
+      "text": "Validar las interfaces del convenio y evitar datos restringidos en logs, copias y colas. Cambios y contingencia requieren autorización.",
+      "sources": [
+        "S11",
+        "S18",
+        "S24",
+        "S26",
+        "S28",
+        "S48"
+      ],
+      "status": "proposed"
+    }
+  ],
+  "questions": [
+    {
+      "text": "¿Qué calendario y secuencia de entrega resultan viables con los entornos y accesos del 9 de noviembre?",
+      "sources": [
+        "S13",
+        "S48"
+      ],
+      "status": "pending"
+    },
+    {
+      "text": "¿Qué evidencia contractual y técnica aportan Nike y EasyPay para filtrado bancario, reenvíos, durabilidad y recuperación?",
+      "sources": [
+        "S24",
+        "S32",
+        "S38",
+        "S42"
+      ],
+      "status": "pending"
+    }
+  ],
+  "success": [
+    {
+      "text": "AWS operativo, conectividad verificada y ausencia de almacenamiento restringido demostrada; conformidad escrita.",
+      "sources": [
+        "S48"
+      ],
+      "status": "confirmed"
+    },
+    {
+      "text": "Producto final: compra y cortesía sin sobreventa ni duplicados, correo y fallas validados; comprobantes fiscales trazables.",
+      "sources": [
+        "S20",
+        "S26",
+        "S28",
+        "S32",
+        "S34",
+        "S48"
+      ],
+      "status": "confirmed"
+    }
+  ],
+  "budget": {
+    "text": "Techo digital: USD 180.000, impuestos incluidos. Asignaciones: honorarios nube 45.000; consumo 6.000; mantenimiento 4.000; programación 105.000; contingencia 20.000. Las cinco suman el total. Consumo y mantenimiento cubren 18 nov-20 dic; contingencia solo con autorización. Honorarios: 40/30/30 %, equivalentes a USD 18.000 al inicio con contrato, 13.500 al aceptar diseño y costos y 13.500 al aceptar AWS operativo. Operación se paga aparte dentro de sus partidas. Son reservas del escenario; no una cotización validada.",
+    "sources": [
+      "S09",
+      "S11",
+      "S13"
+    ],
+    "status": "confirmed"
+  },
+  "timeline": {
+    "text": "Calendario solicitado de 2026: inicio 9 nov, avance 12 nov, nube 16 nov, revisión del producto 17 nov, publicación 18 nov y venta 20 nov 06:00. Carrera 13 dic; cierre operativo 20 dic. Viabilidad por confirmar antes de comprometer fechas.",
+    "sources": [
+      "S13",
+      "S46"
+    ],
+    "status": "pending"
+  },
+  "presentation": [
+    {
+      "kind": "hero",
+      "kicker": "ENCUADRE EJECUTIVO / NOVIEMBRE 2026",
+      "title": "Nike Lindora\n5K, 10K y 15K",
+      "intro": "Nube e integraciones para el sitio oficial\n7 de noviembre de 2026",
+      "blocks": [],
+      "note": "",
+      "sources": [
+        "S02",
+        "S08",
+        "S49",
+        "S50"
+      ]
+    },
+    {
+      "kind": "executive",
+      "kicker": "01 / SÍNTESIS",
+      "title": "Entregar la nube y verificar\nla viabilidad del lanzamiento",
+      "intro": "Para conocimiento y seguimiento de Junta Directiva y vicepresidencias",
+      "blocks": [
+        {
+          "label": "Resultado",
+          "text": "AWS operativo a nombre de Nike; producto completo en fases de programación."
+        },
+        {
+          "label": "Responsabilidad",
+          "text": "Stuart coordina la propuesta; Nike valida por escrito cada ámbito."
+        },
+        {
+          "label": "Próximo hito",
+          "text": "9 nov: accesos y políticas; confirmar viabilidad antes de comprometer fechas."
+        }
+      ],
+      "note": "Reservas del escenario; plazo y solución pendientes de validación. No se ha implementado infraestructura.",
+      "sources": [
+        "S09",
+        "S11",
+        "S13",
+        "S48",
+        "S49"
+      ]
+    },
+    {
+      "kind": "rows",
+      "kicker": "02 / INVERSIÓN",
+      "title": "Cinco partidas dentro\ndel techo de USD 180.000",
+      "intro": "",
+      "blocks": [
+        {
+          "label": "USD 45.000 / Honorarios",
+          "text": "40/30/30 %: 18.000 al inicio con contrato; 13.500 al aceptar diseño y costos; 13.500 al aceptar AWS operativo."
+        },
+        {
+          "label": "USD 10.000 / Operación",
+          "text": "Consumo hasta 6.000 y mantenimiento 4.000, del 18 nov al 20 dic; pagos separados dentro de sus límites."
+        },
+        {
+          "label": "USD 125.000 / Resto",
+          "text": "Programación 105.000 y contingencia 20.000, cuyo uso exige autorización. Total con impuestos incluidos."
+        }
+      ],
+      "note": "Los montos son asignaciones del cliente ficticio; falta validar estimación y viabilidad.",
+      "sources": [
+        "S09",
+        "S11",
+        "S13"
+      ]
+    },
+    {
+      "kind": "roadmap",
+      "kicker": "03 / CALENDARIO",
+      "title": "La entrega de nube precede\na la apertura de ventas",
+      "intro": "",
+      "blocks": [
+        {
+          "label": "9-12 nov / Evaluar",
+          "text": "Inicio solicitado el 9; Diego entrega accesos y políticas. Primer avance el 12."
+        },
+        {
+          "label": "16-18 nov / Entregar",
+          "text": "AWS solicitado el 16; revisión de producto el 17; publicación el 18. Programación con fases propias."
+        },
+        {
+          "label": "20 nov-20 dic / Operar",
+          "text": "Venta desde el 20 nov a las 06:00; carrera el 13 dic y cierre del servicio el 20 dic."
+        }
+      ],
+      "note": "El anuncio no se mueve. Stuart debe confirmar viabilidad antes de comprometer fechas.",
+      "sources": [
+        "S08",
+        "S13",
+        "S46",
+        "S48"
+      ]
+    },
+    {
+      "kind": "journey",
+      "kicker": "04 / EXPERIENCIA",
+      "title": "Cada confirmación debe\ncorresponder a un cupo",
+      "intro": "Meta: 3.000 confirmados, incluidas 200 cortesías. Una compra admite hasta cinco personas.",
+      "blocks": [],
+      "note": "Precios finales por 5K / 10K / 15K: ₡18.000 / ₡22.000 / ₡26.000. Nike absorbe las comisiones.",
+      "sources": [
+        "S06",
+        "S07",
+        "S20",
+        "S24",
+        "S32",
+        "S34"
+      ]
+    },
+    {
+      "kind": "system",
+      "kicker": "05 / DATOS",
+      "title": "Contenido en AWS;\noperaciones en Nike",
+      "intro": "Concepto propuesto por No Name. Arquitectura delimitará tránsito, seguridad y observabilidad.",
+      "blocks": [
+        {
+          "label": "AWS / Público",
+          "text": "Textos, rutas y totales no identificables; sin datos personales en logs, copias o colas."
+        },
+        {
+          "label": "Navegador / Compra",
+          "text": "Envía datos directamente a Nike; no usa el total público para autorizar una venta."
+        },
+        {
+          "label": "Nike / Autoridad",
+          "text": "Reserva, orden, estados y pendientes; EasyPay procesa tarjeta y Nike concilia el resultado."
+        }
+      ],
+      "note": "Si no se puede verificar y reservar cupo, no se cobra. La información sigue disponible.",
+      "sources": [
+        "S15",
+        "S18",
+        "S20",
+        "S30",
+        "S32"
+      ]
+    },
+    {
+      "kind": "columns",
+      "kicker": "06 / INTEGRACIONES",
+      "title": "Pago, tiquete y factura\ncon estados independientes",
+      "intro": "",
+      "blocks": [
+        {
+          "label": "Pago autorizado",
+          "text": "EasyPay: BAC o Banco Nacional; Visa/MasterCard en débito, crédito o Apple Pay. Sin SINPE ni transferencias."
+        },
+        {
+          "label": "Tiquete desde Nike",
+          "text": "Enviar dentro de dos minutos de la confirmación. Reenviar sin nueva compra; pendientes en Nike."
+        },
+        {
+          "label": "Circuito fiscal",
+          "text": "Nike comunica con Hacienda y sus bases financieras y las de Gatorade. Factura al comprador; reintentos desde Nike."
+        }
+      ],
+      "note": "La excepción fiscal no comparte la base de corredores. Verificar capacidades y convenio con los responsables.",
+      "sources": [
+        "S18",
+        "S22",
+        "S24",
+        "S26",
+        "S28",
+        "S32",
+        "S34"
+      ]
+    },
+    {
+      "kind": "rows",
+      "kicker": "07 / CONTINUIDAD",
+      "title": "Recuperar AWS no asegura\nque la venta pueda reabrir",
+      "intro": "",
+      "blocks": [
+        {
+          "label": "Información pública",
+          "text": "Objetivo 99,9 % mensual, 24×7. RTO solicitado: 30 min normales y diez en apertura/carrera. RPO editorial: quince min."
+        },
+        {
+          "label": "Venta completa",
+          "text": "Nike declara recuperación de hasta 45 min; EasyPay, 30. Nike pausa ventas de 23:00 a 23:20. No prometer diez min globales."
+        },
+        {
+          "label": "Operaciones confirmadas",
+          "text": "Cero pérdida tolerada de pagos e inscripciones; validar durabilidad y conciliación en los registros autorizados."
+        }
+      ],
+      "note": "El cliente acepta pausar ventas manteniendo información. Mejoras de terceros requieren alternativa, costo y aprobación.",
+      "sources": [
+        "S36",
+        "S38",
+        "S40",
+        "S42"
+      ]
+    },
+    {
+      "kind": "rows",
+      "kicker": "08 / FALLAS",
+      "title": "Las fallas tienen una\nrespuesta acordada",
+      "intro": "",
+      "blocks": [
+        {
+          "label": "Nike o EasyPay caídos",
+          "text": "Mantener mapas y horarios; suspender compra o pago según la dependencia. Sin almacenamiento personal temporal en AWS."
+        },
+        {
+          "label": "Pago aprobado incierto",
+          "text": "Conciliar EasyPay con la orden ya existente en Nike. No repetir cobro ni emitir tiquete hasta confirmar."
+        },
+        {
+          "label": "Correo o fiscalidad caídos",
+          "text": "Pendientes y reintentos en Nike. El tiquete no espera Hacienda o Gatorade; no declarar aceptación fiscal sin respuesta."
+        }
+      ],
+      "note": "Estos comportamientos son requisitos del escenario. Su implementación y validación pertenecen a las fases de entrega.",
+      "sources": [
+        "S26",
+        "S28",
+        "S30",
+        "S32",
+        "S34"
+      ]
+    },
+    {
+      "kind": "columns",
+      "kicker": "09 / DEMANDA",
+      "title": "Tres picos para dimensionar\ncontenido y transacciones",
+      "intro": "",
+      "blocks": [
+        {
+          "label": "18 nov / Publicación",
+          "text": "2.000 personas en el día; 200 simultáneas durante diez minutos."
+        },
+        {
+          "label": "20 nov / Anuncio",
+          "text": "10.000 personas en el día; 1.000 simultáneas durante quince minutos."
+        },
+        {
+          "label": "13 dic / Carrera",
+          "text": "20.000 personas en el día; 2.000 simultáneas durante media hora. Predominan mapas y horarios."
+        }
+      ],
+      "note": "Uso habitual: 500 personas/día; 800 cerca de carrera. Previsiones de la agencia; no son ventas ni resultados medidos.",
+      "sources": [
+        "S44"
+      ]
+    },
+    {
+      "kind": "split",
+      "kicker": "10 / ACEPTACIÓN",
+      "title": "Aceptar con evidencia\ny conformidad escrita",
+      "intro": "",
+      "blocks": [
+        {
+          "label": "01",
+          "text": "Etapa nube: AWS operativo, conexiones verificadas y evidencia de ausencia de datos restringidos."
+        },
+        {
+          "label": "02",
+          "text": "Producto posterior: compra, cortesías, correo y fallas, sin sobreventa ni cobros duplicados."
+        },
+        {
+          "label": "03",
+          "text": "Valeria valida recorrido; Tecnología, nube; Finanzas, costos y trazabilidad de cobros y facturas."
+        }
+      ],
+      "note": "Conformidad\npor escrito",
+      "sources": [
+        "S13",
+        "S20",
+        "S32",
+        "S34",
+        "S42",
+        "S48"
+      ]
+    },
+    {
+      "kind": "closing",
+      "kicker": "11 / SEGUIMIENTO",
+      "title": "Seguimiento de viabilidad,\ncosto y continuidad",
+      "intro": "Confirmar cronograma e interfaces\nRevisar costo y recuperación por dominio\nAceptar cada entrega con evidencia",
+      "blocks": [
+        {
+          "label": "Stuart / No Name",
+          "text": "Coordinar propuesta y escalar desviaciones con alternativa e impacto."
+        },
+        {
+          "label": "Diego / Nike",
+          "text": "Centralizar consultas, contactos, políticas y acceso a pruebas."
+        },
+        {
+          "label": "Operación / 18 nov-20 dic",
+          "text": "Atención crítica en cinco min 24×7; consultas en una hora de 08:00 a 18:00, Costa Rica."
+        }
+      ],
+      "note": "La revisión del paquete sigue pendiente. La atención inicial no equivale a recuperación; no se autoriza contingencia ni mejoras por silencio.",
+      "sources": [
+        "S11",
+        "S13",
+        "S40",
+        "S46",
+        "S48",
+        "S49",
+        "S50"
+      ]
+    }
+  ],
+  "proposal": {
+    "concept": {
+      "label": "Información continua y venta verificada",
+      "text": "Distribuir contenido público desde AWS y dirigir las operaciones personales a Nike; cada dominio conserva su autoridad y sus estados pendientes.",
+      "sources": [
+        "S15",
+        "S18",
+        "S20",
+        "S30"
+      ],
+      "status": "proposed"
+    },
+    "experience": [
+      {
+        "label": "Consultar",
+        "text": "Rutas, horarios, precios y reglas antes de iniciar la compra.",
+        "sources": [
+          "S02",
+          "S04"
+        ],
+        "status": "proposed"
+      },
+      {
+        "label": "Reservar y pagar",
+        "text": "Nike reserva; EasyPay cobra con medios autorizados y una referencia conciliable.",
+        "sources": [
+          "S20",
+          "S24",
+          "S32"
+        ],
+        "status": "proposed"
+      },
+      {
+        "label": "Confirmar",
+        "text": "Nike confirma y envía tiquete; facturación sigue su circuito independiente.",
+        "sources": [
+          "S26",
+          "S28",
+          "S34"
+        ],
+        "status": "proposed"
+      }
+    ],
+    "solution": [
+      {
+        "label": "AWS público",
+        "text": "Contenido y totales anónimos independientes de ventas. Sin datos personales en registros, copias o colas.",
+        "sources": [
+          "S15",
+          "S18",
+          "S30",
+          "S42"
+        ],
+        "status": "proposed"
+      },
+      {
+        "label": "Nike transaccional",
+        "text": "Datos y reservas directamente en Nike; reintentos sin duplicados. Sin autoridad o pago disponible, pausar ventas.",
+        "sources": [
+          "S15",
+          "S20",
+          "S30",
+          "S32"
+        ],
+        "status": "proposed"
+      },
+      {
+        "label": "Integraciones autorizadas",
+        "text": "Validar EasyPay; correo y fiscalidad desde Nike, con pendientes locales. Arquitectura y FinOps concretan el diseño.",
+        "sources": [
+          "S18",
+          "S24",
+          "S26",
+          "S28",
+          "S32",
+          "S48"
+        ],
+        "status": "proposed"
+      }
+    ],
+    "delivery": [
+      {
+        "label": "9 nov / Viabilidad",
+        "text": "Recibir accesos y políticas; confirmar alcance, dependencias y cronograma antes de asumir compromisos.",
+        "sources": [
+          "S13",
+          "S48"
+        ],
+        "status": "proposed"
+      },
+      {
+        "label": "12 nov / Primer avance",
+        "text": "Presentar diseño, fronteras de datos, costos por partida y plan de recuperación; aceptación de diseño y costos habilita el segundo tracto.",
+        "sources": [
+          "S13",
+          "S38",
+          "S42"
+        ],
+        "status": "proposed"
+      },
+      {
+        "label": "16 nov / AWS solicitado",
+        "text": "Entregar nube operativa y conexiones verificadas con evidencia escrita. Revisión 17 nov y publicación 18 nov dependen de completar las fases de aplicación.",
+        "sources": [
+          "S08",
+          "S13",
+          "S48"
+        ],
+        "status": "proposed"
+      }
+    ],
+    "acceptance": [
+      {
+        "label": "Nube e integración",
+        "text": "Tecnología valida AWS operativo, conectividad y ausencia de datos restringidos; Finanzas valida costos. Conformidad escrita para aceptar esta etapa.",
+        "sources": [
+          "S48"
+        ],
+        "status": "proposed"
+      },
+      {
+        "label": "Producto posterior",
+        "text": "Verificar compra, cortesía, correo, conciliación y fallas de Nike, EasyPay, Hacienda y Gatorade; sin sobreventa ni segundo cobro.",
+        "sources": [
+          "S20",
+          "S26",
+          "S28",
+          "S30",
+          "S32",
+          "S34",
+          "S48"
+        ],
+        "status": "proposed"
+      },
+      {
+        "label": "Continuidad y capacidad",
+        "text": "Separar información y ventas. RTO solicitado 30/10 min frente a Nike 45 y EasyPay 30; validar RPO cero transaccional y demanda prevista.",
+        "sources": [
+          "S36",
+          "S38",
+          "S42",
+          "S44"
+        ],
+        "status": "proposed"
+      }
+    ],
+    "safeguards": [
+      {
+        "label": "Protección de datos",
+        "text": "Revisar tránsito, almacenamiento incidental y registros antes de habilitar integraciones.",
+        "sources": [
+          "S18",
+          "S48"
+        ],
+        "status": "proposed"
+      },
+      {
+        "label": "Dependencias",
+        "text": "Acordar escalamiento y evidencia de conciliación con Nike y EasyPay.",
+        "sources": [
+          "S32",
+          "S38",
+          "S46"
+        ],
+        "status": "proposed"
+      },
+      {
+        "label": "Inversión y fecha",
+        "text": "Escalar desvíos con alternativa; no dar por acordado usar contingencia ni mejorar tiempos de terceros.",
+        "sources": [
+          "S11",
+          "S13",
+          "S40"
+        ],
+        "status": "proposed"
+      }
+    ]
+  },
+  "facts": [
+    {
+      "text": "USD 180.000",
+      "sources": [
+        "S09",
+        "S11"
+      ],
+      "status": "confirmed",
+      "label": "Proyecto total"
+    },
+    {
+      "text": "USD 45.000",
+      "sources": [
+        "S11"
+      ],
+      "status": "confirmed",
+      "label": "Honorarios nube"
+    },
+    {
+      "text": "16 nov 2026",
+      "sources": [
+        "S13"
+      ],
+      "status": "pending",
+      "label": "Entrega AWS solicitada"
+    },
+    {
+      "text": "18 nov 2026",
+      "sources": [
+        "S13"
+      ],
+      "status": "pending",
+      "label": "Publicación solicitada"
+    }
+  ],
+  "executive": {
+    "purpose": "Para conocimiento y seguimiento de Junta Directiva y vicepresidencias",
+    "recommendation": {
+      "label": "Recomendación de No Name",
+      "text": "Separar información pública en AWS y transacciones bajo autoridad de Nike. Mantener rutas y horarios durante fallas, detener cobros sin reserva verificable y conciliar pagos desde registros autorizados. Confirmar viabilidad de plazo, costo e interfaces antes de comprometer la entrega.",
+      "sources": [
+        "S15",
+        "S20",
+        "S30",
+        "S32",
+        "S40",
+        "S48"
+      ],
+      "status": "proposed"
+    },
+    "outcomes": [
+      {
+        "label": "Venta trazable",
+        "text": "3.000 confirmados, incluidas cortesías; cupos y cobros conciliados.",
+        "sources": [
+          "S06",
+          "S07",
+          "S20",
+          "S32"
+        ],
+        "status": "proposed"
+      },
+      {
+        "label": "Información disponible",
+        "text": "Contenido oficial disponible al suspender ventas.",
+        "sources": [
+          "S30",
+          "S36",
+          "S40"
+        ],
+        "status": "proposed"
+      },
+      {
+        "label": "Datos bajo control",
+        "text": "Personas y operaciones en Nike; excepción fiscal delimitada.",
+        "sources": [
+          "S18",
+          "S26",
+          "S28"
+        ],
+        "status": "proposed"
+      }
+    ],
+    "oversight": {
+      "label": "Coordinación propuesta: Stuart",
+      "text": "Reportar viabilidad y desviaciones con impacto y alternativa. Diego centraliza consultas; Valeria, Tecnología y Finanzas validan sus ámbitos por escrito. No comprometer contingencia ni mejoras de terceros sin autorización.",
+      "sources": [
+        "S11",
+        "S13",
+        "S40",
+        "S48",
+        "S49"
+      ],
+      "status": "proposed"
+    }
+  }
+}

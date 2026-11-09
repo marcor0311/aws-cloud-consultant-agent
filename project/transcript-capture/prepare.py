@@ -130,7 +130,7 @@ startCaptureOnMeetingRoute();
     manifest = {
         "manifest_version": 3,
         "name": "Consultoría — captura de Meet (TranscripTonic)",
-        "version": "1.0.0",
+        "version": "1.0.1",
         "description": "Captura local de subtítulos para el backend de desarrollo.",
         "permissions": ["storage", "alarms", "downloads"],
         "host_permissions": ["http://127.0.0.1/*"],
@@ -171,6 +171,47 @@ startCaptureOnMeetingRoute();
     )
 
 
+def capture_token(env_file):
+    """Use the same external secret and precedence as the backend, without rotating it."""
+    local = dotenv_values(env_file, interpolate=False)
+    configured = os.getenv("CLOUD_CONSULTANT_SECRETS_DIR") or local.get(
+        "CLOUD_CONSULTANT_SECRETS_DIR"
+    )
+    root = (
+        Path(configured).expanduser()
+        if configured
+        else Path.home() / ".config/aws-cloud-consultant-agent/dev"
+    )
+    if not root.is_absolute():
+        raise SystemExit("CLOUD_CONSULTANT_SECRETS_DIR debe ser una ruta absoluta.")
+    private_file = root / "secrets.env"
+    private = dotenv_values(private_file, interpolate=False)
+    values = {**local, **private, **os.environ}
+    token = values.get("WORKFLOW_TRANSCRIPT_TOKEN") or secrets.token_urlsafe(40)
+    if len(token) < 32:
+        raise SystemExit("WORKFLOW_TRANSCRIPT_TOKEN debe tener al menos 32 caracteres.")
+    if token in {
+        values.get(name)
+        for name in ("CALENDAR_ACCESS_SERVICE_KEY", "WORKFLOW_MANAGER_TOKEN")
+    }:
+        raise SystemExit(
+            "La credencial de captura debe ser independiente de las demás."
+        )
+    if not values.get("WORKFLOW_TRANSCRIPT_TOKEN"):
+        root.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if not private_file.exists():
+            descriptor = os.open(
+                private_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600
+            )
+            os.close(descriptor)
+        private_file.chmod(0o600)
+        set_key(
+            str(private_file), "WORKFLOW_TRANSCRIPT_TOKEN", token, quote_mode="always"
+        )
+        private_file.chmod(0o600)
+    return token
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -192,22 +233,7 @@ def main():
         raise SystemExit("Checksum de TranscripTonic inválido.")
     CACHE.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     CACHE.write_bytes(archive)
-    env_file = ROOT / "project/.env"
-    token = os.getenv("WORKFLOW_TRANSCRIPT_TOKEN") or dotenv_values(env_file).get(
-        "WORKFLOW_TRANSCRIPT_TOKEN", ""
-    )
-    if not token:
-        token = secrets.token_urlsafe(40)
-        set_key(str(env_file), "WORKFLOW_TRANSCRIPT_TOKEN", token, quote_mode="always")
-    if len(token) < 32:
-        raise SystemExit("WORKFLOW_TRANSCRIPT_TOKEN debe tener al menos 32 caracteres.")
-    if token in {
-        dotenv_values(env_file).get(name)
-        for name in ("CALENDAR_ACCESS_SERVICE_KEY", "WORKFLOW_MANAGER_TOKEN")
-    }:
-        raise SystemExit(
-            "La credencial de captura debe ser independiente de las demás."
-        )
+    token = capture_token(ROOT / "project/.env")
     build(archive, token, TARGET)
     print(f"Extensión lista para cargar desde: {TARGET}")
     print(

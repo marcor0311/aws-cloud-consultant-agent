@@ -10,12 +10,14 @@ from typing import Annotated
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from app.bootstrap import create_access_service, create_runtime
+from app.bootstrap import create_access_service, create_opening_runtime, create_runtime
+from app.core.config import PROJECT_DIR
 from app.workflow.settings import WorkflowSettings
 
 bearer = HTTPBearer(auto_error=False)
 runtime_lock = threading.Lock()
 _runtime = None
+_opening_runtime = None
 
 
 def get_call_receipt_key():
@@ -93,8 +95,29 @@ def get_runtime():
 
 
 def clear_runtime():
-    global _runtime
+    global _runtime, _opening_runtime
     with runtime_lock:
         if _runtime is not None:
             _runtime.close()
             _runtime = None
+        if _opening_runtime is not None:
+            _opening_runtime.close()
+            _opening_runtime = None
+
+
+def get_opening_runtime():
+    global _opening_runtime
+    with runtime_lock:
+        if _opening_runtime is None:
+            try:
+                _opening_runtime = create_opening_runtime(
+                    os.getenv("WORKFLOW_DATABASE_URL", ""),
+                    PROJECT_DIR.parent / "insumos temporales de agente 1",
+                    PROJECT_DIR
+                    / "agents/2. meeting assistant/templates/architecture.md",
+                )
+            except ValueError:
+                raise HTTPException(
+                    503, "Configurar PostgreSQL para la junta directiva."
+                ) from None
+        return _opening_runtime

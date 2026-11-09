@@ -3,6 +3,19 @@
 .env.*
 !.env.example
 secrets/
+secrets.env
+session.json
+registration.json
+credentials.json
+client_secret*.json
+google_oauth_client.json
+*_token.json
+*-token.json
+*.pem
+*.key
+*.p12
+*.pfx
+.aws/
 project/data/
 project/backend/data/
 
@@ -23,6 +36,7 @@ htmlcov/
 console-recordings/
 *.log
 project/generated/
+insumos/
 *.zip
 project/backend/tools/awsdac/v*/
 .terraform/
@@ -33,3 +47,7 @@ project/backend/tools/awsdac/v*/
 .DS_Store
 .idea/
 .vscode/
+
+# Delivery demo local output
+output/
+tmp/

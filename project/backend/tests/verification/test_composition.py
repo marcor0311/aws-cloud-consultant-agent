@@ -13,11 +13,12 @@ def test_composed_api_verifies_only_after_email_otp(tmp_path, monkeypatch):
     client = ClientRepository(database).create(
         "Empresa de prueba", "approved@example.test"
     )
-    key = "synthetic-service-key-12345678901234567890"
+    key = "synthetic-service-key-12345678901234567890"  # gitleaks:allow -- offline fixture
     monkeypatch.setenv("CALENDAR_ACCESS_DB", str(database))
     monkeypatch.setenv("CALENDAR_ACCESS_SERVICE_KEY", key)
     monkeypatch.setenv(
-        "CALENDAR_ACCESS_CODE_SECRET", "synthetic-otp-secret-12345678901234567890"
+        "CALENDAR_ACCESS_CODE_SECRET",
+        "synthetic-otp-secret-12345678901234567890",  # gitleaks:allow -- offline fixture
     )
     messages = []
     monkeypatch.setattr(

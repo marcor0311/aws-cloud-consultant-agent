@@ -300,6 +300,27 @@ class WorkflowRuntime:
                 "end": event["end"]["dateTime"],
             }
             self.store.put(f"meeting:{case_id}", "meeting", updated)
+            # Live tracking records the same first delivery that demos used to create manually.
+            handoff_id = f"{case_id}:calendar:meeting"
+            if not self.store.handoff(handoff_id):
+                self.store.create_handoff(
+                    handoff_id,
+                    case_id,
+                    "calendar-assistant",
+                    self.settings.manager_id,
+                    "scheduling",
+                    "initial_meeting",
+                    revision=1,
+                    artifact_sha256=hashlib.sha256(
+                        json.dumps(
+                            {
+                                k: updated[k]
+                                for k in ("calendar_event_id", "start", "end")
+                            },
+                            sort_keys=True,
+                        ).encode()
+                    ).hexdigest(),
+                )
             self.service.wait_for_meeting(case_id, payload["calendar_event_id"])
             self.process.ensure(case_id, meeting["client_id"])
             if not self.store.project_list(self.settings.manager_id) or not any(

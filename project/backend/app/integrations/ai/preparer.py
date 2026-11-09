@@ -11,13 +11,23 @@ from app.preparation.references import read_reference, search_references
 
 class OpenAIPreparer:
     def __init__(
-        self, key, model, client=None, search=search_references, read=read_reference
+        self,
+        key,
+        model,
+        client=None,
+        search=search_references,
+        read=read_reference,
+        *,
+        allow_inference=False,
     ):
         self.key, self.model = key, model
         self.client = client or httpx.Client(timeout=60)
         self.search, self.read = search, read
+        self.allow_inference = allow_inference
 
     def __call__(self, state):
+        if not self.allow_inference:
+            raise ConfigurationError("real_inference_requires_explicit_activation")
         if not self.key or not self.model:
             raise ConfigurationError("configure_openai_key_and_workflow_model")
         transcript = state["transcript"]

@@ -1,0 +1,68 @@
+{
+  "schema_version": "1.0",
+  "mode": "demo",
+  "delivery_id": "447bfbe9-2bd5-4e96-a786-0ca9875e1d71",
+  "project_id": "consultoria-demo-s3",
+  "project_name": "Gestión documental - demostración PSWE-07",
+  "architecture": {
+    "source": {
+      "provenance": "simulated",
+      "reference": "simulated://architecture/diseno-s3",
+      "revision": "architecture-example-v1"
+    },
+    "approval_status": "simulated_approved",
+    "region": "us-east-1",
+    "environment": "dev",
+    "bucket_name": "pswe07-documents-example",
+    "kms_key_arn": "arn:aws:kms:us-east-1:000000000000:key/00000000-0000-0000-0000-000000000000",
+    "baseline": {
+      "module_id": "s3",
+      "repository": "https://github.com/marcor0311/aws-cloud-consultant-baseline-modules.git",
+      "commit": "2450a17830d40439e4eb673d1459140b52d9b93f",
+      "approval_status": "pending"
+    }
+  },
+  "finops": {
+    "source": {
+      "provenance": "simulated",
+      "reference": "simulated://finops/costos-s3",
+      "revision": "finops-example-v1"
+    },
+    "approval_status": "simulated_approved",
+    "architecture_revision": "architecture-example-v1",
+    "budget_monthly": "100.00",
+    "estimate_monthly": "24.50",
+    "currency": "USD",
+    "period": "month",
+    "calculator_reference": "simulated://pricing/estimacion-s3",
+    "spreadsheet_reference": "simulated://finops/forecast.xlsx",
+    "assumptions": [
+      "Escenario ficticio: almacenamiento privado de documentos en S3.",
+      "Importes educativos sin consulta de precios AWS; no incluyen una factura real."
+    ]
+  },
+  "upstream_timings": [
+    {
+      "phase": "architecture",
+      "provenance": "simulated",
+      "accepted_at": "2026-11-06T14:00:00Z",
+      "handed_off_at": "2026-11-06T14:30:00Z",
+      "activities": [
+        {"actor_id": "architect-example", "actor_type": "human", "kind": "work", "started_at": "2026-11-06T14:00:00Z", "ended_at": "2026-11-06T14:10:00Z"},
+        {"actor_id": "architect-agent-example", "actor_type": "agent", "kind": "work", "started_at": "2026-11-06T14:05:00Z", "ended_at": "2026-11-06T14:15:00Z"},
+        {"actor_id": "architect-example", "actor_type": "human", "kind": "wait", "started_at": "2026-11-06T14:15:00Z", "ended_at": "2026-11-06T14:25:00Z"},
+        {"actor_id": "architect-example", "actor_type": "human", "kind": "rework", "started_at": "2026-11-06T14:25:00Z", "ended_at": "2026-11-06T14:30:00Z"}
+      ]
+    },
+    {
+      "phase": "finops",
+      "provenance": "simulated",
+      "accepted_at": "2026-11-06T14:30:00Z",
+      "handed_off_at": "2026-11-06T14:40:00Z",
+      "activities": [
+        {"actor_id": "finops-agent-example", "actor_type": "agent", "kind": "work", "started_at": "2026-11-06T14:30:00Z", "ended_at": "2026-11-06T14:35:00Z"},
+        {"actor_id": "finops-example", "actor_type": "human", "kind": "work", "started_at": "2026-11-06T14:35:00Z", "ended_at": "2026-11-06T14:40:00Z"}
+      ]
+    }
+  ]
+}

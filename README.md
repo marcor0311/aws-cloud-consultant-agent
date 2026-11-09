@@ -20,7 +20,76 @@ las API de Google Calendar y Gmail.
 > Esta segunda iteración corresponde al curso
 > **PSWE-07 Procesos y Administración de Software**.
 
+## Tecnologías
+
+**Aplicación**
+
+<p>
+  <img src="https://skillicons.dev/icons?i=py,fastapi,js,html,css" alt="Python, FastAPI, JavaScript, HTML y CSS" height="56">
+  <img src="docs/assets/technology-icons/pydantic.svg" alt="Pydantic" title="Pydantic" width="56" height="56">
+</p>
+
+**Datos**
+
+<p>
+  <img src="https://skillicons.dev/icons?i=postgres,sqlite" alt="PostgreSQL y SQLite" height="56">
+</p>
+
+**Agentes e IA**
+
+<p>
+  <img src="docs/assets/technology-icons/langgraph.svg" alt="LangGraph" title="LangGraph" width="56" height="56">
+  <img src="docs/assets/technology-icons/mcp.svg" alt="MCP" title="MCP" width="56" height="56">
+  <img src="docs/assets/technology-icons/openai-chatgpt.svg" alt="OpenAI / ChatGPT" title="OpenAI / ChatGPT" width="56" height="56">
+  <img src="docs/assets/technology-icons/claude.svg" alt="Claude" title="Claude" width="56" height="56">
+  <img src="docs/assets/technology-icons/claude-code.svg" alt="Claude Code" title="Claude Code" width="56" height="56">
+  <img src="docs/assets/technology-icons/github-copilot.svg" alt="GitHub Copilot" title="GitHub Copilot" width="56" height="56">
+  <img src="docs/assets/technology-icons/codex.svg" alt="Codex" title="Codex" width="56" height="56">
+  <img src="docs/assets/technology-icons/gemma.svg" alt="Gemma" title="Gemma" width="56" height="56">
+</p>
+
+**Voz y transcripción**
+
+<p>
+  <img src="docs/assets/technology-icons/livekit.svg" alt="LiveKit" title="LiveKit" width="56" height="56">
+  <img src="docs/assets/technology-icons/assemblyai.svg" alt="AssemblyAI" title="AssemblyAI" width="56" height="56">
+  <img src="docs/assets/technology-icons/gradium.svg" alt="Gradium" title="Gradium" width="56" height="56">
+  <img src="docs/assets/technology-icons/ai-coustics.svg" alt="ai-coustics" title="ai-coustics" width="56" height="56">
+  <img src="docs/assets/technology-icons/transcriptonic.svg" alt="TranscripTonic" title="TranscripTonic" width="56" height="56">
+</p>
+
+**Integraciones**
+
+<p>
+  <img src="docs/assets/technology-icons/gmail.svg" alt="Gmail" title="Gmail" width="56" height="56">
+  <img src="docs/assets/technology-icons/google-calendar.svg" alt="Google Calendar" title="Google Calendar" width="56" height="56">
+  <img src="docs/assets/technology-icons/google-meet.svg" alt="Google Meet" title="Google Meet" width="56" height="56">
+  <img src="docs/assets/technology-icons/slack.svg" alt="Slack" title="Slack" width="56" height="56">
+</p>
+
+**Documentos y navegador**
+
+<p>
+  <img src="docs/assets/technology-icons/reportlab.svg" alt="ReportLab" title="ReportLab" width="56" height="56">
+  <img src="docs/assets/technology-icons/playwright.svg" alt="Playwright" title="Playwright" width="56" height="56">
+</p>
+
+**Nube e infraestructura**
+
+<p>
+  <img src="https://skillicons.dev/icons?i=aws,terraform" alt="AWS y Terraform" height="56">
+</p>
+
+**Control de versiones y CI**
+
+<p>
+  <img src="https://skillicons.dev/icons?i=git,github,githubactions" alt="Git, GitHub y GitHub Actions" height="56">
+</p>
+
 ## Repositorios relacionados
+
+Los repositorios de cada proyecto se crean y se trabajan dentro de la organización
+[aws-cloud-consulting-group](https://github.com/aws-cloud-consulting-group).
 
 El proyecto utiliza estos repositorios como insumos para el diseño y la
 organización de los proyectos de consultoría:
@@ -65,8 +134,6 @@ La propuesta se define en [los issues de agentes](issues.md): incorpora apoyo de
 El diagrama se lee de izquierda a derecha. Cada columna muestra **proceso → puesto → agente → funcionalidad**. El agendamiento y la preparación usan agentes separados, al igual que el proyecto y los baselines. EM se refiere al Engagement Manager.
 
 ![Propuesta de transformación con agentes de IA: seis etapas, puestos responsables, agentes y funcionalidades](docs/process-flow.png)
-
-La consulta del histórico de proyectos por MCP ya está desarrollada y se utiliza desde ChatGPT, Claude o web. Los issues detallan las responsabilidades, herramientas y entregas de la propuesta, e indican las funcionalidades pendientes.
 
 ## 4. Oficina virtual
 

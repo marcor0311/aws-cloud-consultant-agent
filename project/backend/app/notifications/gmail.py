@@ -14,7 +14,7 @@ from google.auth.exceptions import GoogleAuthError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 
-from app.core.config import PROJECT_DIR
+from app.core.config import private_path
 from app.core.validation import normalize_email
 from app.notifications.message import build_code_message
 
@@ -24,8 +24,7 @@ _send_lock = threading.Lock()
 
 
 def configured_path(variable: str, default: str) -> Path:
-    path = Path(os.getenv(variable, default)).expanduser()
-    return path if path.is_absolute() else PROJECT_DIR / path
+    return private_path(os.getenv(variable) or default)
 
 
 def save_credentials(credentials: Credentials, token_file: Path) -> None:
@@ -57,7 +56,7 @@ class GmailSettings:
         return cls(
             sender=os.getenv("GOOGLE_ACCOUNT_EMAIL", ""),
             token_file=configured_path(
-                "CALENDAR_GMAIL_TOKEN_FILE", "secrets/gmail_token.json"
+                "CALENDAR_GMAIL_TOKEN_FILE", "google/gmail-token.json"
             ),
         )
 
