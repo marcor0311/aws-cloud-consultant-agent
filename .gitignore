@@ -4,6 +4,7 @@
 !.env.example
 secrets/
 project/data/
+project/backend/data/
 
 # Python environments, build output and caches
 .venv/
@@ -23,6 +24,7 @@ console-recordings/
 *.log
 project/generated/
 *.zip
+project/backend/tools/awsdac/v*/
 .terraform/
 *.tfstate
 *.tfstate.*

@@ -40,6 +40,11 @@ todo el alcance del issue #19.
 - Aprobación protegida mediante número de revisión y SHA-256.
 - Persistencia de checkpoints y artefactos.
 - Handoff de Arquitectura hacia FinOps.
+- Retorno estructurado FinOps → Arquitectura con revisiones inmutables.
+- Lectura de entregas del agente 2 fijadas a un commit del repo de proyecto.
+- Publicación local versionada bajo `docs/03-architecture/`.
+- Historial consultable de correcciones, aprobaciones y handoffs.
+- Idempotencia por identificador de corrección y número de revisión.
 - Avance del workflow principal de la etapa 3 a la etapa 4.
 - Servidor MCP dedicado para Codex.
 - Instrucciones de repositorio para orientar el razonamiento de Codex.
@@ -66,11 +71,19 @@ Solicitar cambios                Aprobar
 Nueva revisión             Handoff ready_for_finops
                                     ↓
                           Workflow pasa a etapa 4
+                                    ↓
+                    Corrección estructurada de FinOps
+                                    ↓
+                 Nueva revisión y nueva aprobación humana
 ```
 
 Codex proporciona el razonamiento del agente. El servidor MCP no inventa el
 diseño: valida, versiona, persiste y protege la aprobación de la propuesta
 construida por Codex a partir de los requisitos disponibles.
+
+Codex también orquesta la frontera entre los agentes 3 y 4. El agente 3 no llama
+al agente 4: expone un contrato económico tipado, vigente y aprobado. Codex debe
+recuperarlo y entregarlo sin recalcular ni reinterpretar costos al MCP de FinOps.
 
 ## Herramientas MCP
 
@@ -80,10 +93,16 @@ transporte STDIO. Expone únicamente las herramientas de Arquitectura:
 | Herramienta | Responsabilidad |
 | --- | --- |
 | `consultar_catalogo_baselines` | Lee módulos, perfiles, versiones y estados reales del repositorio baseline local. |
+| `leer_entrega_agente_2` | Valida el repo del proyecto y lee insumos aprobados desde el commit indicado. |
+| `publicar_arquitectura_local` | Publica una revisión aprobada sin commit, push ni PR. |
 | `iniciar_arquitectura` | Valida y persiste la primera propuesta de un expediente. |
 | `consultar_arquitectura` | Devuelve el estado, revisión, paquete y decisión pendiente. |
+| `obtener_handoff_finops` | Devuelve a Codex únicamente el handoff vigente, aprobado y listo. |
 | `corregir_arquitectura` | Crea una revisión completa después de cambios solicitados. |
 | `revisar_arquitectura` | Registra `approve` o `revise` para la revisión y SHA-256 exactos. |
+| `solicitar_correccion_finops` | Reabre una entrega mediante una solicitud FinOps versionada. |
+| `aplicar_correccion_finops` | Crea una revisión nueva vinculada a la solicitud recibida. |
+| `consultar_historial_arquitectura` | Devuelve revisiones, correcciones, aprobaciones y handoffs. |
 
 La configuración puede comprobarse con:
 
@@ -133,6 +152,8 @@ Esta carpeta contiene resultados generados, no código fuente del agente.
 | --- | --- |
 | `project/backend/app/architecture/models.py` | Modelos Pydantic del contrato de entrada, recursos, módulos, ADRs, seguridad y costos. |
 | `project/backend/app/architecture/economics.py` | Contrato económico, unidades, procedencia, consumos y reglas de bloqueo. |
+| `project/backend/app/architecture/corrections.py` | Contrato versionado de correcciones solicitadas por FinOps. |
+| `project/backend/app/architecture/project_repository.py` | Contrato agente 2 → 3, lectura Git fijada a commit y publicación local versionada. |
 | `project/backend/app/architecture/state.py` | Estado serializable conservado por LangGraph. |
 | `project/backend/app/architecture/catalog.py` | Lectura y validación del repositorio de módulos baseline. |
 | `project/backend/app/architecture/nodes.py` | Nodos de validación, revisión humana y handoff. |
@@ -225,6 +246,73 @@ interactiva de Codex construyendo el diseño desde requisitos reales.
 
 ## Trabajo pendiente
 
+### Estado del Bloque C — implementación local lista; recarga MCP pendiente
+
+El contrato de entrada `ArchitectureProjectHandoff` v1.1 fija repositorio,
+commit, issue, revisión, un manifiesto de cuatro documentos obligatorios y la
+evidencia de aprobación. La lectura usa blobs del commit, la publicación es
+inmutable e idempotente y el handoff hacia FinOps solo puede recuperarse para la
+revisión vigente aprobada. Las pruebas locales cubren casos positivos y negativos.
+
+El 8 de noviembre de 2026 se invocó realmente por MCP
+`consultar_catalogo_baselines`, que devolvió `api-gateway`, `dynamodb` y `s3`.
+Esta sesión de Codex conservó el inventario antiguo de cinco herramientas y no
+expuso `leer_entrega_agente_2`, `publicar_arquitectura_local` ni
+`obtener_handoff_finops`. El recorrido completo no se considera una ejecución
+MCP real hasta recargar el servidor en una conversación nueva y llamar esas
+herramientas. Las pruebas Python no sustituyen esa evidencia.
+
+La aprobación del repositorio local de prueba usa `evidence_type: test`; no es
+una aprobación humana del proyecto. En la demostración real, Codex debe detenerse
+en la interrupción y esperar una decisión explícita sobre revisión y SHA-256.
+
+Para el Bloque D queda registrada la decisión de usar
+`awslabs/diagram-as-code`, con `ArchitecturePackage` como fuente de verdad,
+relaciones tipadas y generación determinista. No se implementa en el Bloque C.
+
+### Estado del Bloque D — implementación local
+
+`ArchitecturePackage` 1.2 agrega una topología tipada. Cada nodo corresponde a
+un recurso existente y usa un tipo AWS incluido en el catálogo local verificado;
+las relaciones distinguen flujo funcional de dependencia de despliegue. Las
+dependencias no pueden ser desconocidas, autorreferentes ni cíclicas.
+
+Mermaid y `architecture.aws-dac.yaml` se derivan de esa topología; el texto libre
+ya no es la fuente de verdad en 1.2. Los contratos 1.0 y 1.1 conservan temporalmente
+su campo Mermaid para compatibilidad. El YAML fija la definición oficial y el CLI
+`awslabs/diagram-as-code` en `v0.24`.
+
+La publicación 1.2 genera e incluye:
+
+- `architecture.mmd`.
+- `architecture.aws-dac.yaml`.
+- `architecture.png`, renderizado por `awsdac v0.24`.
+- `resources.yaml`.
+- `module-selection.yaml`.
+- Políticas IAM JSON declaradas explícitamente bajo `policies/`.
+- `manifest.json` con SHA-256 de archivos de texto, políticas y PNG.
+
+El adaptador rechaza una versión diferente de `awsdac`. En Windows busca primero
+el binario local verificado en `project/backend/tools/awsdac/v0.24/`; también se
+puede definir `AWSDAC_EXECUTABLE`. Los binarios descargados no se versionan.
+
+Un clon nuevo prepara la dependencia desde `project/backend/` con:
+
+```powershell
+.\scripts\install_awsdac.ps1
+.\.venv\Scripts\python.exe -m pytest -q tests\architecture_agent
+```
+
+`tools/awsdac/dependencies.json` es la fuente versionada de plataforma, asset y
+SHA-256. El instalador detecta sistema operativo y arquitectura, verifica el
+archivo antes de extraerlo y confirma `awsdac v0.24`. En Linux o macOS se ejecuta
+con `pwsh ./scripts/install_awsdac.ps1`.
+
+La renderización real de control produjo un PNG de 18 576 bytes con SHA-256
+`b90bced6be739345e030e1b19b62d48c3e28dc3b5d59b1e27e46b0e34a83f55b`.
+La evidencia local está en `project/backend/data/block-d-diagram/`, carpeta
+ignorada por Git.
+
 ### 1. Demostración real de Codex y MCP
 
 El servidor está registrado y las herramientas se prueban de forma aislada, pero
@@ -245,12 +333,25 @@ acordarse los escenarios mínimo/esperado/máximo y ampliar el catálogo tipado 
 métricas cuando se incorporen nuevos servicios AWS. Las fuentes de precios y los
 cálculos siguen deliberadamente fuera del agente 3.
 
-### 3. Correcciones solicitadas por FinOps
+### Correcciones solicitadas por FinOps — implementado localmente
 
-El workflow general puede regresar de la etapa 4 a la etapa 3, pero el grafo
-especializado debe permitir reabrir un diseño que ya quedó `ready_for_finops`.
-Debe crear una nueva iteración, conservar referencias a revisiones anteriores y
-generar otro handoff sin sobrescribir evidencia.
+El workflow general y el especializado ya permiten regresar de etapa 4 a etapa
+3. La solicitud identifica la revisión, recursos, dimensiones, evaluación y
+restricciones. Cada paquete modificado obtiene revisión y hash nuevos, vuelve a
+aprobación humana y produce un handoff diferente. SQLite conserva las revisiones
+anteriores sin sobrescribirlas; PostgreSQL continúa pendiente del Bloque F.
+
+El contrato `FinOpsCorrectionRequest` 1.0 exige una referencia trazable a la
+evaluación (`finops://`, `artifact://` o `https://`), alcance afectado, cambios,
+restricciones, origen y fecha con zona horaria. Una corrección idéntica a la
+arquitectura entregada se rechaza. Repetir la misma solicitud o la misma
+aplicación devuelve un resultado idempotente; reutilizar el identificador con
+otro contenido produce conflicto.
+
+Las herramientas `solicitar_correccion_finops` y
+`aplicar_correccion_finops` están registradas en el servidor dedicado. La
+evidencia MCP real requiere que la sesión de Codex recargue el inventario del
+servidor; las pruebas locales no se presentan como invocaciones MCP.
 
 ### 4. Políticas como código reales
 
@@ -259,11 +360,43 @@ formato acordado —por ejemplo OPA/Rego, AWS Config o reglas de validación—,
 los archivos y validarlos automáticamente. No se debe presentar una ruta como
 política implementada si el archivo no existe.
 
-### 5. Publicación en el repositorio del proyecto
+### Publicación local en el repositorio del proyecto — implementado
 
-Los documentos deben publicarse en `docs/03-architecture/` del repositorio creado
-desde `aws-cloud-consulting-project-template`, en vez de permanecer únicamente en
-`data/architecture-demo/` o en la base local.
+La entrega del agente 2 identifica repositorio, commit, issue, revisión aprobada
+y SHA-256 de cada insumo. El agente 3 lee los blobs del commit —no archivos
+locales potencialmente modificados— y publica cada revisión aprobada en
+`docs/03-architecture/versions/vNNN/` con un manifiesto de hashes. La operación
+es idempotente y no hace commit, push ni PR; esas operaciones pertenecen a la
+integración GitHub pendiente.
+
+### Contrato real Agente 2 → Arquitectura 1.2 — implementado localmente
+
+`ArchitectureProjectHandoff` acepta las versiones 1.1 y 1.2. La versión 1.1
+conserva sin cambios el contrato de cuatro documentos usado por los primeros
+fixtures. La versión 1.2 representa la entrega real del agente 2:
+
+- Una o más evidencias bajo `docs/01-discovery/`.
+- Un único `board_record` JSON bajo `docs/02-board/`.
+- Evidencias Markdown, HTML, JSON, YAML o PDF con `media_type` explícito.
+- Commit Git, SHA-256 de cada blob, issue, revisión y repositorio de origen.
+- Presupuesto aceptado, partidas cuya suma coincide con el total y condiciones.
+- `request_sha256` del paquete sometido a votación y `digest` del acta.
+- Regla de unanimidad, miembros, votos y condición simulada.
+
+Los hashes se calculan sobre los blobs del commit, no sobre el working tree; así
+la conversión LF/CRLF de Windows no altera la evidencia. Los PDF se verifican por
+SHA-256, pero su contenido binario no se incluye en la respuesta MCP. Markdown,
+HTML y JSON sí se entregan como texto UTF-8 para construir la arquitectura.
+
+`signature_verified: true` dentro del acta se conserva como
+`declared_by_source`. El agente 3 no afirma haber realizado una verificación
+criptográfica independiente porque no recibe las firmas ni los secretos usados
+por el agente 2. Del mismo modo, `is_simulated: true` produce evidencia de tipo
+`test` y nunca sustituye la aprobación humana posterior de Arquitectura.
+
+La prueba de integración local utiliza como referencia
+`aws-cloud-consulting-project-nike-01-lindora-run`, pero el contrato no contiene
+nombres de Nike ni nombres fijos de actas o evidencias.
 
 ### 6. Integración con GitHub MCP
 

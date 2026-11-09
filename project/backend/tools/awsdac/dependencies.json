@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "repository": "https://github.com/awslabs/diagram-as-code",
+  "release_tag": "v0.24",
+  "version": "0.24",
+  "assets": {
+    "darwin-amd64": {
+      "filename": "awsdac-v0.24_darwin-amd64.zip",
+      "sha256": "44c771b174cecee1e64f757d52af8e484379a17656472a91f59eb1a7eaebe3cd"
+    },
+    "darwin-arm64": {
+      "filename": "awsdac-v0.24_darwin-arm64.zip",
+      "sha256": "683b18dca0ff0418428e605a9385bb6350d38751d1dd4ac8843b408d45a9bd50"
+    },
+    "linux-386": {
+      "filename": "awsdac-v0.24_linux-386.zip",
+      "sha256": "89c9879ededc2545155f80affb12a6bc04b9e3763b756fe362c2014951695a81"
+    },
+    "linux-amd64": {
+      "filename": "awsdac-v0.24_linux-amd64.zip",
+      "sha256": "597fc1b24af040f1bd3eaf33cb2c63bd0d2f50599faf74ff5c60ea5f870eb49c"
+    },
+    "linux-arm": {
+      "filename": "awsdac-v0.24_linux-arm.zip",
+      "sha256": "eb487139a39365d012220d1c8a0434abf6e262d1c2248613daddddd67cf17fd6"
+    },
+    "linux-arm64": {
+      "filename": "awsdac-v0.24_linux-arm64.zip",
+      "sha256": "2731757b3d5671e67fdb0db9ec337617ceb06f9a0620b323bf56295b44442aa0"
+    },
+    "windows-386": {
+      "filename": "awsdac-v0.24_windows-386.zip",
+      "sha256": "246b6afac7542b3add306dfd857f34130e598f34c0368535e22ea932b7606507"
+    },
+    "windows-amd64": {
+      "filename": "awsdac-v0.24_windows-amd64.zip",
+      "sha256": "94023a4cee7c47bae88807440075f99c8f23b52cd01013a4a169972f48fd1c32"
+    }
+  }
+}

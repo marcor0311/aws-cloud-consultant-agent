@@ -158,6 +158,27 @@ def test_contract_rejects_unknown_dependencies_and_false_baseline_status(proposa
     with pytest.raises(ValueError, match="no coincide"):
         BaselineCatalog(BASELINES).validate(package.baselines)
 
+    package = ArchitecturePackage.model_validate(proposal)
+    package.baselines[0].commit = "0" * 40
+    with pytest.raises(ValueError, match="commit baseline"):
+        BaselineCatalog(BASELINES).validate(package.baselines)
+
+
+def test_contract_rejects_circular_deployment_dependencies(proposal):
+    invalid = deepcopy(proposal)
+    invalid["resources"][0]["dependencies"] = ["documents-key"]
+    invalid["resources"].append(
+        {
+            "resource_id": "documents-key",
+            "aws_service": "AWS KMS",
+            "purpose": "Encrypt documents.",
+            "dependencies": ["documents"],
+            "sizing_assumptions": ["One key"],
+        }
+    )
+    with pytest.raises(ValueError, match="cíclicas"):
+        ArchitecturePackage.model_validate(invalid)
+
 
 def test_legacy_1_0_contract_remains_parseable_but_blocks_finops(proposal):
     legacy = deepcopy(proposal)
@@ -314,6 +335,10 @@ def test_review_requires_exact_revision_and_persists_restart(tmp_path, proposal)
     assert final["state"]["handoff"]["contract_version"] == "1.0"
     assert final["state"]["handoff"]["architecture_schema_version"] == "1.1"
     assert final["state"]["handoff"]["source_issue"] == proposal["source_issue"]
+    exported = service.get_finops_handoff("case-19", 2)
+    assert exported == final["state"]["handoff"]
+    with pytest.raises(ValueError, match="No existe un handoff"):
+        service.get_finops_handoff("case-19", 99)
     connection.close()
 
     connection, restarted = service_at(path)

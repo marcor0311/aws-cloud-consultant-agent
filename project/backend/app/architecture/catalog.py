@@ -1,5 +1,6 @@
 """Read-only catalog over the real Terraform baseline repository."""
 
+import subprocess
 from pathlib import Path
 
 import yaml
@@ -37,17 +38,39 @@ class BaselineCatalog:
             )
         return result
 
+    def _module_at_commit(self, commit: str, module_id: str) -> dict:
+        result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(self.root),
+                "show",
+                f"{commit}:aws/{module_id}/module.yaml",
+            ],
+            check=False,
+            capture_output=True,
+        )
+        if result.returncode:
+            raise ValueError(
+                f"El commit baseline no contiene el módulo {module_id}."
+            )
+        try:
+            return yaml.safe_load(result.stdout.decode("utf-8"))
+        except (UnicodeDecodeError, yaml.YAMLError) as error:
+            raise ValueError("El manifiesto baseline fijado no es válido.") from error
+
     def validate(self, selections: list[BaselineSelection]) -> None:
         catalog = {item["module_id"]: item for item in self.modules()}
         for selection in selections:
             actual = catalog.get(selection.module_id)
             if not actual:
                 raise ValueError(f"Módulo baseline inexistente: {selection.module_id}.")
-            if selection.candidate_version != actual["candidate_version"]:
+            pinned = self._module_at_commit(selection.commit, selection.module_id)
+            if selection.candidate_version != pinned["candidate_version"]:
                 raise ValueError(
                     f"Versión incorrecta para {selection.module_id}; consultar el catálogo."
                 )
-            profiles = {profile["name"] for profile in actual.get("profiles", [])}
+            profiles = {profile["name"] for profile in pinned.get("profiles", [])}
             if selection.profile not in profiles:
                 raise ValueError(
                     f"Perfil inexistente para {selection.module_id}: {selection.profile}."

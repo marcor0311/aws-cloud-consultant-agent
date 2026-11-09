@@ -228,6 +228,38 @@ por `WorkflowExecution` (`app/workflow/ports.py`) y su adaptador está en
 
 ## Cloud Architecture Agent — issue #19
 
+### Dependencia reproducible de diagramas AWS
+
+El paquete de Arquitectura 1.2 genera el PNG mediante
+`awslabs/diagram-as-code`. El ejecutable no se guarda en Git porque es un binario
+externo específico de cada plataforma. Su versión, nombres de assets y SHA-256
+están fijados en `tools/awsdac/dependencies.json`.
+
+Desde `project/backend/`, instalar o comprobar la dependencia:
+
+```powershell
+.\scripts\install_awsdac.ps1
+```
+
+El script detecta Windows, Linux o macOS y las arquitecturas soportadas, descarga
+exactamente `v0.24`, verifica el hash antes de extraer y comprueba la versión del
+ejecutable. En Linux o macOS requiere PowerShell 7 y se ejecuta con:
+
+```sh
+pwsh ./scripts/install_awsdac.ps1
+```
+
+Después se pueden ejecutar las pruebas del agente:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q tests\architecture_agent
+```
+
+En Linux o macOS, usar el Python del entorno virtual correspondiente. Si el
+binario se administra fuera del repositorio, establecer `AWSDAC_EXECUTABLE` con
+su ruta absoluta. La publicación 1.2 falla de forma explícita cuando falta la
+dependencia o su versión no es `0.24`.
+
 El primer incremento recibe una propuesta estructurada elaborada con el arquitecto,
 consulta los `module.yaml` y `audit-record.yaml` del repositorio hermano de
 baselines y produce requisitos, arquitectura, diagrama Mermaid, ADRs y seguridad.

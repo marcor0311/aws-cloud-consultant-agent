@@ -1,12 +1,15 @@
 """Strict, versioned deliverable produced by the Cloud Architecture Agent."""
 
 import json
+import re
 from decimal import Decimal
 from typing import Literal
 
+import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.architecture.economics import EconomicContract
+from app.architecture.topology import ArchitectureTopology
 
 
 class Contract(BaseModel):
@@ -47,10 +50,48 @@ class ArchitectureDecision(Contract):
     tradeoffs: list[str] = Field(min_length=1, max_length=20)
 
 
+class IamPolicyStatement(Contract):
+    sid: str = Field(pattern=r"^[A-Za-z0-9]+$")
+    effect: Literal["Allow", "Deny"]
+    actions: list[str] = Field(min_length=1, max_length=100)
+    resources: list[str] = Field(min_length=1, max_length=100)
+
+    @model_validator(mode="after")
+    def iam_values_are_valid(self):
+        if not all(
+            re.fullmatch(r"[a-z0-9-]+:[A-Za-z0-9*?-]+", action)
+            for action in self.actions
+        ):
+            raise ValueError("Cada acción IAM debe usar el formato servicio:acción.")
+        if not all(resource == "*" or resource.startswith("arn:") for resource in self.resources):
+            raise ValueError("Cada recurso IAM debe ser un ARN o '*'.")
+        return self
+
+
+class IamPolicyDocument(Contract):
+    version: Literal["2012-10-17"] = "2012-10-17"
+    statements: list[IamPolicyStatement] = Field(min_length=1, max_length=100)
+
+    def aws_document(self) -> dict:
+        return {
+            "Version": self.version,
+            "Statement": [
+                {
+                    "Sid": statement.sid,
+                    "Effect": statement.effect,
+                    "Action": sorted(statement.actions),
+                    "Resource": sorted(statement.resources),
+                }
+                for statement in self.statements
+            ],
+        }
+
+
 class SecurityControl(Contract):
     control_id: str = Field(pattern=r"^SEC-[0-9]{3}$")
     description: str = Field(min_length=1, max_length=1000)
     policy_as_code_path: str | None = Field(default=None, max_length=500)
+    iam_policy: IamPolicyDocument | None = None
 
 
 class CostAssumption(Contract):
@@ -63,7 +104,7 @@ class CostAssumption(Contract):
 
 
 class ArchitecturePackage(Contract):
-    schema_version: Literal["1.0", "1.1"] = "1.0"
+    schema_version: Literal["1.0", "1.1", "1.2"] = "1.0"
     project_id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{2,59}$")
     source_issue: str = Field(
         pattern=r"^https://github\.com/[^/]+/[^/]+/issues/[0-9]+$"
@@ -78,7 +119,8 @@ class ArchitecturePackage(Contract):
     security_controls: list[SecurityControl] = Field(min_length=1, max_length=100)
     cost_assumptions: list[CostAssumption] = Field(min_length=1, max_length=100)
     economic_contract: EconomicContract | None = None
-    diagram_mermaid: str = Field(min_length=1, max_length=20000)
+    topology: ArchitectureTopology | None = None
+    diagram_mermaid: str | None = Field(default=None, max_length=20000)
     risks: list[str] = Field(min_length=1, max_length=50)
     open_questions: list[str] = Field(default_factory=list, max_length=50)
 
@@ -93,6 +135,64 @@ class ArchitecturePackage(Contract):
                 raise ValueError("Un recurso no puede depender de sí mismo.")
             if not set(resource.dependencies) <= known:
                 raise ValueError("Todas las dependencias deben referenciar recursos.")
+        visiting = set()
+        visited = set()
+        dependencies = {
+            resource.resource_id: set(resource.dependencies)
+            for resource in self.resources
+        }
+
+        def visit(resource_id):
+            if resource_id in visiting:
+                raise ValueError("Las dependencias de despliegue no pueden ser cíclicas.")
+            if resource_id in visited:
+                return
+            visiting.add(resource_id)
+            for dependency in dependencies[resource_id]:
+                visit(dependency)
+            visiting.remove(resource_id)
+            visited.add(resource_id)
+
+        for resource_id in known:
+            visit(resource_id)
+        if self.schema_version in {"1.0", "1.1"} and not self.diagram_mermaid:
+            raise ValueError("Los contratos anteriores requieren diagram_mermaid.")
+        if self.schema_version == "1.2":
+            if self.topology is None:
+                raise ValueError("ArchitecturePackage 1.2 requiere topology.")
+            topology_ids = {node.resource_id for node in self.topology.nodes}
+            if topology_ids != known:
+                raise ValueError("La topología debe representar exactamente los recursos.")
+            dependency_edges = {
+                (dependency, resource.resource_id)
+                for resource in self.resources
+                for dependency in resource.dependencies
+            }
+            topology_dependencies = {
+                (relation.source, relation.target)
+                for relation in self.topology.relations
+                if relation.relation_type == "deployment_dependency"
+            }
+            if topology_dependencies != dependency_edges:
+                raise ValueError(
+                    "Las dependencias de despliegue deben coincidir con resources."
+                )
+            object.__setattr__(self, "diagram_mermaid", self.topology.mermaid())
+            for control in self.security_controls:
+                if bool(control.policy_as_code_path) != bool(control.iam_policy):
+                    raise ValueError(
+                        "Cada política debe declarar conjuntamente ruta y documento IAM."
+                    )
+                if control.policy_as_code_path:
+                    path = control.policy_as_code_path
+                    if (
+                        not path.startswith("policies/")
+                        or not path.endswith(".json")
+                        or ".." in path.split("/")
+                    ):
+                        raise ValueError(
+                            "Las políticas deben escribirse como policies/*.json."
+                        )
         if not {item.resource_id for item in self.cost_assumptions} <= known:
             raise ValueError("Los supuestos de costo deben referenciar recursos.")
         if self.schema_version == "1.1" and self.economic_contract is None:
@@ -156,9 +256,20 @@ class ArchitecturePackage(Contract):
             f"- **{item.requirement_id}** {item.description} — Fuente: {item.source}"
             for item in self.requirements
         )
-        resources = "# Recursos AWS propuestos\n\n" + "\n".join(
+        resources = (
+            f"# Arquitectura AWS — {self.project_id}\n\n"
+            f"- Región: `{self.region}`\n"
+            f"- Ambiente: `{self.environment}`\n"
+            f"- Issue: {self.source_issue}\n\n"
+            "## Recursos propuestos\n\n"
+            + "\n".join(
             f"- **{item.resource_id} / {item.aws_service}:** {item.purpose}"
             for item in self.resources
+            )
+            + "\n\n## Riesgos\n\n"
+            + "\n".join(f"- {risk}" for risk in self.risks)
+            + "\n\n## Preguntas abiertas\n\n"
+            + ("\n".join(f"- {question}" for question in self.open_questions) or "- Ninguna")
         )
         adrs = "# Decisiones de arquitectura\n\n" + "\n\n".join(
             f"## {item.adr_id} — {item.title}\n\n{item.decision}\n\n"
@@ -191,6 +302,56 @@ class ArchitecturePackage(Contract):
                 )
                 + "\n"
             )
+        if self.topology:
+            artifacts["architecture.aws-dac.yaml"] = self.topology.awsdac_yaml()
+            artifacts["resources.yaml"] = yaml.safe_dump(
+                {
+                    "schema_version": "1.0",
+                    "region": self.region,
+                    "environment": self.environment,
+                    "resources": [
+                        {
+                            "resource_id": resource.resource_id,
+                            "aws_service": resource.aws_service,
+                            "aws_resource_type": next(
+                                node.aws_resource_type
+                                for node in self.topology.nodes
+                                if node.resource_id == resource.resource_id
+                            ),
+                            "dependencies": sorted(resource.dependencies),
+                        }
+                        for resource in sorted(
+                            self.resources, key=lambda item: item.resource_id
+                        )
+                    ],
+                },
+                sort_keys=False,
+                allow_unicode=True,
+            )
+            artifacts["module-selection.yaml"] = yaml.safe_dump(
+                {
+                    "schema_version": "1.0",
+                    "modules": [
+                        baseline.model_dump(mode="json")
+                        for baseline in sorted(
+                            self.baselines, key=lambda item: item.module_id
+                        )
+                    ],
+                    "missing_modules": sorted(self.missing_baselines),
+                },
+                sort_keys=False,
+                allow_unicode=True,
+            )
+        for control in self.security_controls:
+            if control.policy_as_code_path and control.iam_policy:
+                artifacts[control.policy_as_code_path] = (
+                    json.dumps(
+                        control.iam_policy.aws_document(),
+                        ensure_ascii=False,
+                        indent=2,
+                    )
+                    + "\n"
+                )
         return artifacts
 
 
@@ -204,7 +365,7 @@ class ArchitectureFinOpsHandoff(Contract):
     source_issue: str = Field(
         pattern=r"^https://github\.com/[^/]+/[^/]+/issues/[0-9]+$"
     )
-    architecture_schema_version: Literal["1.0", "1.1"]
+    architecture_schema_version: Literal["1.0", "1.1", "1.2"]
     architecture: ArchitecturePackage
     economic_contract: EconomicContract | None
     documents: list[str] = Field(min_length=1, max_length=100)

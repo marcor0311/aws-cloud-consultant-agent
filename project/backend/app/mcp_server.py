@@ -111,6 +111,16 @@ def create_server(service, runtime=None):
             return call(runtime.architecture.catalog_modules)
 
         @server.tool()
+        def leer_entrega_agente_2(entrega: dict[str, Any]) -> dict:
+            """Lee insumos aprobados desde un commit del repositorio del proyecto."""
+            return call(runtime.architecture.read_project_handoff, entrega)
+
+        @server.tool()
+        def publicar_arquitectura_local(expediente_id: str) -> dict:
+            """Publica la revisión aprobada localmente sin commit ni push."""
+            return call(runtime.architecture.publish_to_project, expediente_id)
+
+        @server.tool()
         def iniciar_arquitectura(
             expediente_id: str, entrada_id: str, propuesta: dict[str, Any]
         ) -> dict:
@@ -130,6 +140,45 @@ def create_server(service, runtime=None):
         def consultar_arquitectura(expediente_id: str) -> dict:
             """Consulta la revisión, documentos y decisión pendiente del diseño."""
             return call(runtime.architecture.get, expediente_id)
+
+        @server.tool()
+        def consultar_historial_arquitectura(expediente_id: str) -> dict:
+            """Consulta revisiones, correcciones, aprobaciones y entregas."""
+            return call(runtime.architecture.history, expediente_id)
+
+        @server.tool()
+        def obtener_handoff_finops(expediente_id: str, revision: int) -> dict:
+            """Entrega a Codex el handoff aprobado para invocar posteriormente FinOps."""
+            return call(
+                runtime.architecture.get_finops_handoff,
+                expediente_id,
+                revision,
+            )
+
+        @server.tool()
+        def solicitar_correccion_finops(
+            expediente_id: str, solicitud: dict[str, Any]
+        ) -> dict:
+            """Registra una solicitud estructurada de corrección de FinOps."""
+            return call(
+                runtime.architecture.request_finops_correction,
+                expediente_id,
+                solicitud,
+            )
+
+        @server.tool()
+        def aplicar_correccion_finops(
+            expediente_id: str,
+            solicitud_id: str,
+            propuesta: dict[str, Any],
+        ) -> dict:
+            """Crea una revisión nueva enlazada con la corrección de FinOps."""
+            return call(
+                runtime.architecture.revise_from_finops,
+                expediente_id,
+                solicitud_id,
+                propuesta,
+            )
 
         @server.tool()
         def corregir_arquitectura(

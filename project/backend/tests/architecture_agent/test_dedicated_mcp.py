@@ -12,10 +12,16 @@ def test_dedicated_mcp_has_only_architecture_tools(tmp_path):
         tools = set(create_server(service)._tool_manager._tools)
         assert tools == {
             "consultar_catalogo_baselines",
+            "leer_entrega_agente_2",
+            "publicar_arquitectura_local",
             "iniciar_arquitectura",
             "consultar_arquitectura",
+            "consultar_historial_arquitectura",
+            "obtener_handoff_finops",
             "corregir_arquitectura",
             "revisar_arquitectura",
+            "solicitar_correccion_finops",
+            "aplicar_correccion_finops",
         }
     finally:
         resources.close()

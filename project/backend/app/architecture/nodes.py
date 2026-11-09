@@ -17,6 +17,12 @@ class ArchitectureNodes:
             "documents": package.artifacts(),
             "revision": 1,
             "status": "awaiting_review",
+            "parent_revision": None,
+            "correction_request_id": "",
+            "correction_history": [],
+            "revision_history": [],
+            "approval_history": [],
+            "handoff_history": [],
         }
 
     def review(self, state):
@@ -38,12 +44,43 @@ class ArchitectureNodes:
             and not response.get("feedback", "").strip()
         ):
             raise ValueError("Indicar los ajustes solicitados.")
+        decision = response["decision"]
+        approval = {
+            "revision": state["revision"],
+            "artifact_sha256": state["artifact_sha256"],
+            "decision": decision,
+            "feedback": response.get("feedback", ""),
+        }
+        revision_record = {
+            "revision": state["revision"],
+            "parent_revision": state.get("parent_revision"),
+            "correction_request_id": state.get("correction_request_id", ""),
+            "artifact_sha256": state["artifact_sha256"],
+            "package": state["package"],
+            "documents": state["documents"],
+            "decision": decision,
+        }
+        approvals = [
+            item
+            for item in state.get("approval_history", [])
+            if not (
+                item["revision"] == approval["revision"]
+                and item["artifact_sha256"] == approval["artifact_sha256"]
+            )
+        ]
+        revisions = [
+            item
+            for item in state.get("revision_history", [])
+            if item["revision"] != revision_record["revision"]
+        ]
         return {
             "decision": response["decision"],
             "feedback": response.get("feedback", ""),
             "status": "approved"
-            if response["decision"] == "approve"
+            if decision == "approve"
             else "changes_requested",
+            "approval_history": [*approvals, approval],
+            "revision_history": [*revisions, revision_record],
         }
 
     def handoff(self, state):
@@ -60,11 +97,18 @@ class ArchitectureNodes:
             economic_contract=package.economic_contract,
             documents=sorted(state["documents"]),
         )
+        handoff_payload = handoff.model_dump(mode="json")
+        previous = [
+            item
+            for item in state.get("handoff_history", [])
+            if item["revision"] != state["revision"]
+        ]
         return {
             "status": (
                 "blocked_for_finops_inputs"
                 if blocking_reasons
                 else "ready_for_finops"
             ),
-            "handoff": handoff.model_dump(mode="json"),
+            "handoff": handoff_payload,
+            "handoff_history": [*previous, handoff_payload],
         }
