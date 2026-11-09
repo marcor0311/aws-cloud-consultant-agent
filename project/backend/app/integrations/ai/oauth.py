@@ -189,6 +189,7 @@ class PlanConnection:
             )
         self.access_token = tokens["access_token"]
         self.expires_at = time.time() + int(tokens["expires_in"])
+        self.accept_tokens(tokens)
         if progress:
             progress("catalog", "Buscando los modelos disponibles en tu cuenta…")
         catalog = checked(
@@ -206,6 +207,9 @@ class PlanConnection:
         ]
         if not self.models:
             raise DemoError("La cuenta no devolvió modelos disponibles para esta demo.")
+
+    def accept_tokens(self, tokens):
+        """The demo remains in-memory; renewable integrations override this hook."""
 
     def headers(self):
         if not self.access_token or time.time() >= self.expires_at:

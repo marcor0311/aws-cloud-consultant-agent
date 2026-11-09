@@ -3,6 +3,19 @@
 .env.*
 !.env.example
 secrets/
+secrets.env
+session.json
+registration.json
+credentials.json
+client_secret*.json
+google_oauth_client.json
+*_token.json
+*-token.json
+*.pem
+*.key
+*.p12
+*.pfx
+.aws/
 project/data/
 
 # Python environments, build output and caches
@@ -22,6 +35,8 @@ htmlcov/
 console-recordings/
 *.log
 project/generated/
+insumos/
+/insumos temporales de agente 1/
 *.zip
 .terraform/
 *.tfstate

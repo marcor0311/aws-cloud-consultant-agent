@@ -1,4 +1,5 @@
 async function refresh() {
+  document.querySelector('#version').textContent = `v${chrome.runtime.getManifest().version}`;
   const {captures = [], activeTab, transcript = []} = await chrome.storage.local.get(['captures', 'activeTab', 'transcript']);
   document.querySelector('#active').textContent = activeTab == null ? 'Sin captura activa.' :
     (transcript.length ? `Meet abierto · ${transcript.length} intervenciones guardadas. Evitá recargar la pestaña.` : 'Meet abierto · todavía no se guardó texto. Revisá los subtítulos y hablá unos segundos.');
@@ -23,3 +24,6 @@ document.querySelector('#retry').onclick = async () => {
   await refresh();
 };
 await refresh();
+chrome.storage.onChanged.addListener((_changes, area) => {
+  if (area === 'local') refresh();
+});

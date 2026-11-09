@@ -18,12 +18,16 @@ class PreparationService:
         store=None,
         manager_id="engagement-manager",
         on_sync=None,
+        direction_actor="executive-direction-agent",
+        notifications=True,
     ):
         self.graph = graph
         self.store = store
         self.manager_id = manager_id
         self.lock = RLock()
         self.on_sync = on_sync
+        self.direction_actor = direction_actor
+        self.notifications = notifications
 
     def _owned(self, case_id):
         if self.store:
@@ -36,9 +40,21 @@ class PreparationService:
             return
         state = self.get(case_id)["state"]
         if state.get("status") in {"awaiting_review", "ready_for_stage_2"}:
-            self.store.notification(
-                case_id, state["revision"], state["status"], self.manager_id
-            )
+            if self.notifications:
+                self.store.notification(
+                    case_id, state["revision"], state["status"], self.manager_id
+                )
+            else:
+                self.store.put(
+                    f"status:{case_id}",
+                    "status",
+                    {
+                        "case_id": case_id,
+                        "revision": state["revision"],
+                        "status": state["status"],
+                        "manager_id": self.manager_id,
+                    },
+                )
         if state.get("status") == "awaiting_review":
             self.store.create_handoff(
                 f"{case_id}:preparation:stuart:v{state['revision']}",
@@ -78,7 +94,7 @@ class PreparationService:
                 f"{case_id}:stage-1:stage-2:v{state['revision']}",
                 case_id,
                 self.manager_id,
-                "executive-direction-agent",
+                self.direction_actor,
                 "preparation",
                 "stage-2",
                 revision=state["revision"],
@@ -174,6 +190,7 @@ class PreparationService:
             fingerprint = input_hash(transcript, query)
             if previous:
                 if previous.get("status") == "awaiting_meeting":
+                    self._receive_transcript(case_id, transcript)
                     self.graph.resume(
                         config,
                         {
@@ -187,6 +204,7 @@ class PreparationService:
                         },
                     )
                     self._sync(case_id)
+                    self._accept_transcript(case_id)
                     return self.get(case_id)
                 if (
                     previous["event_id"] != event_id
@@ -200,7 +218,9 @@ class PreparationService:
                     # Retry a failed node from its durable checkpoint.
                     self.graph.continue_run(config)
                 self._sync(case_id)
+                self._accept_transcript(case_id)
                 return self.get(case_id)
+            self._receive_transcript(case_id, transcript)
             self.graph.start(
                 config,
                 {
@@ -217,7 +237,30 @@ class PreparationService:
                 },
             )
             self._sync(case_id)
+            self._accept_transcript(case_id)
             return self.get(case_id)
+
+    def _receive_transcript(self, case_id, transcript):
+        if not self.store:
+            return
+        handoff_id = f"{case_id}:meeting:preparation"
+        if not self.store.handoff(handoff_id):
+            self.store.create_handoff(
+                handoff_id,
+                case_id,
+                self.manager_id,
+                "preparation-agent",
+                "transcript_intake",
+                "preparation",
+                revision=1,
+                artifact_sha256=hashlib.sha256(transcript.encode()).hexdigest(),
+            )
+
+    def _accept_transcript(self, case_id):
+        if self.store and self.store.handoff(f"{case_id}:meeting:preparation"):
+            self.store.accept_handoff(
+                f"{case_id}:meeting:preparation", "preparation-agent"
+            )
 
     def resume(self, case_id, action, value, expected_revision=None):
         with (

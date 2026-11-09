@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.core.config import project_path
+from app.core.config import private_path, project_path
 
 
 @dataclass(frozen=True)
@@ -17,6 +17,7 @@ class WorkflowSettings:
     manager_token: str = ""
     openai_key: str = ""
     openai_model: str = ""
+    inference_enabled: bool = False
     slack_token: str = ""
     slack_user_id: str = ""
     google_token_file: Path | None = None
@@ -79,9 +80,10 @@ class WorkflowSettings:
             manager_token=os.getenv("WORKFLOW_MANAGER_TOKEN", ""),
             openai_key=os.getenv("OPENAI_API_KEY", ""),
             openai_model=os.getenv("WORKFLOW_OPENAI_MODEL", ""),
+            inference_enabled=os.getenv("WORKFLOW_INFERENCE_ENABLED", "0") == "1",
             slack_token=os.getenv("SLACK_BOT_TOKEN", ""),
             slack_user_id=os.getenv("SLACK_EM_USER_ID", ""),
-            google_token_file=project_path(token_path) if token_path else None,
+            google_token_file=private_path(token_path) if token_path else None,
             pubsub_topic="projects/mock/topics/meet"
             if mode == "mock"
             else os.getenv("WORKFLOW_PUBSUB_TOPIC", ""),
@@ -121,7 +123,10 @@ class WorkflowSettings:
             "mode": self.mode,
             "external_connections": self.mode != "mock",
             "enabled": self.enabled,
-            "model": bool(self.openai_key and self.openai_model),
+            "model": bool(
+                self.openai_key and self.openai_model and self.inference_enabled
+            ),
+            "inference_enabled": self.inference_enabled,
             "slack": bool(self.slack_token and self.slack_user_id),
             "google": bool(self.google_token_file and self.google_token_file.is_file()),
             "pubsub_pull": bool(self.pubsub_subscription),

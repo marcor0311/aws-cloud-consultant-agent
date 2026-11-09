@@ -1,0 +1,71 @@
+{
+  "case_id": "nike-01-lindora-run",
+  "company": "Nike",
+  "project_name": "Lindora Run",
+  "owner": "aws-cloud-consulting-group",
+  "private": false,
+  "queue_position": 1,
+  "architect": "HiddenShadow77UC",
+  "issue_assignee": "marcor0311",
+  "budget": {
+    "currency": "USD",
+    "total": "180000",
+    "accepted": true,
+    "lines": [
+      {
+        "name": "Honorarios de infraestructura de nube",
+        "amount": "45000"
+      },
+      {
+        "name": "Consumo de nube del 18 nov al 20 dic",
+        "amount": "6000"
+      },
+      {
+        "name": "Mantenimiento de nube del 18 nov al 20 dic",
+        "amount": "4000"
+      },
+      {
+        "name": "Fases de programación",
+        "amount": "105000"
+      },
+      {
+        "name": "Contingencia con autorización expresa",
+        "amount": "20000"
+      }
+    ],
+    "conditions": "Techo digital: USD 180.000, impuestos incluidos. Asignaciones: honorarios nube 45.000; consumo 6.000; mantenimiento 4.000; programación 105.000; contingencia 20.000. Las cinco suman el total. Consumo y mantenimiento cubren 18 nov-20 dic; contingencia solo con autorización. Honorarios: 40/30/30 %, equivalentes a USD 18.000 al inicio con contrato, 13.500 al aceptar diseño y costos y 13.500 al aceptar AWS operativo. Operación se paga aparte dentro de sus partidas. Son reservas del escenario; no una cotización validada."
+  },
+  "work": {
+    "context": "Nike encarga el sitio oficial de la carrera del 13 de diciembre de 2026 en Terrazas Lindora, con información, venta y tiquetes para 5K, 10K y 15K. Esta primera etapa debe entregar AWS operativo a nombre de Nike y conexiones verificadas; la programación del producto tiene fases posteriores. Stuart evaluará la viabilidad del calendario y los costos antes de comprometer la entrega. La reunión fija límites de datos, pagos y continuidad; no acredita una solución implementada ni aprobada.",
+    "scope": "AWS operativo a nombre de Nike, conectividad y evidencia de ausencia de persistencia de datos restringidos.\nPlataforma para contenido oficial y conexiones con Nike, EasyPay, correo y circuito fiscal autorizado; verificar interfaces sin anticipar programación terminada.\nMantenimiento, atención y escalamiento de nube del 18 de noviembre al 20 de diciembre, con cobertura de anuncio y carrera.",
+    "restrictions": "Logística y atención a corredores a cargo de Nike. Programación completa en fases posteriores; organización de carrera excluida del presupuesto digital.\nSin datos restringidos en AWS, otros bancos, SINPE ni transferencias manuales. Gatorade recibe solo la copia fiscal autorizada.\nAWS conserva textos, mapas, precios y totales anónimos. Nike conserva identidad, contacto, nacimiento, talla, consentimiento, emergencia, órdenes, estados y pendientes de correo. Tampoco se permiten copias, registros o mensajes personales en nube.\nEl total público es informativo. Nike verifica y reserva cupos por distancia durante diez minutos; las cortesías requieren código y descuentan cupo. No cobrar sin autoridad disponible ni superar 3.000 confirmados.\nEasyPay: débito, crédito y Apple Pay con Visa o MasterCard emitidas por BAC o Banco Nacional, incluso dentro de Apple Pay. Informar un medio no admitido antes del cobro. El proveedor debe probar compatibilidad y condiciones.\nSi el pago se aprobó y Nike pierde conexión, recuperar la notificación de EasyPay y conciliar con la orden ya existente en Nike. No volver a cobrar ni emitir tiquete hasta confirmar en Nike; verificar reenvío de notificaciones con EasyPay.\nNike envía tiquetes dentro de dos minutos tras confirmar la inscripción y permite reenvío sin nueva compra. Si falla el correo, los pendientes quedan en Nike. El tiquete no espera la recuperación de Hacienda o Gatorade.\nNike controla emisión y estados fiscales; comunica con Hacienda y envía comprobante y respuesta a Finanzas de Nike y Gatorade, en instalaciones propias, y factura al comprador. Es una excepción autorizada a compartir datos; no habilita entregar la base de corredores. Sin respuesta fiscal se aplica la contingencia de Fiscal; Nike retiene y reintenta entregas pendientes.\nInformación pública 24×7, objetivo 99,9 % mensual. RTO solicitado: 30 minutos normales y diez en apertura/carrera; Nike declara hasta 45 y EasyPay hasta 30. Nike pausa ventas de 23:00 a 23:20. Se acepta suspender ventas manteniendo información; no hay garantía de recuperación transaccional en diez minutos.\nRPO: hasta quince minutos de contenido repetible y cero pérdida tolerada de pagos aprobados o inscripciones confirmadas. Previsiones diarias/simultáneas: 18 nov 2.000/200 por diez min; 20 nov 10.000/1.000 por quince min; 13 dic 20.000/2.000 por treinta min. Normal: 500 diarios, 800 al acercarse la carrera. Son previsiones de personas, no ventas ni pruebas ejecutadas.",
+    "deliverables": "Diseño de arquitectura AWS, diagrama como código, ADRs con decisiones y alternativas, controles de datos e integración, plan de recuperación y estimación inicial para revisión de FinOps. Documentar supuestos y evidencia requerida; no declarar pruebas o infraestructura ejecutadas.",
+    "acceptance": "AWS operativo, conectividad verificada y ausencia de almacenamiento restringido demostrada; conformidad escrita.\nProducto final: compra y cortesía sin sobreventa ni duplicados, correo y fallas validados; comprobantes fiscales trazables.\nEl diseño debe explicar cómo verificar estos requisitos en la entrega posterior. El arquitecto debe revisar el PR y aprobar expresamente; este issue no aprueba fases posteriores."
+  },
+  "approved_by": "marcor0311",
+  "approval_reference": "Decisión expresa en conversación del 8 de noviembre de 2026: insumos aprobados, prioridad 1, presupuesto aceptado y David asignado.",
+  "comments": "Primera posición de la cola de proyectos. Se conserva el presupuesto completo y sus partidas. La reunión y el resto de coordinación previa se implementarán después.",
+  "is_fictitious": true,
+  "files": [
+    {
+      "name": "ficha-proyecto.pdf",
+      "sha256": "5f993165559ba847ab84c1cfead853d7a3e21f27fcec1c70ff825df6df52cf25"
+    },
+    {
+      "name": "resumen-reunion.pdf",
+      "sha256": "3a2d4e14c5867755e81e97ef0d9403a0ad1e1a551152a8a674b49b880fc5fb53"
+    },
+    {
+      "name": "presentacion.html",
+      "sha256": "5339440e8c3cb43bea4aedfefb907b1b54c4e4b5d96e3bfd6682d6cc2ebd6406"
+    },
+    {
+      "name": "transcripcion-reunion-nike.md",
+      "sha256": "3fd1ce0de3aed6a26b2b88352452dd846323e253c6ccd66d757be28c7704e5c7"
+    },
+    {
+      "name": "presentacion.pdf",
+      "sha256": "5f492c27902d225503b2b0822d1b2c2d9a3f6b21b10114118ec9ddab522a9247"
+    }
+  ]
+}
