@@ -13,8 +13,8 @@ El job `architecture-agent` de `.github/workflows/checks.yml`:
 2. Descarga el repositorio del agente, los módulos baseline y la entrega Nike del
    agente 2 como repositorios hermanos.
 3. Ejecuta Ruff sobre la aplicación y las pruebas del agente 3.
-4. Ejecuta todas las pruebas de `tests/architecture_agent/` y la integración del
-   proceso principal en `tests/workflow/test_process_workflow.py`.
+4. Ejecuta todas las pruebas de `tests/architecture_agent/`, incluidas las
+   integraciones con el proceso principal y el retrabajo FinOps.
 5. Proporciona `WORKFLOW_TEST_POSTGRES_URL`, por lo que la prueba PostgreSQL no
    queda omitida en CI.
 6. Instala `awsdac v0.24`, verifica su SHA-256 y renderiza realmente el YAML
@@ -64,7 +64,7 @@ Desde `project/backend`:
 ```powershell
 .\.venv\Scripts\python.exe -m ruff format --check app tests
 .\.venv\Scripts\python.exe -m ruff check app tests
-.\.venv\Scripts\python.exe -m pytest -q tests\architecture_agent tests\workflow\test_process_workflow.py
+.\.venv\Scripts\python.exe -m pytest -q tests\architecture_agent
 ```
 
 La prueba PostgreSQL requiere además una base desechable:

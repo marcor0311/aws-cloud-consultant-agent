@@ -71,10 +71,7 @@ jobs:
       - name: Validate Architecture code and contracts
         run: python -m ruff check app tests/architecture_agent
       - name: Test Architecture, handoffs, artifacts and process integration
-        run: >-
-          python -m pytest -q
-          tests/architecture_agent
-          tests/workflow/test_process_workflow.py
+        run: python -m pytest -q tests/architecture_agent
 
   backend:
     runs-on: ubuntu-latest

@@ -120,6 +120,28 @@ La configuración puede comprobarse con:
 codex mcp get aws_architecture
 ```
 
+### Evidencia de ejecución MCP — 9 de noviembre de 2026
+
+Codex ejecutado desde Visual Studio Code inició realmente el servidor local y
+confirmó, sin modificar la configuración:
+
+- Registro `aws_architecture` habilitado con transporte STDIO.
+- Intérprete `project/backend/.venv/Scripts/python.exe`.
+- Módulo `-m app.architecture.mcp_server`.
+- `PYTHONPATH` dirigido a `project/backend`.
+- Servidor identificado como `Cloud Architecture Agent`.
+- Protocolo MCP negociado: `2025-06-18`.
+- Inventario descubierto mediante `tools/list`: 18 herramientas.
+- Invocación real satisfactoria de `consultar_catalogo_baselines`.
+- Descubrimiento confirmado de `consultar_metricas_arquitectura` y
+  `registrar_aceptacion_handoff_finops`.
+
+Esta evidencia confirma registro, arranque, negociación, descubrimiento e
+invocación del catálogo. No demuestra todavía la construcción de una arquitectura
+nueva, la aprobación humana, la publicación GitHub ni el consumo por el MCP real
+de FinOps. Durante la comprobación no se modificó la arquitectura y no se hicieron
+commits ni operaciones remotas.
+
 ## Documentos generados
 
 El paquete aprobado puede producir los siguientes documentos:
@@ -222,7 +244,7 @@ estado `draft` y con aprobación de producción pendiente.
 | `project/backend/tests/architecture_agent/test_architecture.py` | Contrato, catálogo, revisiones, persistencia, MCP y transición a FinOps. |
 | `project/backend/tests/architecture_agent/test_demo.py` | Exportación visible y confirmación de que no se genera Terraform. |
 | `project/backend/tests/architecture_agent/test_dedicated_mcp.py` | Frontera del MCP dedicado y conjunto exacto de herramientas. |
-| `project/backend/tests/workflow/test_process_workflow.py` | Reglas generales de avance, aprobación y retrabajo entre etapas. |
+| `project/backend/tests/architecture_agent/test_finops_rework.py` | Avance, aprobación y retrabajo entre Arquitectura y el proceso general. |
 
 ## Cómo ejecutar y comprobar
 
@@ -235,7 +257,7 @@ Desde `project/backend/`:
 Para comprobar también el workflow principal:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q tests\architecture_agent tests\workflow\test_process_workflow.py
+.\.venv\Scripts\python.exe -m pytest -q tests\architecture_agent
 ```
 
 Comprobación de calidad:
@@ -257,7 +279,7 @@ interactiva de Codex construyendo el diseño desde requisitos reales.
 
 ## Trabajo pendiente
 
-### Estado del Bloque C — implementación local lista; recarga MCP pendiente
+### Estado del Bloque C — servidor MCP recargado y herramientas descubiertas
 
 El contrato de entrada `ArchitectureProjectHandoff` v1.1 fija repositorio,
 commit, issue, revisión, un manifiesto de cuatro documentos obligatorios y la
@@ -267,11 +289,12 @@ revisión vigente aprobada. Las pruebas locales cubren casos positivos y negativ
 
 El 8 de noviembre de 2026 se invocó realmente por MCP
 `consultar_catalogo_baselines`, que devolvió `api-gateway`, `dynamodb` y `s3`.
-Esta sesión de Codex conservó el inventario antiguo de cinco herramientas y no
-expuso `leer_entrega_agente_2`, `publicar_arquitectura_local` ni
-`obtener_handoff_finops`. El recorrido completo no se considera una ejecución
-MCP real hasta recargar el servidor en una conversación nueva y llamar esas
-herramientas. Las pruebas Python no sustituyen esa evidencia.
+El 9 de noviembre de 2026 una sesión nueva de Codex en Visual Studio Code recargó
+el servidor, negoció el protocolo `2025-06-18`, descubrió las 18 herramientas e
+invocó nuevamente el catálogo. Quedó superado el inventario antiguo de cinco
+herramientas. El recorrido completo sigue pendiente hasta llamar, como mínimo,
+`leer_entrega_agente_2`, `iniciar_arquitectura`, la revisión humana y las
+operaciones de publicación con un caso nuevo construido sin el JSON de ejemplo.
 
 La aprobación del repositorio local de prueba usa `evidence_type: test`; no es
 una aprobación humana del proyecto. En la demostración real, Codex debe detenerse
@@ -563,8 +586,10 @@ procedencia explícita y persistencia después de reiniciar.
 - [x] Instalar el binario `awsdac v0.24` verificado y exigir un render real.
 - [x] Restaurar el catálogo histórico `references/` con su manifiesto de hashes.
 - [x] Mantener una matriz que separa evidencia local, CI y remota.
+- [x] Conservar evidencia de arranque, negociación, `tools/list` e invocación
+  real del catálogo mediante Codex/MCP.
 - [ ] Obtener la primera ejecución verde del job en GitHub Actions.
-- [ ] Conservar evidencia de invocaciones MCP y aprobación remota reales.
+- [ ] Conservar evidencia del recorrido MCP completo y de la aprobación remota.
 
 **Criterio de salida:** CI verde con PostgreSQL y render AWS reales, más evidencia
 MCP/GitHub verificable. Preparar el job no equivale a haberlo ejecutado.
