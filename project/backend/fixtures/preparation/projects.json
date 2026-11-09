@@ -1,0 +1,51 @@
+[
+  {
+    "project_id": "tienda-deportiva-horizonte",
+    "title": "Tienda Deportiva Horizonte",
+    "company": "Horizonte Deportes — ficticia",
+    "contact": "Ana Solís",
+    "email": "ana@horizonte.example",
+    "meeting_start": "2026-11-09T10:00:00-06:00",
+    "transcript_file": "tienda-deportiva.txt",
+    "search_query": "comercio merchandising catálogo carrito inventario",
+    "reference_id": "inter-miami-merchandise-ecommerce",
+    "reference_quote": "merchandising",
+    "summary": "Horizonte quiere sustituir los pedidos por mensajes por una tienda en línea. El MVP se centrará en descubrir productos, completar una compra y gestionar pedidos. Presupuesto, plazo, capacidad y objetivos de continuidad siguen pendientes de confirmación.",
+    "needs": [
+      {"text": "Tienda en línea para camisetas y accesorios, con inventario controlado", "quote": "Queremos vender camisetas y accesorios por internet porque hoy recibimos pedidos por mensajes y perdemos el control del inventario."}
+    ],
+    "requirements": [
+      {"text": "Catálogo, carrito y proveedor de pagos externo; no almacenar tarjetas", "quote": "Necesitamos catálogo, carrito y pago mediante un proveedor externo. No queremos guardar datos de tarjetas."},
+      {"text": "Panel de productos e inventario; carga manual inicial", "quote": "El equipo necesita un panel para actualizar productos e inventario."}
+    ],
+    "budget": {"text": "No confirmado; no hay presupuesto aprobado", "status": "unknown", "quote": "Todavía no tenemos presupuesto aprobado ni una fecha comprometida."},
+    "timeline": {"text": "No confirmado; acordar el plazo después de delimitar el MVP", "status": "unknown", "quote": "Todavía no tenemos presupuesto aprobado ni una fecha comprometida."},
+    "questions": ["¿Qué proveedor de pagos se utilizará?", "¿Quién autoriza el presupuesto del MVP?", "¿Qué carga, disponibilidad y recuperación se deben validar?"],
+    "ideas": ["Abrir con el problema de pedidos por mensajes y pérdida de control del inventario.", "Mostrar el recorrido del MVP: catálogo, compra y gestión del pedido.", "Separar alternativas y riesgos de decisiones ya aprobadas.", "Cerrar con presupuesto, plazo y validaciones pendientes."],
+    "script": "Stuart abre con el problema del cliente, explica el alcance mínimo y los requisitos confirmados. Después compara opciones usando el caso académico de comercio electrónico. Cierra con las decisiones pendientes, sin presentar costos o fechas como aprobados."
+  },
+  {
+    "project_id": "reservas-sierra-aventura",
+    "title": "Reservas Sierra Aventura",
+    "company": "Sierra Aventura — ficticia",
+    "contact": "Diego Mora",
+    "email": "diego@sierra.example",
+    "meeting_start": "2026-11-10T14:00:00-06:00",
+    "transcript_file": "reservas-aventura.txt",
+    "search_query": "skipass reservas pases validación operación",
+    "reference_id": "verbier-4-vallees-skipass-operations",
+    "reference_quote": "SkiPass",
+    "summary": "Sierra Aventura necesita reservas con control de cupos y pases QR. La validación sin conexión es una alternativa por evaluar, no una regla aprobada. Existe un techo de USD 12 000 para evaluar el piloto, sin fecha comprometida ni estimación mensual de operación.",
+    "needs": [
+      {"text": "Reservas por fecha con control de cupos y prevención de sobreventas", "quote": "Necesitamos reservas por fecha y control de cupos para evitar sobreventas."}
+    ],
+    "requirements": [
+      {"text": "Emitir un pase QR por reserva y validarlo en la entrada", "quote": "Cada reserva debe generar un pase con código QR y el personal debe poder validar ese pase al ingresar."}
+    ],
+    "budget": {"text": "USD 12 000 como techo para evaluar el piloto; no es un costo mensual", "status": "confirmed", "quote": "Dirección aprobó un máximo de doce mil dólares para evaluar el piloto."},
+    "timeline": {"text": "No confirmado; no hay fecha de salida acordada", "status": "unknown", "quote": "No tenemos fecha de salida acordada"},
+    "questions": ["¿Qué reglas se aplican a la validación sin conexión?", "¿Cómo se integra la caja?", "¿Cuál es la política de cancelación y de pases duplicados?"],
+    "ideas": ["Explicar el problema de sobreventas y el control de cupos.", "Mostrar el flujo de reserva, emisión del pase y acceso.", "Tratar la operación sin conexión como alternativa pendiente de validar.", "Cerrar con reglas operativas, presupuesto del piloto y decisiones pendientes."],
+    "script": "Stuart presenta el problema operativo y el recorrido de reserva y acceso. Distingue los requisitos confirmados de la alternativa sin conexión. Usa skipass como antecedente ficticio y solicita definir reglas, integración y pruebas antes del diseño."
+  }
+]

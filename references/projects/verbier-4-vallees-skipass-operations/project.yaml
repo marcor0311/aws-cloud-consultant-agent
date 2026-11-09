@@ -1,0 +1,42 @@
+is_fictitious: true
+reference_only: true
+project_id: verbier-4-vallees-skipass-operations
+project_title: "Plataforma SkiPass e integración operativa de cinco estaciones de Verbier 4 Vallées"
+project_type: consulting_project_reference
+organization: "Verbier 4 Vallées y operadores participantes; patrocinador y gobierno multioperador no registrados en este expediente"
+location: "Cantón de Valais, Suiza"
+status: historical_reference
+production_status: in_production
+production_period: not_recorded
+as_built_documentation: incomplete
+business_owner: not_recorded
+latest_version: "1.1.0" # Versión documental del catálogo, no release de producción
+deployed_version: not_recorded
+documentation_approval_status: not_recorded
+versions:
+  - version: "1.0.0"
+    status: historical_documentation_snapshot
+  - version: "1.1.0"
+    status: current_documentation_snapshot
+entrypoints:
+  project_overview: README.md
+  brief: project-brief.md
+  change_log: CHANGELOG.md
+  current_architecture: versions/1.1.0/architecture.md
+  current_diagram: versions/1.1.0/architecture.drawio
+  current_terraform: versions/1.1.0/terraform/
+  current_audit: versions/1.1.0/audit-record.yaml
+catalog_id: verbier-skipass
+company_id: verbier-4-vallees
+title: "Sistema SkiPass y coordinación de cinco estaciones"
+short_description: "Reservas de pases y coordinación operativa entre cinco estaciones de esquí."
+overview: "El proyecto plantea reservas digitales de pases y coordinación entre cinco estaciones, conectando operaciones locales y sistemas centrales. La capacidad documentada es una estimación de planeación, no una medición histórica verificada."
+start_date: "2026-01"
+date_confidence: illustrative
+visibility: public
+documentation_certainty: "historical_reference; documentation incomplete; production telemetry not verified"
+tags: [ski, reservations, multi-site, integration]
+suggested_questions:
+  - "¿Cuántos visitantes diarios debe soportar?"
+  - "¿Cómo conecta las cinco estaciones?"
+  - "¿Qué papel tienen los datos meteorológicos?"

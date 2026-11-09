@@ -65,20 +65,19 @@ siguientes se ejecutan en una copia del repositorio, no sobre `main` compartido.
 Desde la raíz, en PowerShell:
 
 ```powershell
-python -m venv .venv
-.venv\Scripts\python.exe -m pip install -r project/requirements-delivery.lock
+python -m venv project/backend/.venv
+project\backend\.venv\Scripts\python.exe -m pip install -r project/backend/requirements-dev.txt
 ```
 
-El lockfile registra las versiones usadas en esta entrega, incluidas las pruebas.
-Para evolucionar las dependencias, modificar primero los requirements de `app/`
-y regenerar el lockfile.
+Las dependencias y herramientas de pruebas se mantienen en los requirements
+del backend, compartidos con el resto de sus módulos.
 
 Si ya existe PostgreSQL, usar una base local dedicada y configurar
-`DELIVERY_DATABASE_URL`. Si se dispone de Docker, desde `project/`:
+`DELIVERY_DATABASE_URL`. Si se dispone de Docker, desde `project/backend/`:
 
 ```powershell
 $env:DELIVERY_POSTGRES_PASSWORD = 'elegir-una-clave-local'
-docker compose -f compose.delivery.yml up -d --wait
+docker compose -f ../compose.delivery.yml up -d --wait
 $env:DELIVERY_DATABASE_URL = 'postgresql://delivery:' + [Uri]::EscapeDataString($env:DELIVERY_POSTGRES_PASSWORD) + '@127.0.0.1:55432/delivery'
 ```
 
@@ -88,11 +87,11 @@ sin Docker; el código no depende del gestor que lo inicia.
 
 ## Ejecutar y exportar
 
-Desde `project/`, con `DELIVERY_DATABASE_URL` configurada:
+Desde `project/backend/`, con `DELIVERY_DATABASE_URL` configurada:
 
 ```powershell
-..\.venv\Scripts\python.exe -m app.delivery init-db
-..\.venv\Scripts\python.exe -m app.delivery run --input examples/delivery-1.json --output data/delivery-demo
+.venv\Scripts\python.exe -m app.delivery init-db
+.venv\Scripts\python.exe -m app.delivery run --input fixtures/delivery-1.json --output ../generated/delivery-demo
 ```
 
 Resultado esperado: estado `draft_ready`, JSON de la entrega, `main.tf`,
@@ -109,10 +108,10 @@ Reejecutar una entrega completada no vuelve a generar el PDF.
 
 ## API de demostración
 
-Desde `project/`:
+Desde `project/backend/`:
 
 ```powershell
-..\.venv\Scripts\python.exe -m uvicorn app.delivery.local_app:app --host 127.0.0.1 --port 8011
+.venv\Scripts\python.exe -m uvicorn app.demos.delivery:app --host 127.0.0.1 --port 8011
 ```
 
 Documentación interactiva: `http://127.0.0.1:8011/docs`.
@@ -123,7 +122,7 @@ Documentación interactiva: `http://127.0.0.1:8011/docs`.
 | Consultar | `GET /api/delivery/runs/{delivery_id}` |
 | Descargar un archivo de esa entrega | `GET /api/delivery/runs/{delivery_id}/artifacts/{artifact_id}` |
 
-La entrada de `POST` es el contenido de `examples/delivery-1.json`. La respuesta
+La entrada de `POST` es el contenido de `fixtures/delivery-1.json`. La respuesta
 incluye los identificadores necesarios para descargar el PDF y sus respaldos.
 Descargar un archivo con el identificador de otra entrega devuelve 404.
 La API también está registrada en el backend principal; el servidor separado
@@ -164,16 +163,16 @@ sí incluye el intervalo real del agente de informe.
 
 ## Pruebas
 
-Desde `project/`, usar una base PostgreSQL de pruebas con permisos para crear
+Desde `project/backend/`, usar una base PostgreSQL de pruebas con permisos para crear
 esquemas. Cada prueba de integración crea y elimina exclusivamente su esquema
 aleatorio `delivery_test_*`.
 
 ```powershell
 $env:DELIVERY_TEST_DATABASE_URL = $env:DELIVERY_DATABASE_URL
-..\.venv\Scripts\python.exe -m pytest tests/test_delivery.py -q
-..\.venv\Scripts\python.exe -m pytest tests -q
-..\.venv\Scripts\python.exe -m ruff check app/delivery tests/test_delivery.py
-..\.venv\Scripts\python.exe -m ruff format --check app/delivery tests/test_delivery.py
+.venv\Scripts\python.exe -m pytest tests/test_delivery.py -q
+.venv\Scripts\python.exe -m pytest tests -q
+.venv\Scripts\python.exe -m ruff check app tests
+.venv\Scripts\python.exe -m ruff format --check app tests
 ```
 
 Sin `DELIVERY_TEST_DATABASE_URL`, las pruebas PostgreSQL se omiten expresamente;

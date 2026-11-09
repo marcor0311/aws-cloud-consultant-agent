@@ -26,6 +26,9 @@ las API de Google Calendar y Gmail.
 
 ## Repositorios relacionados
 
+Los repositorios de cada proyecto se crean y se trabajan dentro de la organización
+[aws-cloud-consulting-group](https://github.com/aws-cloud-consulting-group).
+
 El proyecto utiliza estos repositorios como insumos para el diseño y la
 organización de los proyectos de consultoría:
 
@@ -66,6 +69,12 @@ https://github.com/user-attachments/assets/7f10b3d4-1c70-4ffb-8118-c16bec2319a3
 
 La propuesta se define en [los issues de agentes](issues.md): incorpora apoyo de IA en cada etapa y conserva la revisión y las decisiones de las personas responsables. Cada entrega al siguiente equipo comparte el contexto del proyecto, los documentos y las aprobaciones, evitando volver a recopilar la misma información.
 
+La reunión final del cliente con Stuart se prepara con el
+[cuestionario de cierre del proyecto de nube](docs/cuestionario-stuart-nube.md).
+Reúne 15 preguntas de negocio para una conversación de 30 minutos sobre
+objetivos, alcance, presupuesto, pagos, fechas, demanda y expectativas de servicio.
+Las respuestas sirven de insumo para Junta, Arquitectura, FinOps e Ingeniería.
+
 El diagrama se lee de izquierda a derecha. Cada columna muestra **proceso → puesto → agente → funcionalidad**. El agendamiento y la preparación usan agentes separados, al igual que el proyecto y los baselines. EM se refiere al Engagement Manager.
 
 ![Propuesta de transformación con agentes de IA: seis etapas, puestos responsables, agentes y funcionalidades](docs/process-flow.png)
@@ -77,3 +86,11 @@ La consulta del histórico de proyectos por MCP ya está desarrollada y se utili
 El dashboard permite identificar la etapa del flujo de trabajo en la que se encuentra el agente y el equipo con el que colabora para ese proyecto.
 
 ![Vista de la oficina virtual con el agente en el área de Arquitectura](docs/live-dashboard.png)
+
+## Credenciales locales
+
+Guardar credenciales fuera del repositorio en `~/.config/aws-cloud-consultant-agent/dev/`.
+`project/.env` conserva solo configuración no sensible y la ruta a ese directorio.
+La [estructura de ejemplo](config/local-secrets.example/README.md) describe los archivos
+privados, la migración con respaldo y el contrato de producción. Los ejemplos se
+versionan con valores vacíos; los tokens y sesiones reales nunca se suben.

@@ -46,7 +46,7 @@ configuración mediante `DELIVERY_DATABASE_URL`.
 4. Copie esta instrucción, péguela en esa ventana y presione **Enter**:
 
 ```powershell
-Test-Path -LiteralPath '.\project\examples\delivery-1.json'
+Test-Path -LiteralPath '.\project\backend\fixtures\delivery-1.json'
 ```
 
 Debe aparecer **`True`**. Si aparece `False`, la ventana no está en la carpeta
@@ -74,8 +74,8 @@ revise su instalación antes de continuar. Docker Desktop debe estar encendido.
 Todavía desde la carpeta que contiene `README.md`, ejecute:
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r .\project\requirements-delivery.lock
+python -m venv project/backend/.venv
+.\project\backend\.venv\Scripts\python.exe -m pip install -r .\project\backend\requirements-dev.txt
 ```
 
 La segunda instrucción puede tardar varios minutos. Espere a que termine y
@@ -107,12 +107,12 @@ Docker mantiene la base encendida; no necesita una segunda ventana para ella.
 
 ## 7. Ejecutar los dos componentes y exportar sus resultados
 
-Ahora cambie a la carpeta `project` y ejecute:
+Ahora cambie a la carpeta `project/backend` y ejecute:
 
 ```powershell
-Set-Location -LiteralPath '.\project'
-..\.venv\Scripts\python.exe -m app.delivery init-db
-..\.venv\Scripts\python.exe -m app.delivery run --input .\examples\delivery-1.json --output .\data\delivery-demo
+Set-Location -LiteralPath '.\project\backend'
+.venv\Scripts\python.exe -m app.delivery init-db
+.venv\Scripts\python.exe -m app.delivery run --input .\fixtures\delivery-1.json --output ..\generated\delivery-demo
 ```
 
 El primer comando Python debe indicar:
@@ -136,13 +136,13 @@ que se debe pegar en la API.
 En la misma ventana ejecute:
 
 ```powershell
-Invoke-Item -LiteralPath '.\data\delivery-demo\informe-ejecutivo-v1.pdf'
+Invoke-Item -LiteralPath '..\generated\delivery-demo\informe-ejecutivo-v1.pdf'
 ```
 
 Para abrir la carpeta de resultados:
 
 ```powershell
-Invoke-Item -LiteralPath '.\data\delivery-demo'
+Invoke-Item -LiteralPath '..\generated\delivery-demo'
 ```
 
 | Archivo | Función |
@@ -168,7 +168,7 @@ En el PDF se puede comprobar:
 Ejecute nuevamente:
 
 ```powershell
-..\.venv\Scripts\python.exe -m app.delivery run --input .\examples\delivery-1.json --output .\data\delivery-demo
+.venv\Scripts\python.exe -m app.delivery run --input .\fixtures\delivery-1.json --output ..\generated\delivery-demo
 ```
 
 Debe conservar el mismo `delivery_id` y devolver `draft_ready`.
@@ -177,11 +177,11 @@ o regenerar el PDF. Para otra versión de los datos se requiere otro identificad
 
 ## 10. Opcional: ejecutar las pruebas automáticas del avance
 
-Con la base encendida y desde `project`, ejecute:
+Con la base encendida y desde `project/backend`, ejecute:
 
 ```powershell
 $env:DELIVERY_TEST_DATABASE_URL = $env:DELIVERY_DATABASE_URL
-..\.venv\Scripts\python.exe -m pytest tests/test_delivery.py -q
+.venv\Scripts\python.exe -m pytest tests/test_delivery.py -q
 ```
 
 Resultado esperado para esta versión: **21 pruebas correctas**.
@@ -199,10 +199,10 @@ en Windows están documentados en la [guía técnica](delivery-1.md#pruebas).
 
 ### Iniciar la API
 
-En la misma ventana, desde `project`, ejecute:
+En la misma ventana, desde `project/backend`, ejecute:
 
 ```powershell
-..\.venv\Scripts\python.exe -m uvicorn app.delivery.local_app:app --host 127.0.0.1 --port 8011
+.venv\Scripts\python.exe -m uvicorn app.demos.delivery:app --host 127.0.0.1 --port 8011
 ```
 
 Espere un mensaje que incluya `Uvicorn running on http://127.0.0.1:8011`.
@@ -213,7 +213,7 @@ La ventana permanecerá ocupada mientras la API esté encendida; es normal.
 1. Abra el navegador y escriba `http://127.0.0.1:8011/docs`.
 2. Despliegue **POST /api/delivery/runs** y pulse **Try it out**.
 3. En el Explorador de archivos entre en la carpeta del proyecto, después en
-   `project`, luego en `examples`.
+   `project`, luego en `backend` y `fixtures`.
 4. Abra `delivery-1.json` con Bloc de notas u otro editor de texto.
 5. Dentro del archivo presione **Ctrl + A** y luego **Ctrl + C**.
 6. Vuelva al navegador, haga clic dentro de **Request body**, presione
@@ -237,10 +237,10 @@ archivos utilizando los identificadores devueltos en la respuesta.
 
 1. Si inició la API, presione **Ctrl + C** en PowerShell y espere a que reaparezca
    la línea para escribir.
-2. Desde la carpeta `project`, ejecute:
+2. Desde la carpeta `project/backend`, ejecute:
 
 ```powershell
-docker compose -f .\compose.delivery.yml down
+docker compose -f ..\compose.delivery.yml down
 ```
 
 Eso detiene los contenedores de esta demostración y conserva el volumen de

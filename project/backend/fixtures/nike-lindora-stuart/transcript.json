@@ -1,0 +1,316 @@
+{
+  "id": "mock-nike-lindora-hibrida-stuart",
+  "title": "Nike Lindora 5K, 10K y 15K | Encargo de nube e integraciones",
+  "project_name": "Nike Lindora 5K, 10K y 15K",
+  "client": "Nike — caso de demostración",
+  "is_mock": true,
+  "started_at": "2026-11-07T09:00:00-06:00",
+  "ended_at": "2026-11-07T09:24:49-06:00",
+  "participants": [
+    "Stuart / Engagement Manager de la consultora",
+    "Valeria Rojas / Líder de Marketing del cliente",
+    "Diego Solano / Coordinador del proyecto del cliente"
+  ],
+  "segments": [
+    {
+      "id": "S01",
+      "speaker": "Stuart / Engagement Manager de la consultora",
+      "at": "2026-11-07T09:00:00-06:00",
+      "text": "Gracias por estar. Tenemos media hora y ya revisé el material previo. Quiero confirmar el encargo y las condiciones que pueden cambiar el costo o la continuidad del servicio. Valeria, empecemos por lo que necesita el público."
+    },
+    {
+      "id": "S02",
+      "speaker": "Valeria Rojas / Líder de Marketing del cliente",
+      "at": "2026-11-07T09:00:23-06:00",
+      "text": "Es la carrera Nike del 13 de diciembre, con salida y meta en Terrazas Lindora: 5K, 10K y 15K. Gatorade es el patrocinador. Queremos un sitio oficial para informarse, comprar la inscripción y recibir su tiquete por correo. Nos dirigimos principalmente a corredores en Costa Rica, aunque también vienen de otros países de Centroamérica. La gente entra desde el teléfono. Hay que mostrar rutas, horarios y precios, no solo poner un botón de comprar. El otro día me preguntaron por WhatsApp dónde podían parquear y después por la camiseta, y ahí se nos fue..."
+    },
+    {
+      "id": "S03",
+      "speaker": "Stuart / Engagement Manager de la consultora",
+      "at": "2026-11-07T09:01:14-06:00",
+      "text": "Eso nos ayuda a entender el uso. Para cuidar el tiempo, tomaremos los detalles logísticos del material de Nike. ¿Qué información debe quedar visible junto a la venta?"
+    },
+    {
+      "id": "S04",
+      "speaker": "Valeria Rojas / Líder de Marketing del cliente",
+      "at": "2026-11-07T09:01:32-06:00",
+      "text": "Las tres rutas descargables, cada una con sus retornos y puntos de hidratación; las salidas son a las cinco y media para 15K, cinco cuarenta y cinco para 10K y seis para 5K. Los mapas finales salen todos de Terrazas y vuelven ahí. También reglamento, precios, qué incluye el paquete, preguntas frecuentes y presencia de Nike y Gatorade. Nosotros organizamos la entrega de paquetes, la señalización y la carrera. Ustedes publican la información aprobada; no les estamos encargando coordinar la logística del evento."
+    },
+    {
+      "id": "S05",
+      "speaker": "Stuart / Engagement Manager de la consultora",
+      "at": "2026-11-07T09:02:18-06:00",
+      "text": "¿Cuántas inscripciones habrá, a qué precio y cómo sabrán que el proyecto dio resultado?"
+    },
+    {
+      "id": "S06",
+      "speaker": "Diego Solano / Coordinador del proyecto del cliente",
+      "at": "2026-11-07T09:02:29-06:00",
+      "text": "Tres mil cupos: mil quinientos de 5K, mil de 10K y quinientos de 15K. Precios finales de 18.000, 22.000 y 26.000 colones, respectivamente. Nike asume las comisiones de cobro; no se agregan al final. Incluyen camiseta, chip, número, medalla e hidratación. Hay doscientas cortesías dentro de esos cupos: cien de 5K, setenta de 10K y treinta de 15K. Nuestra meta es completar los tres mil confirmados y poder cuadrar inscritos con dinero recibido. Una visita o un formulario incompleto no cuentan como una venta."
+    },
+    {
+      "id": "S07",
+      "speaker": "Valeria Rojas / Líder de Marketing del cliente",
+      "at": "2026-11-07T09:03:15-06:00",
+      "text": "Y la confirmación por correo es importantísima. Si alguien paga y no le llega, nos escribe a nosotros y cree que perdió el dinero. Queremos que el correo traiga el tiquete de cada corredor. Una compra puede incluir hasta cinco personas. Lo de las cortesías también tiene que verse en los reportes, porque Gatorade..."
+    },
+    {
+      "id": "S08",
+      "speaker": "Stuart / Engagement Manager de la consultora",
+      "at": "2026-11-07T09:03:46-06:00",
+      "text": "Retomo ese punto cuando hablemos del correo y los datos. Para precisar esta primera etapa: el resultado final del proyecto es el producto funcionando en AWS. Hoy necesitamos cerrar las condiciones de la plataforma de nube y sus conexiones; la programación de las funciones tiene su fase posterior. ¿Qué presupuesto tienen para el proyecto completo?"
+    },
+    {
+      "id": "S09",
+      "speaker": "Valeria Rojas / Líder de Marketing del cliente",
+      "at": "2026-11-07T09:04:18-06:00",
+      "text": "El techo aprobado para el proyecto digital es de 180.000 dólares, impuestos incluidos. Eso cubre la plataforma para esta edición y las ampliaciones que siguen; no es el presupuesto de organizar la carrera. Queremos llegar al sitio publicado y funcionando. Cómo se reparten ustedes el trabajo no lo conozco; yo necesito ver qué vamos recibiendo por ese monto."
+    },
+    {
+      "id": "S10",
+      "speaker": "Stuart / Engagement Manager de la consultora",
+      "at": "2026-11-07T09:04:51-06:00",
+      "text": "Claro. Entonces, dentro de ese total, ¿cuánto pueden destinar ahora a desarrollar y poner en marcha la infraestructura de nube, cuánto a su consumo y cuánto al mantenimiento durante el mes del evento?"
+    },
+    {
+      "id": "S11",
+      "speaker": "Diego Solano / Coordinador del proyecto del cliente",
+      "at": "2026-11-07T09:05:12-06:00",
+      "text": "Para preparar y dejar operativa la nube reservamos 45.000 dólares de honorarios. Para servicios de nube, hasta 6.000 durante el período del 18 de noviembre al 20 de diciembre; para mantenimiento y atención de esa plataforma, 4.000 más. Son tres partidas distintas. Tenemos 105.000 para las fases de programación y 20.000 de contingencia; con esas cinco partidas completamos los 180.000. No queremos consumir la contingencia sin autorizarlo. La infraestructura debe quedar en AWS a nombre de Nike y conectada a nuestros sistemas, no solo dibujada."
+    },
+    {
+      "id": "S12",
+      "speaker": "Stuart / Engagement Manager de la consultora",
+      "at": "2026-11-07T09:05:59-06:00",
+      "text": "¿Cómo pueden pagar esos 45.000 y qué fechas esperan para los avances de esta etapa?"
+    },
+    {
+      "id": "S13",
+      "speaker": "Diego Solano / Coordinador del proyecto del cliente",
+      "at": "2026-11-07T09:06:11-06:00",
+      "text": "Cuarenta por ciento al iniciar con contrato, treinta al aceptar el diseño y los costos y treinta con la infraestructura operativa aceptada en AWS: 18.000, 13.500 y 13.500 dólares. La operación se paga aparte contra el consumo y el mantenimiento contratado, dentro de sus límites. Queremos iniciar el 9 de noviembre, ver el primer avance el 12 y recibir la plataforma el 16. El producto completo se revisa el 17, se publica el 18 y abre venta el 20 a las seis de la mañana. La carrera es el 13 de diciembre. La fecha del anuncio no se mueve. Ustedes deben confirmarnos la viabilidad antes de comprometernos."
+    },
+    {
+      "id": "S14",
+      "speaker": "Stuart / Engagement Manager de la consultora",
+      "at": "2026-11-07T09:07:09-06:00",
+      "text": "Vamos a las conexiones, porque condicionan ese calendario. ¿Dónde deben quedar los datos de las personas y las compras? ¿Qué puede guardarse en la base de datos en nube?"
+    },
+    {
+      "id": "S15",
+      "speaker": "Diego Solano / Coordinador del proyecto del cliente",
+      "at": "2026-11-07T09:07:28-06:00",
+      "text": "En nube pueden guardar textos, mapas, distancias, precios, patrocinio, preguntas frecuentes y cifras agregadas de cupos. Los corredores, compradores, órdenes y pagos van al sistema que Nike tiene en sus propias instalaciones. Legal exige que esos datos no queden almacenados en AWS, aunque el sitio tenga su propia base de datos. Necesitamos que la página los envíe directamente a Nike y consulte lo que corresponda desde ahí."
+    },
+    {
+      "id": "S16",
+      "speaker": "Valeria Rojas / Líder de Marketing del cliente",
+      "at": "2026-11-07T09:08:06-06:00",
+      "text": "Eso lo tenemos firmado. No puede terminar una lista de nombres en una copia del sitio porque después es más cómodo bajarla. Nike debe poder buscar una inscripción y reenviar su correo. A Marketing nos bastan los totales para seguir las ventas; los datos de emergencia los maneja la organización."
+    },
+    {
+      "id": "S17",
+      "speaker": "Stuart / Engagement Manager de la consultora",
+      "at": "2026-11-07T09:08:35-06:00",
+      "text": "¿La restricción incluye copias, registros de actividad y mensajes guardados? ¿Y dónde queda la información necesaria para enviar el correo?"
+    },
+    {
+      "id": "S18",
+      "speaker": "Diego Solano / Coordinador del proyecto del cliente",
+      "at": "2026-11-07T09:08:49-06:00",
+      "text": "Sí, tampoco en respaldos ni registros ni mensajes pendientes en la nube. Nombre, documento, correo, teléfono, fecha de nacimiento, talla, consentimiento y contacto de emergencia quedan en Nike, junto con la orden y sus estados. Nuestro servicio de correo toma de ahí el tiquete y lo envía; los envíos pendientes también quedan en Nike. La tarjeta la maneja EasyPay, no queremos guardar sus números. El contenido público y los totales en nube no deben permitir identificar a una persona. Las políticas y las autorizaciones están en la documentación que ya les compartimos."
+    },
+    {
+      "id": "S19",
+      "speaker": "Stuart / Engagement Manager de la consultora",
+      "at": "2026-11-07T09:09:39-06:00",
+      "text": "¿Quién lleva el control real de cupos? Si la nube muestra una cifra desactualizada, ¿podría vender de más?"
+    },
+    {
+      "id": "S20",
+      "speaker": "Diego Solano / Coordinador del proyecto del cliente",
+      "at": "2026-11-07T09:09:52-06:00",
+      "text": "El control está en Nike. La cifra pública es informativa. Antes de aceptar una venta hay que verificar y reservar ahí el cupo de cada distancia. Se reserva diez minutos mientras se paga; una cortesía usa un código autorizado y también descuenta cupo. Nunca queremos pasar de tres mil. Si no se puede comprobar el cupo, no se debe cobrar usando el último número que aparecía en la página."
+    },
+    {
+      "id": "S21",
+      "speaker": "Stuart / Engagement Manager de la consultora",
+      "at": "2026-11-07T09:10:31-06:00",
+      "text": "Hablemos de EasyPay. ¿Qué bancos y medios de pago permite el convenio que debemos respetar?"
+    },
+    {
+      "id": "S22",
+      "speaker": "Valeria Rojas / Líder de Marketing del cliente",
+      "at": "2026-11-07T09:10:43-06:00",
+      "text": "Tenemos convenio con EasyPay para BAC y Banco Nacional. Débito, crédito y Apple Pay, con Visa o MasterCard. No queremos abrir SINPE ni transferencias manuales para esta edición; la revisión de comprobantes nos consumió demasiado. El precio publicado tiene que ser lo que pague la persona."
+    },
+    {
+      "id": "S23",
+      "speaker": "Stuart / Engagement Manager de la consultora",
+      "at": "2026-11-07T09:11:10-06:00",
+      "text": "Para que no haya confusión: ¿aceptan solo tarjetas emitidas por esos dos bancos, también dentro de Apple Pay, o cualquier tarjeta que la pasarela pueda procesar?"
+    },
+    {
+      "id": "S24",
+      "speaker": "Diego Solano / Coordinador del proyecto del cliente",
+      "at": "2026-11-07T09:11:27-06:00",
+      "text": "Solo las emitidas por BAC o Banco Nacional. Apple Pay no elimina esa condición; la tarjeta asociada también debe cumplirla. Visa y MasterCard son las marcas admitidas. Si el medio no cumple, se informa antes de cobrar. El contacto de EasyPay entregará las condiciones y las pruebas del convenio; no les estamos pidiendo integrar otros bancos."
+    },
+    {
+      "id": "S25",
+      "speaker": "Stuart / Engagement Manager de la consultora",
+      "at": "2026-11-07T09:11:59-06:00",
+      "text": "¿Qué debe ocurrir con la factura, además del tiquete y la confirmación del pago?"
+    },
+    {
+      "id": "S26",
+      "speaker": "Diego Solano / Coordinador del proyecto del cliente",
+      "at": "2026-11-07T09:12:10-06:00",
+      "text": "La facturación debe comunicarse con Hacienda y enviar el comprobante y su respuesta a las bases financieras de Nike y de Gatorade. La factura también se envía al comprador por correo. Nada de esa información se almacena en la base de datos del sitio en AWS. Nike tiene el sistema que controla la emisión y guarda los estados. Si Hacienda no responde, se sigue el procedimiento de contingencia aprobado por nuestro equipo fiscal; no se marca como aceptada una factura que todavía no tiene esa respuesta."
+    },
+    {
+      "id": "S27",
+      "speaker": "Stuart / Engagement Manager de la consultora",
+      "at": "2026-11-07T09:12:57-06:00",
+      "text": "La factura puede identificar al comprador. ¿Esa copia a Gatorade está expresamente autorizada, aunque la base de corredores deba permanecer en Nike?"
+    },
+    {
+      "id": "S28",
+      "speaker": "Diego Solano / Coordinador del proyecto del cliente",
+      "at": "2026-11-07T09:13:12-06:00",
+      "text": "Sí, la copia fiscal completa es una excepción autorizada para Hacienda y los sistemas financieros de ambas empresas. Las bases financieras son de sus instalaciones, no de la nube del sitio. Gatorade no recibe la base de corredores ni sus contactos de emergencia. Si su sistema financiero está fuera de servicio, Nike conserva el envío pendiente y reintenta. El patrocinio por sí solo no les da acceso a todos los datos personales."
+    },
+    {
+      "id": "S29",
+      "speaker": "Stuart / Engagement Manager de la consultora",
+      "at": "2026-11-07T09:13:52-06:00",
+      "text": "Ahora un caso que puede afectar las ventas: si la base de Nike está fuera de servicio, ¿prefieren pausar las compras o permiten guardar temporalmente esos datos en nube para completarlas después?"
+    },
+    {
+      "id": "S30",
+      "speaker": "Valeria Rojas / Líder de Marketing del cliente",
+      "at": "2026-11-07T09:14:12-06:00",
+      "text": "No, guardarlos en nube no está permitido ni temporalmente. En ese caso seguimos mostrando la información de la carrera y avisamos que no se puede completar la compra. Me preocupa perder ventas, claro, pero no podemos saltarnos esa restricción. La persona debe poder volver a intentar sin que aparezcan dos cobros. No me gustaría que por un problema de inscripción desaparezcan también los mapas y los horarios."
+    },
+    {
+      "id": "S31",
+      "speaker": "Stuart / Engagement Manager de la consultora",
+      "at": "2026-11-07T09:14:50-06:00",
+      "text": "¿Y si Nike está funcionando pero EasyPay está offline? ¿Qué pasa si el pago se aprobó justo antes de perder la conexión con Nike?"
+    },
+    {
+      "id": "S32",
+      "speaker": "Diego Solano / Coordinador del proyecto del cliente",
+      "at": "2026-11-07T09:15:06-06:00",
+      "text": "Si EasyPay está caído, no cobramos por otra vía: dejamos consultar la carrera y avisamos que el pago no está disponible. Si falla también Nike, se mantienen esas dos restricciones. Si el banco ya aprobó un pago, hay que recuperarlo desde el registro de EasyPay y relacionarlo con la orden pendiente que ya existía en Nike. No cobrar otra vez porque no llegó la respuesta. EasyPay conserva y reenvía las notificaciones según el convenio; ustedes deben comprobar ese comportamiento con ellos. Hasta registrar la confirmación en Nike, el caso sigue en verificación y no se manda un tiquete como si estuviera resuelto."
+    },
+    {
+      "id": "S33",
+      "speaker": "Stuart / Engagement Manager de la consultora",
+      "at": "2026-11-07T09:16:01-06:00",
+      "text": "Para el correo: ¿qué demora toleran y cómo se atiende al comprador si el envío falla?"
+    },
+    {
+      "id": "S34",
+      "speaker": "Valeria Rojas / Líder de Marketing del cliente",
+      "at": "2026-11-07T09:16:13-06:00",
+      "text": "La confirmación debe salir dentro de dos minutos de quedar confirmada la inscripción. Si el correo falla, Nike debe poder reenviarlo sin otra compra. El tiquete no debería esperar a que Hacienda o Gatorade vuelvan a estar disponibles; la factura puede llegar después, siguiendo lo que indicó Fiscal. Si una integración deja algo pendiente, nuestro equipo tiene que verlo y saber qué falta. No queremos enterarnos por un patrocinador reclamando."
+    },
+    {
+      "id": "S35",
+      "speaker": "Stuart / Engagement Manager de la consultora",
+      "at": "2026-11-07T09:16:51-06:00",
+      "text": "Quiero separar dos compromisos. Primero, cuánto pueden esperar para volver a usar el servicio después de una falla: ¿qué máximo aceptan normalmente y durante la apertura o la carrera?"
+    },
+    {
+      "id": "S36",
+      "speaker": "Valeria Rojas / Líder de Marketing del cliente",
+      "at": "2026-11-07T09:17:09-06:00",
+      "text": "Treinta minutos en un día normal y diez en la apertura de inscripciones y la mañana de la carrera. La información debe estar disponible todo el día, con el objetivo del 99,9 % mensual que se habló antes. Queremos evitar mantenimientos durante las horas de campaña. Si el problema es de Nike o de EasyPay, no esperamos que nos digan simplemente que su parte está bien. Necesitamos que nos ayuden a coordinar y expliquen qué sigue disponible."
+    },
+    {
+      "id": "S37",
+      "speaker": "Stuart / Engagement Manager de la consultora",
+      "at": "2026-11-07T09:17:51-06:00",
+      "text": "Ese es el tiempo de recuperación, RTO. ¿Sus dependencias pueden volver en esos diez minutos? Lo pregunto porque recuperar AWS no reabre ventas si Nike o la pasarela siguen caídos."
+    },
+    {
+      "id": "S38",
+      "speaker": "Diego Solano / Coordinador del proyecto del cliente",
+      "at": "2026-11-07T09:18:09-06:00",
+      "text": "Nike tiene un compromiso interno de recuperación de hasta cuarenta y cinco minutos; EasyPay nos da hasta treinta en ese tipo de incidente. Y Nike hace mantenimiento de once a once veinte de la noche, sin aceptar ventas. La página informativa debe seguir disponible. Entendemos que el tiempo de recuperar una venta completa queda condicionado por ellos; queremos verlo separado en su propuesta, no escondido dentro del porcentaje de la página."
+    },
+    {
+      "id": "S39",
+      "speaker": "Stuart / Engagement Manager de la consultora",
+      "at": "2026-11-07T09:18:48-06:00",
+      "text": "Entonces el objetivo de la información pública se medirá separado de las ventas. Si dependemos de una recuperación de cuarenta y cinco minutos, no puedo prometer que la compra vuelva en diez. ¿Aceptan esa pausa de venta, manteniendo información disponible y sin guardar datos restringidos en nube?"
+    },
+    {
+      "id": "S40",
+      "speaker": "Valeria Rojas / Líder de Marketing del cliente",
+      "at": "2026-11-07T09:19:15-06:00",
+      "text": "Sí, que quede explícito. Preferimos suspender la venta y explicarlo antes que arriesgar datos o cobrar mal. Si pueden mejorar esos tiempos con nuestros proveedores, presenten la alternativa y su costo; no la den por acordada."
+    },
+    {
+      "id": "S41",
+      "speaker": "Stuart / Engagement Manager de la consultora",
+      "at": "2026-11-07T09:19:36-06:00",
+      "text": "La segunda pregunta es sobre pérdida de información. Si hay que recuperar el sistema, ¿qué trabajo reciente podrían repetir y qué operaciones ya confirmadas no pueden desaparecer? A ese límite lo llamamos RPO."
+    },
+    {
+      "id": "S42",
+      "speaker": "Diego Solano / Coordinador del proyecto del cliente",
+      "at": "2026-11-07T09:19:56-06:00",
+      "text": "Podríamos repetir hasta quince minutos de cambios en contenidos de la carrera. Pero ninguna inscripción confirmada ni ningún pago aprobado puede perderse: para esas operaciones el límite es cero. Un formulario que la persona apenas estaba llenando puede tener que completarse otra vez. Un cargo del banco no. Los datos de las operaciones están en Nike y en los registros autorizados de los proveedores, no queremos una copia de emergencia en AWS como solución."
+    },
+    {
+      "id": "S43",
+      "speaker": "Stuart / Engagement Manager de la consultora",
+      "at": "2026-11-07T09:20:36-06:00",
+      "text": "Para dimensionar esa continuidad, ¿qué uso normal y qué picos prevén?"
+    },
+    {
+      "id": "S44",
+      "speaker": "Valeria Rojas / Líder de Marketing del cliente",
+      "at": "2026-11-07T09:20:45-06:00",
+      "text": "Quinientas personas al día normalmente, unas ochocientas al acercarse la carrera. El 18 de noviembre calculamos dos mil en el día y doscientas al mismo tiempo durante diez minutos. El anuncio del 20 puede traer diez mil en el día y mil simultáneas durante quince minutos. El 13 de diciembre serían veinte mil en el día y dos mil simultáneas durante media hora. Es el cálculo de la agencia, no son inscripciones. En la carrera buscarán principalmente mapas y horarios. Y hablando de mapas, había una discusión por dónde iba el acceso de acompañantes..."
+    },
+    {
+      "id": "S45",
+      "speaker": "Stuart / Engagement Manager de la consultora",
+      "at": "2026-11-07T09:21:35-06:00",
+      "text": "La dejamos con el mapa aprobado de Nike para no consumir el cierre. Nos faltan el mantenimiento y la aceptación de esta etapa. ¿Qué atención necesitan durante ese período de operación?"
+    },
+    {
+      "id": "S46",
+      "speaker": "Diego Solano / Coordinador del proyecto del cliente",
+      "at": "2026-11-07T09:21:54-06:00",
+      "text": "Dentro de los 4.000 reservados, atención inicial de un incidente crítico en cinco minutos a cualquier hora, y de consultas normales dentro de una hora, de ocho a seis, hora de Costa Rica. La atención inicial no es lo mismo que haber recuperado el servicio. Necesitamos cobertura especial en el anuncio y la carrera, hasta el cierre del servicio el 20 de diciembre. Nike atiende preguntas de corredores, logística y operación de sus sistemas; ustedes coordinan la plataforma de nube y el escalamiento con nuestros contactos."
+    },
+    {
+      "id": "S47",
+      "speaker": "Stuart / Engagement Manager de la consultora",
+      "at": "2026-11-07T09:22:40-06:00",
+      "text": "¿Qué nos entregarán para verificar las conexiones y quién confirma la entrega?"
+    },
+    {
+      "id": "S48",
+      "speaker": "Diego Solano / Coordinador del proyecto del cliente",
+      "at": "2026-11-07T09:22:49-06:00",
+      "text": "El 9 de noviembre entrego mapas, contenidos y reglamento; también las políticas de datos y los contactos autorizados de Nike, Gatorade, EasyPay y Fiscal. Nuestros responsables facilitan los entornos de prueba y accesos por los canales acordados. Yo centralizo las consultas. Valeria valida la información y el recorrido del usuario; Tecnología de Nike valida la infraestructura y las conexiones; Finanzas valida costos y trazabilidad de cobros y facturas. Para esta etapa necesitamos AWS operativo, conectividad verificada y evidencia de que no se guardan datos restringidos. Las pruebas del producto terminado deberán incluir compra, correo y los casos de falla que hablamos. La conformidad se da por escrito, no por silencio."
+    },
+    {
+      "id": "S49",
+      "speaker": "Stuart / Engagement Manager de la consultora",
+      "at": "2026-11-07T09:23:47-06:00",
+      "text": "Voy a separar en la propuesta el proyecto completo de esta primera etapa de nube, con sus 45.000 de honorarios, 6.000 de consumo y 4.000 de mantenimiento. También el RTO de nuestros servicios de los tiempos de Nike y EasyPay, y el RPO de contenidos del de pagos e inscripciones. Mantendremos la información pública cuando se suspendan ventas y no usaremos nube para guardar las operaciones restringidas. ¿Eso refleja lo que quieren que evaluemos?"
+    },
+    {
+      "id": "S50",
+      "speaker": "Valeria Rojas / Líder de Marketing del cliente",
+      "at": "2026-11-07T09:24:27-06:00",
+      "text": "Sí. Y no perdamos lo principal: información clara de Nike y Gatorade, vender bien y que la persona reciba su confirmación. La logística nos corresponde a nosotros. Necesitamos su recomendación para que esas condiciones funcionen juntas, con sus costos y límites a la vista."
+    }
+  ]
+}

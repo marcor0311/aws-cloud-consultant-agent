@@ -1,0 +1,27 @@
+{
+  "number": 2,
+  "name": "Meeting Assistant",
+  "id": "meeting_assistant",
+  "stage": "executive_prioritization",
+  "runtime": "backend/app/project_opening",
+  "orchestration": "LangGraph",
+  "persistence": "PostgreSQL: WORKFLOW_DATABASE_URL",
+  "authentication": "Sign in with ChatGPT",
+  "instructions": "prompts/assistant.txt",
+  "issue_template": "templates/architecture.md",
+  "board_approval": {
+    "rule": "unanimity",
+    "members": {
+      "minimum": 4,
+      "maximum": 5
+    },
+    "source": "verified_slack_block_actions",
+    "minutes_directory": "docs/02-board/",
+    "preview_members": [
+      "Board Member 1",
+      "Board Member 2",
+      "Board Member 3",
+      "Board Member 4"
+    ]
+  }
+}

@@ -1,21 +1,52 @@
-.DS_Store
-__pycache__/
-*.pyc
-.terraform/
-*.tfstate
-*.tfstate.*
-project/generated/
-*.zip
-project/.env
+# Local configuration and credentials
 .env
 .env.*
 !.env.example
-whitelist.md
+secrets/
+secrets.env
+session.json
+registration.json
+credentials.json
+client_secret*.json
+google_oauth_client.json
+*_token.json
+*-token.json
+*.pem
+*.key
+*.p12
+*.pfx
+.aws/
 project/data/
-project/.venv-backend/
-project/secrets/
+
+# Python environments, build output and caches
 .venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
 .pytest_cache/
 .ruff_cache/
+.coverage
+htmlcov/
+
+# Local recordings and generated artifacts
+console-recordings/
+*.log
+project/generated/
+insumos/
+/insumos temporales de agente 1/
+*.zip
+.terraform/
+*.tfstate
+*.tfstate.*
+
+# OS and editor files
+.DS_Store
+.idea/
+.vscode/
+
+# Delivery demo local output
 output/
 tmp/

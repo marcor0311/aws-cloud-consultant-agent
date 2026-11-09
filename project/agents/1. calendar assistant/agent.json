@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "agent_id": "calendar_assistant",
+  "agent_number": 1,
+  "display_name": "Calendar Assistant",
+  "process_stage": "engagement_manager",
+  "responsibility": "scheduling",
+  "models": {
+    "llm": {
+      "model": "google/gemma-4-31b-it"
+    },
+    "stt": {
+      "model": "assemblyai/universal-3-6-pro",
+      "language": "es"
+    },
+    "tts": {
+      "model": "gradium/default",
+      "voice": "iTQW2xFICXk8riV4",
+      "language": "es"
+    }
+  }
+}

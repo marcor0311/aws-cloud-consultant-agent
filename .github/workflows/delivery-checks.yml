@@ -24,13 +24,13 @@ jobs:
       LANGSMITH_TRACING: "false"
     defaults:
       run:
-        working-directory: project
+        working-directory: project/backend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: python -m pip install -r requirements-delivery.lock
-      - run: python -m ruff check app/delivery tests/test_delivery.py
-      - run: python -m ruff format --check app/delivery tests/test_delivery.py
-      - run: python -m pytest tests -q
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m ruff check app tests
+      - run: python -m ruff format --check app tests
+      - run: python -m pytest tests/test_delivery.py -q

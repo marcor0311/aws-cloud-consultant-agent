@@ -1,0 +1,25 @@
+TRANSCRIPCIÓN FICTICIA — DEMOSTRACIÓN LOCAL
+Proyecto: Tienda Deportiva Horizonte
+Fecha simulada: 9 de noviembre de 2026, 10:00–10:30, Costa Rica.
+Participantes: Ana Solís, cliente ficticia; Stuart, Engagement Manager.
+No participa ningún agente en la reunión.
+
+[00:00] Stuart: Ana, contame qué problema quieren resolver y qué esperan de esta primera etapa.
+[00:45] Ana: Somos una tienda deportiva pequeña. Queremos vender camisetas y accesorios por internet porque hoy recibimos pedidos por mensajes y perdemos el control del inventario.
+[02:10] Stuart: ¿Qué debería poder hacer una persona que visite la tienda?
+[02:30] Ana: Necesitamos catálogo, carrito y pago mediante un proveedor externo. No queremos guardar datos de tarjetas.
+[04:15] Stuart: ¿Cómo se actualizarían los productos y las existencias?
+[04:40] Ana: El equipo necesita un panel para actualizar productos e inventario. Al principio podemos cargar los productos manualmente; la integración con el sistema contable puede esperar.
+[07:00] Stuart: ¿Qué volumen esperan y cuándo hay mayor demanda?
+[07:25] Ana: Tenemos unos dos mil clientes registrados y hacemos campañas alrededor de partidos. No tenemos mediciones de usuarios simultáneos; no quiero que asumamos una capacidad sin validarla.
+[10:10] Stuart: ¿Hay un presupuesto autorizado y una fecha comprometida?
+[10:35] Ana: Todavía no tenemos presupuesto aprobado ni una fecha comprometida. Primero necesitamos entender alternativas, costos y el alcance de un MVP.
+[13:20] Stuart: ¿Qué prioridad tendría ese MVP?
+[13:45] Ana: Lo prioritario es que una persona pueda encontrar un producto y completar una compra, y que nosotros podamos ver el pedido. Una aplicación móvil nativa y recomendaciones personalizadas quedan fuera de la primera etapa.
+[17:00] Stuart: Podemos comparar alternativas y revisar antecedentes de comercio electrónico como orientación. Las referencias del catálogo académico son ficticias y no prueban rendimiento real.
+[19:30] Ana: Perfecto. Queremos conocer riesgos, decisiones pendientes y qué debemos validar antes de comprometernos con una arquitectura.
+[22:00] Stuart: ¿Con qué criterio dirían que el piloto funciona?
+[22:20] Ana: Queremos demostrar una compra de principio a fin y gestionar ese pedido desde el panel. Los objetivos de disponibilidad y recuperación todavía tenemos que acordarlos.
+[26:00] Stuart: Voy a preparar el resumen de necesidades, un planteamiento para la presentación y un posible guion. Después revisaremos las preguntas abiertas y los ajustes antes de presentarlo a dirección.
+[28:30] Ana: De acuerdo. No demos por aprobados costos, fechas ni una solución técnica todavía.
+[30:00] Fin de la reunión ficticia.
