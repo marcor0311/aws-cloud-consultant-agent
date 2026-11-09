@@ -233,3 +233,8 @@ apunta por defecto a `~/.config/aws-cloud-consultant-agent/dev/`, donde viven
 `secrets.env`, credenciales Google y sesiones ChatGPT. Los valores del proceso
 tienen prioridad; las rutas de credenciales relativas usan esa raíz privada.
 Ver [estructura de ejemplo y migración](../../config/local-secrets.example/README.md).
+
+`make setup-backend` también instala Playwright y su Chromium compatible para
+exportar la presentación PDF desde HTML, sin depender de Chrome del sistema.
+En Linux mínimo puede requerirse `python -m playwright install-deps chromium`
+dentro del entorno del backend; ver [generación de insumos](../../docs/insumos.md).

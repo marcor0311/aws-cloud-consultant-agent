@@ -52,6 +52,10 @@ class PreparationDeliveries:
                         "La revisión ya tiene otros archivos; requiere nueva revisión."
                     )
                 return previous
+            if len(files) != 5:
+                raise ValueError(
+                    "Las nuevas entregas requieren cinco archivos, incluida la presentación PDF."
+                )
             self.store.put(key, "artifact-files", value)
             self.store.event(
                 "files-bound:" + hashlib.sha256(key.encode()).hexdigest(),

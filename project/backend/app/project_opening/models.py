@@ -6,7 +6,7 @@ import unicodedata
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, model_validator
 
 PREFIX = "AWS Cloud Consulting Project"
 TEMPLATE = "marcor0311/aws-cloud-consulting-project-template"
@@ -89,7 +89,11 @@ class OpeningRequest(Input):
     is_fictitious: bool = False
 
     @model_validator(mode="after")
-    def unique_files(self):
+    def unique_files(self, info: ValidationInfo):
+        if len(self.files) != 5 and not (info.context or {}).get("stored_legacy"):
+            raise ValueError(
+                "Las nuevas aperturas requieren cinco archivos, incluida la presentación PDF."
+            )
         names = [f.name for f in self.files]
         if len(set(names)) != len(names) or not any(
             name.endswith(".md") for name in names

@@ -15,7 +15,7 @@ Al recibirse el último voto, el servicio genera y conserva en PostgreSQL:
 
 - `docs/02-board/acta-junta-<votacion_id>.md`: proyecto, resultado, regla,
   miembros, votos, fecha de cada voto y cierre en hora de Costa Rica, presupuesto,
-  condiciones y hashes de los cuatro insumos.
+  condiciones y hashes de los cinco archivos.
 - `docs/02-board/acta-junta-<votacion_id>.json`: evidencia estructurada, fechas UTC,
   workspace, aplicación, canal, mensaje, hashes de las solicitudes verificadas y
   huella del certificado.

@@ -7,7 +7,7 @@ aceptación. Los checkpoints de LangGraph viven en el mismo PostgreSQL.
 
 La preparación registra transcripción → preparación → revisión del responsable.
 Su aprobación crea la entrega a etapa 2. Un manifiesto `artifact-files` vincula la
-revisión a los cuatro archivos exportados. El agente 2 exige ese manifiesto, acepta
+revisión a los cinco archivos exportados. El agente 2 exige ese manifiesto, acepta
 la entrega y revalida la revisión antes de ejecutar. Una convocatoria publicada
 crea una entrega por miembro; el voto firmado confirma su recepción. Al cerrarse
 la votación se entrega el acta al agente 2. El issue genera la entrega al arquitecto,
@@ -35,7 +35,8 @@ registrado por separado. La conciliación incorporó la transcripción preparada
 el contenido validado y la aprobación expresa previa del usuario. Conservó los
 cuatro archivos existentes y registró la incorporación con fecha actual,
 `provenance=reconciled_local_documents` y `historical_occurred_at=null`.
-No acredita una llamada, una reunión real ni votos de junta.
+No acredita una llamada, una reunión real ni votos de junta. La ampliación
+posterior autorizada añadió la presentación PDF al manifiesto de cinco archivos.
 
 El caso activo tiene tres entregas recibidas y permanece en cola, pendiente de
 votación real. El recorrido completo con cuatro miembros ficticios se verifica en

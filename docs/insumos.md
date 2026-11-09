@@ -3,7 +3,7 @@
 ## Transcripción de Stuart: Nike Lindora
 
 `insumos temporales de agente 1/` está directamente en la raíz y contiene
-los tres entregables (ficha PDF, resumen PDF y presentación HTML), junto con
+los cuatro documentos (ficha PDF, resumen PDF y presentación HTML y PDF), junto con
 `transcripcion-reunion-nike.md`, la transcripción completa de la reunión. No hay otra
 carpeta `insumos/` que los envuelva.
 
@@ -13,10 +13,10 @@ El generador utiliza esos archivos, ejecuta recuperación y preparación en el g
 local con checkpoints PostgreSQL y se detiene en `awaiting_review`, pendiente de
 aprobación. Registra la recepción y la entrega para revisión en la base de workflow;
 no llama a modelos externos. Los archivos auxiliares se
-producen en un directorio temporal que se elimina; se publican los tres documentos y la transcripción completa.
+producen en un directorio temporal que se elimina; se publican los cuatro documentos y la transcripción completa.
 
-Requiere `WORKFLOW_DATABASE_URL` configurada en `project/.env`. Cada revisión
-vincula los cuatro archivos mediante sus hashes; un reintento valida los archivos
+Requiere `WORKFLOW_DATABASE_URL` configurada en el `secrets.env` externo. Cada revisión
+vincula los cinco archivos mediante sus hashes; un reintento valida los archivos
 existentes sin regenerarlos. Ver [trazabilidad y conciliación](handoffs.md).
 
 ```sh
@@ -30,15 +30,22 @@ La vista conjunta está en `docs/design/playbook.html`. Las instrucciones siguie
 de `make insumos-mock` corresponden al fixture anterior y generan ese otro escenario
 en `insumos/`.
 
+`make setup-backend` instala Playwright y su Chromium compatible; la exportación
+no depende de tener Chrome instalado en el equipo. En Linux mínimo, instalar
+también las bibliotecas del sistema con `project/backend/.venv/bin/python -m
+playwright install-deps chromium` (puede requerir permisos de administrador).
+`INSUMOS_BROWSER` permite elegir explícitamente otro Chromium.
+
 ## Fixture original
 
-Desde la raíz, con las dependencias del backend instaladas:
+Desde la raíz, instalar el backend y el Chromium compatible antes de generar:
 
 ```sh
+make setup-backend
 make insumos-mock
 ```
 
-`insumos/` contiene dos PDF (resumen de reunión y ficha del proyecto) generados con ReportLab, una presentación HTML autónoma,
+`insumos/` contiene dos PDF (resumen de reunión y ficha del proyecto) generados con ReportLab, una presentación HTML autónoma y su versión PDF,
 la transcripción ficticia bajo `fuentes/` y un manifiesto con hashes. La salida está
 ignorada por Git; los fixtures y el generador sí viven en el código del backend.
 
@@ -98,7 +105,7 @@ artificial de aprobación.
 el SHA-256 de la transcripción y referenciar IDs existentes; cada métrica necesita
 una cita literal con el mismo valor. El renderizador escapa los textos y no ejecuta
 instrucciones de la transcripción. Los PDF y el HTML se publican después de completar
-el renderizado de los tres archivos. Se conservan los contratos existentes de
+el renderizado de los cuatro documentos. Se conservan los contratos existentes de
 `ExecutivePackage`, revisión y handoff; el exportador no aprueba contenido.
 
 La tipografía Lato se incluye localmente con licencia OFL, por lo que abrir los

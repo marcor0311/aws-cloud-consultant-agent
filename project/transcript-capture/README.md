@@ -17,7 +17,9 @@ make backend
 
 La primera preparación descarga la versión fijada; las siguientes usan una copia
 verificada en `project/generated/`. También admite `prepare.py --archive ARCHIVO`.
-El comando crea `WORKFLOW_TRANSCRIPT_TOKEN` en `project/.env` únicamente si no existe.
+El comando reutiliza `WORKFLOW_TRANSCRIPT_TOKEN` del proceso o del `secrets.env`
+externo seleccionado por `CLOUD_CONSULTANT_SECRETS_DIR`. Solo genera y guarda un
+token allí cuando no existe; no escribe credenciales nuevas en `project/.env`.
 Al cambiar esa configuración hay que reiniciar el backend. No modifica los tokens
 de Google ni las credenciales del agente de voz.
 

@@ -131,7 +131,7 @@ class BoardService:
                 raise ValueError("Una votación simulada no se publica en Slack real.")
             if not ballot["review_url"]:
                 raise ValueError(
-                    "Configurar el enlace de revisión de los cuatro insumos."
+                    "Configurar el enlace de revisión de los cinco archivos."
                 )
             self.slack.validate(ballot)
             self.repository.save({**ballot, "status": "publishing"})

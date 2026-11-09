@@ -234,6 +234,13 @@ def test_preparation_to_agent2_documents_issue_and_handoffs_persist(tmp_path, so
     store = WorkflowStore(database)
     with open_checkpointer(checkpoint) as saver:
         service = make_service(store, saver, github, tmp_path)
+        without_pdf = {
+            **source,
+            "files": [f for f in source["files"] if f["name"] != "presentacion.pdf"],
+        }
+        with pytest.raises(ValueError, match="cinco archivos"):
+            service.register(without_pdf)
+        assert not github.repositories
         approved = service.register(source)
         assert approved["title"] == "AWS Cloud Consulting Project Nike 01 Lindora Run"
         assert (

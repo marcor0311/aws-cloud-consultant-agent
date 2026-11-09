@@ -194,6 +194,10 @@ reemplazar silenciosamente una decisión con otro hash. No usar otro ID para
 sortear esto ni reservar otro correlativo. Los checkpoints anteriores que llegan
 al paso de asignación sin un PR fusionado también exigen conciliación.
 
-El paquete actual incluye `presentacion.html` y `presentacion.pdf` (una diapositiva por página), además de los dos PDF ejecutivos y la transcripción. La exportación requiere las dependencias de `requirements-artifacts-dev.txt` y Chromium de Playwright o `INSUMOS_BROWSER`. El editor HTML usa `storageSlot` para su identificador de localStorage; no contiene credenciales. El paquete define Markdown con prosa sin límite de 80 columnas, etiquetas de interlocutor en negrita y títulos de frontmatter independientes del H1. Gitleaks mantiene el análisis completo del historial.
+El paquete actual incluye `presentacion.html` y `presentacion.pdf` (una diapositiva por página), además de los dos PDF ejecutivos y la transcripción. `make setup-backend` instala Playwright y Chromium para exportar el PDF; `requirements-artifacts-dev.txt` añade las herramientas de revisión visual. `INSUMOS_BROWSER` permite elegir otro Chromium. El editor HTML usa `storageSlot` para su identificador de localStorage; no contiene credenciales. El paquete define Markdown con prosa sin límite de 80 columnas, etiquetas de interlocutor en negrita y títulos de frontmatter independientes del H1. Gitleaks mantiene el análisis completo del historial.
 
 La raíz privada se configura mediante `CLOUD_CONSULTANT_SECRETS_DIR`. Ver [ejemplos y migración](../../../config/local-secrets.example/README.md).
+
+Las aperturas y entregas nuevas exigen los cinco archivos. La compatibilidad con
+cuatro archivos se limita a expedientes y manifiestos ya persistidos: no permite
+registrar una apertura nueva incompleta.

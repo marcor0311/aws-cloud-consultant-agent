@@ -285,7 +285,7 @@ Los mocks ejecutables están en `integrations/mocks.py`, sus datos en `fixtures/
 La exportación local de insumos usa `preparation/insumos.py` para el contenido con
 evidencia y `integrations/insumos_export.py` para ReportLab y HTML. La demo Nike
 compone un proveedor guionado con el grafo existente y exporta a `insumos/` sin
-acceder al estado privado. Los tres documentos permanecen pendientes de revisión;
+acceder al estado privado. Los cuatro documentos permanecen pendientes de revisión;
 no se altera el contrato de aprobación ni se inicia el worker. Ver
 [generación y comprobaciones](insumos.md).
 Ese recorrido corresponde al fixture original. El generador de Nike Lindora

@@ -748,9 +748,8 @@ def render_presentation_pdf(html_path, pdf_path):
     with sync_playwright() as pw:
         options = {"headless": True}
         executable = os.getenv("INSUMOS_BROWSER")
-        chrome = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
-        if executable or chrome.exists():
-            options["executable_path"] = executable or str(chrome)
+        if executable:
+            options["executable_path"] = executable
         browser = pw.chromium.launch(**options)
         try:
             context = browser.new_context(

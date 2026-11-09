@@ -45,7 +45,8 @@ class OpeningService:
                     key: record[key]
                     for key in OpeningRequest.model_fields
                     if key in record
-                }
+                },
+                context={"stored_legacy": True},
             ).files
         )
         certificate = self.validate_board(case_id)
@@ -72,7 +73,8 @@ class OpeningService:
                         key: record[key]
                         for key in OpeningRequest.model_fields
                         if key in record
-                    }
+                    },
+                    context={"stored_legacy": True},
                 ).files
             )
             certificate = self.validate_board(case_id)

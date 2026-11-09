@@ -7,7 +7,7 @@ BACKEND_PYTHON := .venv/bin/python
 
 help:
 	@echo "make chatgpt-demo   Probar LangGraph con tu suscripción de ChatGPT (OAuth)"
-	@echo "make setup-backend  Instalar dependencias del backend"
+	@echo "make setup-backend  Instalar backend y Chromium para PDF"
 	@echo "make setup-agent    Instalar dependencias del agente con uv.lock"
 	@echo "make backend        Iniciar la API local (puerto 8000)"
 	@echo "make agent          Iniciar la llamada local"
@@ -22,7 +22,7 @@ help:
 	@echo "make test           Integraciones esenciales offline"
 	@echo "make test-e2e       Recorrido completo offline (bajo demanda)"
 	@echo "make test-postgres  Persistencia con PostgreSQL aislado (bajo demanda)"
-	@echo "make insumos-mock   Generar los tres insumos del caso ficticio Nike"
+	@echo "make insumos-mock   Generar ficha, resumen y presentación HTML/PDF"
 	@echo "make prepare-capture Preparar la extensión privada para Chrome"
 	@echo "make check          Comprobar formato e imports de Python"
 	@echo "make gmail-auth     Autorizar el envío de Gmail del backend"
@@ -35,6 +35,7 @@ help:
 setup-backend:
 	$(PYTHON) -m venv "$(BACKEND_DIR)/.venv"
 	cd "$(BACKEND_DIR)" && $(BACKEND_PYTHON) -m pip install -r requirements-dev.txt
+	cd "$(BACKEND_DIR)" && $(BACKEND_PYTHON) -m playwright install chromium
 
 setup-agent:
 	cd "$(AGENT_DIR)" && uv sync --locked

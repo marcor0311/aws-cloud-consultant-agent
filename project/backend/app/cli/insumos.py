@@ -1,4 +1,4 @@
-"""Generate three local meeting deliverables from source-bound preparation."""
+"""Generate local meeting documents and an HTML/PDF presentation from source-bound preparation."""
 
 import argparse
 import json
