@@ -22,3 +22,11 @@ La automatización localiza elementos por su semántica accesible. El validador
 `S3ExportEvidenceBuilder` falla si cambian las etiquetas, propiedades, región,
 moneda o estructura de la exportación; no utiliza coordenadas fijas ni precios
 locales.
+
+## Análisis económico del Bloque D
+
+`finops-economic-analysis.json` registra `3.24 USD/mes` y `38.88 USD/año` como
+subtotal S3 verificado. El presupuesto aprobado del handoff es `75.00 USD/mes`,
+pero la comparación es provisional: falta estimar AWS KMS. La cobertura es 50 %
+de recursos y 60 % de dimensiones, por lo que el resultado presupuestario es
+`not_evaluable` y no existe una decisión de aprobación.

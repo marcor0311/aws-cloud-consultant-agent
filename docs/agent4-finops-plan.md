@@ -115,6 +115,13 @@ separados de la decisión autorizada.
 **Pruebas mínimas:** totales, redondeo, presupuesto mensual/anual, información
 faltante y aprobación excepcional debidamente autorizada.
 
+**Estado:** implementado con `Decimal` y validado contra la evidencia S3 real.
+El resultado actual es parcial: 3.24 USD/mes y 38.88 USD/año son subtotales
+verificados, mientras AWS KMS permanece excluido. El presupuesto aprobado es
+75.00 USD/mes, pero `budget_result` es `not_evaluable` hasta completar cobertura.
+Los escenarios con cambios facturables permanecen bloqueados hasta obtener sus
+propias estimaciones verificadas.
+
 ## Bloque E — MCP FinOps y correcciones
 
 **Objetivo:** exponer las operaciones FinOps y coordinar los MCP mediante Codex.

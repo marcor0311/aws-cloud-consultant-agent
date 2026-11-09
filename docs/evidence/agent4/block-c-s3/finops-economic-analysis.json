@@ -1,0 +1,125 @@
+{
+  "contract_version": "1.0",
+  "case_id": "block-c-s3",
+  "project_id": "documentos-demo",
+  "architecture_revision": 1,
+  "architecture_sha256": "792b54259f7360106f532e17db90c9da12a50a38ca73de3326dbbcb601a3c74a",
+  "operational_status": "partial",
+  "budget_result": "not_evaluable",
+  "currency": "USD",
+  "verified_monthly_subtotal": "3.24",
+  "verified_annual_subtotal": "38.88",
+  "breakdown": [
+    {
+      "resource_id": "documents",
+      "aws_service": "Amazon S3",
+      "monthly_cost": "3.24",
+      "annual_cost": "38.88",
+      "share_of_verified_subtotal_percent": "100.00",
+      "evidence_id": "pricing-f4695d9248fcc8ecbf7f94e07bda1069010839f5bf499184d7051412c4443dda"
+    }
+  ],
+  "coverage": {
+    "expected_resources": 2,
+    "verified_resources": 1,
+    "resource_coverage_percent": "50.00",
+    "expected_dimensions": 5,
+    "verified_dimensions": 3,
+    "dimension_coverage_percent": "60.00",
+    "pending_resources": [
+      "documents-key"
+    ],
+    "pending_dimensions": [
+      "documents-key:customer-key",
+      "documents-key:symmetric-requests"
+    ],
+    "excluded_costs": [
+      "documents-key: AWS KMS"
+    ],
+    "complete": false
+  },
+  "budget_comparison": {
+    "status": "coverage_incomplete",
+    "cost_currency": "USD",
+    "budget": {
+      "status": "known",
+      "amount": "75.00",
+      "currency": "USD",
+      "period": "month",
+      "source_reference": "https://github.com/marcor0311/aws-cloud-consultant-agent/issues/19",
+      "approval_reference": "https://github.com/marcor0311/aws-cloud-consultant-agent/issues/19"
+    },
+    "monthly_budget": "75.00",
+    "annual_budget": "900.00",
+    "monthly_variance": "71.76",
+    "annual_variance": "861.12",
+    "absolute_difference": "71.76",
+    "difference_percent": "95.68",
+    "verified_subtotal_percent_of_budget": "4.32",
+    "provisional": true,
+    "blocking_reasons": [
+      "cost_coverage_incomplete"
+    ]
+  },
+  "scenarios": [
+    {
+      "scenario": "base",
+      "status": "partial",
+      "monthly_cost": "3.24",
+      "annual_cost": "38.88",
+      "evidence_ids": [
+        "pricing-f4695d9248fcc8ecbf7f94e07bda1069010839f5bf499184d7051412c4443dda"
+      ],
+      "blocking_reasons": [
+        "cost_coverage_incomplete"
+      ]
+    },
+    {
+      "scenario": "higher_demand",
+      "status": "blocked",
+      "monthly_cost": null,
+      "annual_cost": null,
+      "evidence_ids": [],
+      "blocking_reasons": [
+        "scenario_inputs_missing",
+        "verified_aws_pricing_calculator_estimate_required"
+      ]
+    },
+    {
+      "scenario": "lower_demand",
+      "status": "blocked",
+      "monthly_cost": null,
+      "annual_cost": null,
+      "evidence_ids": [],
+      "blocking_reasons": [
+        "scenario_inputs_missing",
+        "verified_aws_pricing_calculator_estimate_required"
+      ]
+    },
+    {
+      "scenario": "optimized",
+      "status": "blocked",
+      "monthly_cost": null,
+      "annual_cost": null,
+      "evidence_ids": [],
+      "blocking_reasons": [
+        "scenario_inputs_missing",
+        "verified_aws_pricing_calculator_estimate_required"
+      ]
+    }
+  ],
+  "recommendations": [
+    {
+      "resource_id": "documents",
+      "recommendation": "Evaluar clases de almacenamiento o reglas de ciclo de vida solo cuando exista evidencia del patrón de acceso.",
+      "justification": "La estimación verificada usa S3 Standard; el handoff no demuestra todavía que otra clase sea adecuada.",
+      "financial_impact": "not_quantified",
+      "technical_risk": "Una clase incorrecta puede aumentar recuperación, latencia o transiciones. Requiere nueva estimación y aprobación.",
+      "architecture_approval_required": true
+    }
+  ],
+  "evidence_ids": [
+    "pricing-f4695d9248fcc8ecbf7f94e07bda1069010839f5bf499184d7051412c4443dda"
+  ],
+  "decision_reference": null
+}

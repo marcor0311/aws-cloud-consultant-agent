@@ -15,6 +15,7 @@ from app.architecture.economics import S3PricingInput
 from app.architecture.metrics import FinOpsHandoffAcceptance
 from app.architecture.models import ArchitectureFinOpsHandoff, ArchitecturePackage
 from app.architecture.service import ArchitectureService
+from app.finops.analysis import BudgetReference, FinOpsEconomicAnalyzer
 from app.finops.calculator import PricingCalculatorPreparer
 from app.finops.evidence import S3ExportEvidenceBuilder
 from app.finops.models import FinOpsEvaluationDecision, FinOpsIntake
@@ -253,3 +254,79 @@ def test_real_s3_export_matches_the_prepared_calculator_input():
     assert partial.unrepresentable_parameters[0].startswith(
         "ui_mismatch:standard-storage:"
     )
+
+
+def test_economic_analysis_reports_verified_subtotal_and_incomplete_coverage():
+    payload = handoff_payload()
+    intake = FinOpsIntake(
+        case_id="block-c-s3",
+        project_id=payload["architecture"]["project_id"],
+        handoff=payload,
+        acceptance=FinOpsHandoffAcceptance(
+            case_id="block-c-s3",
+            revision=1,
+            artifact_sha256=payload["artifact_sha256"],
+            accepted_by="finops-agent",
+            accepted_at="2026-11-09T00:50:02-06:00",
+            finops_reference="finops://block-c-s3/intakes/1",
+        ),
+    )
+    evidence_path = (
+        Path(__file__).resolve().parents[4]
+        / "docs/evidence/agent4/block-c-s3/pricing-calculator-evidence.json"
+    )
+    evidence = json.loads(evidence_path.read_text("utf-8"))
+
+    analysis = FinOpsEconomicAnalyzer().analyze(intake, [evidence])
+
+    assert analysis.operational_status == "partial"
+    assert analysis.budget_result == "not_evaluable"
+    assert analysis.verified_monthly_subtotal == Decimal("3.24")
+    assert analysis.verified_annual_subtotal == Decimal("38.88")
+    assert analysis.breakdown[0].share_of_verified_subtotal_percent == 100
+    assert analysis.coverage.resource_coverage_percent == 50
+    assert analysis.coverage.dimension_coverage_percent == 60
+    assert analysis.coverage.pending_resources == ["documents-key"]
+    assert analysis.coverage.excluded_costs == ["documents-key: AWS KMS"]
+    comparison = analysis.budget_comparison
+    assert comparison.status == "coverage_incomplete"
+    assert comparison.monthly_budget == Decimal("75.00")
+    assert comparison.annual_budget == Decimal("900.00")
+    assert comparison.monthly_variance == Decimal("71.76")
+    assert comparison.annual_variance == Decimal("861.12")
+    assert comparison.absolute_difference == Decimal("71.76")
+    assert comparison.difference_percent == Decimal("95.68")
+    assert comparison.verified_subtotal_percent_of_budget == Decimal("4.32")
+    assert analysis.scenarios[0].status == "partial"
+    assert all(item.status == "blocked" for item in analysis.scenarios[1:])
+    assert analysis.decision_reference is None
+
+    mismatched = deepcopy(evidence)
+    mismatched["architecture_revision"] = 2
+    with pytest.raises(ValueError, match="no corresponde al handoff"):
+        FinOpsEconomicAnalyzer().analyze(intake, [mismatched])
+
+
+def test_currency_mismatch_blocks_budget_comparison_without_conversion():
+    comparison = FinOpsEconomicAnalyzer.compare_budget(
+        Decimal("3.24"),
+        "USD",
+        BudgetReference(
+            status="known",
+            amount="50000",
+            currency="CRC",
+            period="month",
+            source_reference="approved://agent-2/budget",
+            approval_reference="approved://agent-2/decision",
+        ),
+        coverage_complete=True,
+    )
+
+    assert comparison.status == "currency_mismatch"
+    assert comparison.monthly_variance is None
+    assert comparison.absolute_difference is None
+    assert comparison.difference_percent is None
+    assert comparison.blocking_reasons == [
+        "currency_mismatch:USD:CRC",
+        "authorized_dated_exchange_rate_required",
+    ]
