@@ -3,7 +3,7 @@
   "commit": "cdd46e5d9a832f5f0d05dea368b55ef305dfc90d",
   "recovered_on": "2026-11-06",
   "is_fictitious": true,
-  "changes": "Markdown fiction notice and YAML fiction flags; executable Terraform excluded.",
+  "changes": "Markdown fiction notice and YAML fiction flags; executable Terraform excluded. Trailing whitespace normalized in project briefs; source hashes preserved.",
   "files": [
     {
       "path": "references/companies/inter-miami-cf/company.yaml",
@@ -57,7 +57,7 @@
       "path": "references/projects/inter-miami-merchandise-ecommerce/project-brief.md",
       "source_path": "project/catalog/projects/inter-miami-merchandise-ecommerce/project-brief.md",
       "source_sha256": "71b87287f00f415a495648e64963ebc1b21830e513cd9d385dcddd74d63823ca",
-      "sha256": "c8b3a03ab16b47ff19e526c641f38ab66f9576d7d71d6bee42bf39f24b1e7c1c"
+      "sha256": "2ef3cc9cdd6a660de259221b2e77f9dbd7b711f13de6f6cdc6d2dd303c71b36b"
     },
     {
       "path": "references/projects/inter-miami-merchandise-ecommerce/project.yaml",
@@ -129,7 +129,7 @@
       "path": "references/projects/mercedes-benz-canada-vehicle-showroom/project-brief.md",
       "source_path": "project/catalog/projects/mercedes-benz-canada-vehicle-showroom/project-brief.md",
       "source_sha256": "ed6b9ac0ea0f6c736d62044506973fb5a9244fe1150014db5379d9c4fa2f9446",
-      "sha256": "9d3b9292c2dbccc35120020445abe12763c854385bdfb996dba1233ad72f17ab"
+      "sha256": "9f454ca98b7798fccbff9fcb1866202c6af7c4c7773d1127ab5fa80c85cce507"
     },
     {
       "path": "references/projects/mercedes-benz-canada-vehicle-showroom/project.yaml",
@@ -201,7 +201,7 @@
       "path": "references/projects/verbier-4-vallees-skipass-operations/project-brief.md",
       "source_path": "project/catalog/projects/verbier-4-vallees-skipass-operations/project-brief.md",
       "source_sha256": "1440c0e784efb593f4bd6969da49dd00cd62665ef01f05515dd621f094b86a8c",
-      "sha256": "f70236c38c8f615ea537262ac4f1563cca46d895be939ed14486075827325732"
+      "sha256": "247b62e50800ca1db54a1c91e5918e410f53fb7da37209722e15b9b370c362ec"
     },
     {
       "path": "references/projects/verbier-4-vallees-skipass-operations/project.yaml",
