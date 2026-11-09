@@ -328,3 +328,15 @@ Las mediciones existentes distinguen actividad humana, actividad del agente,
 esperas, retrabajo y aceptación de entregas. El Process Time se registra a partir
 de intervalos explícitos, no se infiere del tiempo entre issues o pausas del grafo.
 La estructura no agrega infraestructura de despliegue.
+
+## Demostración de ingeniería e informe
+
+El incremento de entrega 1 vive en `backend/app/delivery/` (contratos, métricas y
+grafo determinista). HTTP está en `api/delivery.py`, PostgreSQL y su migración
+explícita en `persistence/delivery.py` y `persistence/migrations/`, y ReportLab en
+`integrations/delivery_pdf.py`. `cli/delivery.py` expone la ejecución local;
+`python -m app.delivery` conserva su entrada. La API separada está en
+`demos/delivery.py`. El fixture y las pruebas pertenecen al backend.
+Este recorrido sigue separado del proceso principal y no avanza sus etapas.
+Las exportaciones usan `project/generated/delivery-demo`; se conserva la base
+PostgreSQL existente y sus variables `DELIVERY_DATABASE_URL`.

@@ -46,3 +46,7 @@ insumos/
 .DS_Store
 .idea/
 .vscode/
+
+# Delivery demo local output
+output/
+tmp/
