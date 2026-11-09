@@ -26,51 +26,29 @@ project/backend/.venv/bin/python scripts/verify-insumos.py --directory 'insumos 
 ```
 
 La ficha tiene dos páginas; el resumen, cuatro; la presentación, doce diapositivas.
-La vista conjunta está en `docs/design/playbook.html`. Las instrucciones siguientes
-de `make insumos-mock` corresponden al fixture anterior y generan ese otro escenario
-en `insumos/`.
+La vista conjunta está en `docs/design/playbook.html`.
 
-`make setup-backend` instala Playwright y su Chromium compatible; la exportación
-no depende de tener Chrome instalado en el equipo. En Linux mínimo, instalar
-también las bibliotecas del sistema con `project/backend/.venv/bin/python -m
-playwright install-deps chromium` (puede requerir permisos de administrador).
-`INSUMOS_BROWSER` permite elegir explícitamente otro Chromium.
+## Generación offline del caso vigente
 
-## Fixture original
-
-Desde la raíz, instalar el backend y el Chromium compatible antes de generar:
+`make insumos-mock` usa exclusivamente el fixture Nike Lindora de Stuart. No usa
+la configuración privada, clientes reales, bases activas, LiveKit ni servicios externos.
+Ejecuta el grafo con un proveedor guionado y termina en `awaiting_review`;
+no aprueba ni entrega el expediente automáticamente.
 
 ```sh
 make setup-backend
 make insumos-mock
 ```
 
-`insumos/` contiene dos PDF (resumen de reunión y ficha del proyecto) generados con ReportLab, una presentación HTML autónoma y su versión PDF,
-la transcripción ficticia bajo `fuentes/` y un manifiesto con hashes. La salida está
-ignorada por Git; los fixtures y el generador sí viven en el código del backend.
+La salida local `insumos/` contiene ficha y resumen PDF, presentación HTML y PDF,
+transcripción bajo `fuentes/` y un manifiesto de hashes. Es una exportación offline
+del mismo caso vigente; el comando persistente anterior conserva la entrega
+aprobada en su ubicación original. La demo no sobrescribe ese paquete aprobado.
 
-La demo ejecuta el grafo existente de preparación con `InMemorySaver`, búsqueda
-vacía y un proveedor guionado. Termina en `awaiting_review`; no simula una aprobación
-humana ni entrega el proyecto a la etapa siguiente. No usa la configuración privada,
-clientes reales, bases activas, LiveKit ni servicios externos.
-
-## Caso de demostración
-
-`project/backend/fixtures/nike-maraton-cr/` contiene una reunión ficticia de
-encuadre ejecutivo, con 22 intervenciones. Por autorización del usuario, se refinó
-el escenario para representar un encargo completo al llegar a Stuart: alcance,
-inversión máxima de USD 24.000, publicación el 18 de enero de 2027 y responsables
-definidos. Estos datos son decisiones de construcción del caso ficticio, no
-compromisos ni aprobaciones reales de Nike.
-
-Las previsiones son 10.000 usuarios durante el día de campaña y 500 diarios
-posteriores. Los 1.500 son sesiones por semana de una campaña anterior; el escenario
-aclara su unidad y período. La concurrencia de validación, de 1.000 personas durante
-quince minutos, se declara por separado en la reunión; no se calcula desde usuarios
-diarios. No se ejecutan pruebas de carga como parte de esta demo.
-
-La demo valida el flujo y los formatos con datos guionados; no evalúa comprensión
-de lenguaje por un modelo real.
+`make setup-backend` instala Playwright y su Chromium compatible. En Linux mínimo,
+instalar también las bibliotecas del sistema con
+`project/backend/.venv/bin/python -m playwright install-deps chromium`.
+`INSUMOS_BROWSER` permite elegir explícitamente otro Chromium.
 
 ## Generador reutilizable
 
@@ -96,7 +74,7 @@ son opcionales para conservar la lectura de preparaciones anteriores. Las
 recomendaciones mantienen estado `proposed` y referencias a las necesidades que
 las motivan; no se convierten en acuerdos del cliente por tener una cita.
 
-La ficha tiene dos páginas; el resumen, tres; la presentación, diez diapositivas.
+La ficha tiene dos páginas; el resumen, cuatro; la presentación, doce diapositivas.
 La audiencia prioritaria es Junta Directiva y vicepresidencias. El propósito del
 caso es conocimiento y seguimiento de un encargo definido, no una solicitud
 artificial de aprobación.
@@ -125,7 +103,7 @@ project/backend/.venv/bin/python scripts/verify-insumos.py \
 El script renderiza todas las páginas PDF a PNG (Poppler si está disponible; PyMuPDF
 como alternativa), abre el HTML con la red desactivada en un navegador aislado y
 comprueba dimensiones, desbordamientos, navegación, edición, exportación e impresión.
-Captura las diez diapositivas a 1280×720; la revisión se realiza únicamente en escritorio.
+Captura las doce diapositivas a 1280×720; la revisión se realiza únicamente en escritorio.
 Los PNG y el informe quedan en el directorio temporal para inspección visual.
 `INSUMOS_BROWSER` permite indicar un ejecutable Chromium de pruebas propio.
 

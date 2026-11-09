@@ -11,7 +11,7 @@ from app.preparation.graph import build_graph
 from app.preparation.insumos import MeetingInsumos, MeetingTranscript
 from app.preparation.service import PreparationService
 
-FIXTURE = Path(__file__).resolve().parents[2] / "fixtures/nike-maraton-cr"
+FIXTURE = Path(__file__).resolve().parents[2] / "fixtures/nike-lindora-stuart"
 
 
 def prepare_mock(directory=FIXTURE):
@@ -42,7 +42,7 @@ def prepare_mock(directory=FIXTURE):
             transcript.id,
             "mock-meeting-ended",
             transcript.as_text(),
-            "maratón Costa Rica",
+            transcript.project_name,
         )
     if result["state"]["status"] != "awaiting_review":
         raise ValueError("La preparación debe quedar pendiente de revisión humana.")

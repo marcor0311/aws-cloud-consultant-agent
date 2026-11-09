@@ -100,4 +100,4 @@ EasyPay admite en este guion tarjetas de débito y crédito Visa o MasterCard em
 | 14 | S15, S18, S22, S24, S26, S28, S32, S48 |
 | 15 | S48 |
 
-El expediente se conserva en `project/backend/fixtures/nike-lindora-stuart/`. No reemplaza el fixture anterior `nike-maraton-cr`. Sus tres documentos se generaron en `insumos temporales de agente 1/` y permanecen pendientes de revisión. No se ejecutaron pruebas de banco, facturación, correo, nube ni infraestructura on-premise.
+El expediente se conserva en `project/backend/fixtures/nike-lindora-stuart/`. Sustituye el fixture anterior de Maratón Costa Rica, retirado del repositorio. Sus documentos se generaron en `insumos temporales de agente 1/` y permanecen pendientes de revisión. No se ejecutaron pruebas de banco, facturación, correo, nube ni infraestructura on-premise.

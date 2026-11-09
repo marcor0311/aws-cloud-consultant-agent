@@ -618,15 +618,7 @@ def render_html(path, transcript, content):
             else ""
         )
         if kind == "hero":
-            image = (
-                '<img class="hero-photo" src="data:image/png;base64,'
-                + base64.b64encode(
-                    (ASSETS / "images/corredor-editorial.png").read_bytes()
-                ).decode()
-                + '" alt="Corredor en movimiento, con tratamiento fotográfico azul y naranja">'
-                if transcript.id == "mock-nike-maraton-cr"
-                else '<div class="hero-lines" aria-hidden="true"></div>'
-            )
+            image = '<div class="hero-lines" aria-hidden="true"></div>'
             body = (
                 image
                 + f'<p class="hero-sub reveal" data-edit-id="s{index}-intro">{lines(slide.intro)}</p>'
