@@ -53,9 +53,7 @@ def create_service(
                 else str(data / "checkpoints.sqlite3")
             )
         )
-    saver = resources.enter_context(
-        open_checkpointer(configured_checkpoint)
-    )
+    saver = resources.enter_context(open_checkpointer(configured_checkpoint))
     catalog = BaselineCatalog(baseline_root)
     service = ArchitectureService(
         LangGraphExecution(build_graph(saver, catalog)),
@@ -106,7 +104,9 @@ def create_server(service):
         return call(service.prepare_github_publication, expediente_id)
 
     @server.tool()
-    def registrar_pull_request_github(expediente_id: str, recibo: dict[str, Any]) -> dict:
+    def registrar_pull_request_github(
+        expediente_id: str, recibo: dict[str, Any]
+    ) -> dict:
         """Registra el commit y PR creados externamente por Codex mediante GitHub MCP."""
         return call(service.register_github_pull_request, expediente_id, recibo)
 

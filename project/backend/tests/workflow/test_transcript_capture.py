@@ -142,7 +142,9 @@ def test_current_meet_room_path_is_accepted_and_correlated(ready):
     body = capture(meeting_url="https://meet.google.com/meet/abc-defg-hij")
     received = receive_capture(runtime, body)
     assert received["status"] == "accepted"
-    assert runtime.store.job(received["task_id"])["payload"]["meet_code"] == "abc-defg-hij"
+    assert (
+        runtime.store.job(received["task_id"])["payload"]["meet_code"] == "abc-defg-hij"
+    )
 
 
 @pytest.mark.parametrize(

@@ -1,3 +1,4 @@
+import os
 import re
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
@@ -34,7 +35,8 @@ def test_creation_persists_generated_ids_and_retries_collisions(tmp_path, monkey
     assert restarted.lookup_code("ioio-0012") == second
     assert restarted.lookup("FIRST@example.com") == first
     assert restarted.lookup_code("ZZZZ-9999") is None
-    assert repo.database.stat().st_mode & 0o777 == 0o600
+    if os.name != "nt":
+        assert repo.database.stat().st_mode & 0o777 == 0o600
 
 
 def test_database_enforces_unique_codes_and_email(tmp_path):

@@ -21,7 +21,9 @@ from app.integrations.langgraph import LangGraphExecution
 from app.persistence.checkpoints import open_checkpointer
 from app.persistence.workflow import WorkflowStore
 
-BASELINES = Path(__file__).resolve().parents[5] / "aws-cloud-consultant-baseline-modules"
+BASELINES = (
+    Path(__file__).resolve().parents[5] / "aws-cloud-consultant-baseline-modules"
+)
 
 
 class Clock:
@@ -64,9 +66,9 @@ def test_metrics_and_finops_acceptance_survive_restart(tmp_path):
     connection, store, service = service_at(tmp_path, clock)
     pending = service.start("case-f", "approved-input", package())["state"]
     clock.advance(10)
-    approved = service.review(
-        "case-f", 1, pending["artifact_sha256"], "approve"
-    )["state"]
+    approved = service.review("case-f", 1, pending["artifact_sha256"], "approve")[
+        "state"
+    ]
     store.record_interval(
         "measured-agent-work",
         "case-f",
@@ -158,9 +160,7 @@ def test_finops_acceptance_requires_timezone_and_traceable_reference():
 def test_architecture_recovers_metrics_and_acceptance_from_postgres():
     """Real integration evidence only when an isolated PostgreSQL URL is supplied."""
     checkpoint_url = os.environ["WORKFLOW_TEST_POSTGRES_URL"]
-    database_url = checkpoint_url.replace(
-        "postgresql://", "postgresql+psycopg://", 1
-    )
+    database_url = checkpoint_url.replace("postgresql://", "postgresql+psycopg://", 1)
     case_id = f"architecture-postgres-{uuid.uuid4().hex}"
 
     def open_service():
@@ -176,9 +176,9 @@ def test_architecture_recovers_metrics_and_acceptance_from_postgres():
 
     resources, store, service = open_service()
     pending = service.start(case_id, "postgres-input", package())["state"]
-    approved = service.review(
-        case_id, 1, pending["artifact_sha256"], "approve"
-    )["state"]
+    approved = service.review(case_id, 1, pending["artifact_sha256"], "approve")[
+        "state"
+    ]
     receipt = {
         "case_id": case_id,
         "revision": 1,

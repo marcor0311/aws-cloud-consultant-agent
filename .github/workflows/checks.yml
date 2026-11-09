@@ -9,6 +9,67 @@ permissions:
   contents: read
 
 jobs:
+  architecture-agent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: architecture_test
+          POSTGRES_USER: architecture
+          POSTGRES_PASSWORD: architecture-test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U architecture -d architecture_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      WORKFLOW_TEST_POSTGRES_URL: >-
+        postgresql://architecture:architecture-test-only@localhost:5432/architecture_test
+      AWSDAC_EXECUTABLE: >-
+        ${{ github.workspace }}/aws-cloud-consultant-agent/project/backend/tools/awsdac/v0.24/dist/awsdac-v0.24_linux-amd64/awsdac
+    defaults:
+      run:
+        working-directory: aws-cloud-consultant-agent/project/backend
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: aws-cloud-consultant-agent
+      - uses: actions/checkout@v6
+        with:
+          repository: marcor0311/aws-cloud-consultant-baseline-modules
+          path: aws-cloud-consultant-baseline-modules
+      - uses: actions/checkout@v6
+        with:
+          repository: aws-cloud-consulting-group/aws-cloud-consulting-project-nike-01-lindora-run
+          path: aws-cloud-consulting-project-nike-01-lindora-run
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: aws-cloud-consultant-agent/project/backend/requirements-dev.txt
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Install and verify pinned AWS diagram generator
+        shell: pwsh
+        run: ./scripts/install_awsdac.ps1
+      - name: Verify required integration inputs
+        shell: pwsh
+        run: |
+          if (-not (Test-Path $env:AWSDAC_EXECUTABLE)) { throw "awsdac missing" }
+          if (-not (Test-Path ../../../aws-cloud-consultant-baseline-modules/.git)) { throw "baseline repo missing" }
+          if (-not (Test-Path ../../../aws-cloud-consulting-project-nike-01-lindora-run/.git)) { throw "agent 2 repo missing" }
+          if (-not $env:WORKFLOW_TEST_POSTGRES_URL) { throw "PostgreSQL URL missing" }
+      - name: Validate Architecture code and contracts
+        run: python -m ruff check app tests/architecture_agent
+      - name: Test Architecture, handoffs, artifacts and process integration
+        run: >-
+          python -m pytest -q
+          tests/architecture_agent
+          tests/workflow/test_process_workflow.py
+
   backend:
     runs-on: ubuntu-latest
     defaults:

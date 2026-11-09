@@ -63,7 +63,10 @@ class IamPolicyStatement(Contract):
             for action in self.actions
         ):
             raise ValueError("Cada acción IAM debe usar el formato servicio:acción.")
-        if not all(resource == "*" or resource.startswith("arn:") for resource in self.resources):
+        if not all(
+            resource == "*" or resource.startswith("arn:")
+            for resource in self.resources
+        ):
             raise ValueError("Cada recurso IAM debe ser un ARN o '*'.")
         return self
 
@@ -144,7 +147,9 @@ class ArchitecturePackage(Contract):
 
         def visit(resource_id):
             if resource_id in visiting:
-                raise ValueError("Las dependencias de despliegue no pueden ser cíclicas.")
+                raise ValueError(
+                    "Las dependencias de despliegue no pueden ser cíclicas."
+                )
             if resource_id in visited:
                 return
             visiting.add(resource_id)
@@ -162,7 +167,9 @@ class ArchitecturePackage(Contract):
                 raise ValueError("ArchitecturePackage 1.2 requiere topology.")
             topology_ids = {node.resource_id for node in self.topology.nodes}
             if topology_ids != known:
-                raise ValueError("La topología debe representar exactamente los recursos.")
+                raise ValueError(
+                    "La topología debe representar exactamente los recursos."
+                )
             dependency_edges = {
                 (dependency, resource.resource_id)
                 for resource in self.resources
@@ -213,9 +220,13 @@ class ArchitecturePackage(Contract):
             }
             for item in self.economic_contract.pricing_inputs:
                 if item.region != self.region:
-                    raise ValueError("La región económica debe coincidir con arquitectura.")
+                    raise ValueError(
+                        "La región económica debe coincidir con arquitectura."
+                    )
                 if item.aws_service != service_by_resource[item.resource_id]:
-                    raise ValueError("El servicio económico debe coincidir con el recurso.")
+                    raise ValueError(
+                        "El servicio económico debe coincidir con el recurso."
+                    )
             requirement_ids = {item.requirement_id for item in self.requirements}
             decision_ids = {item.adr_id for item in self.decisions}
             for pricing_input in self.economic_contract.pricing_inputs:
@@ -263,13 +274,16 @@ class ArchitecturePackage(Contract):
             f"- Issue: {self.source_issue}\n\n"
             "## Recursos propuestos\n\n"
             + "\n".join(
-            f"- **{item.resource_id} / {item.aws_service}:** {item.purpose}"
-            for item in self.resources
+                f"- **{item.resource_id} / {item.aws_service}:** {item.purpose}"
+                for item in self.resources
             )
             + "\n\n## Riesgos\n\n"
             + "\n".join(f"- {risk}" for risk in self.risks)
             + "\n\n## Preguntas abiertas\n\n"
-            + ("\n".join(f"- {question}" for question in self.open_questions) or "- Ninguna")
+            + (
+                "\n".join(f"- {question}" for question in self.open_questions)
+                or "- Ninguna"
+            )
         )
         adrs = "# Decisiones de arquitectura\n\n" + "\n\n".join(
             f"## {item.adr_id} — {item.title}\n\n{item.decision}\n\n"

@@ -148,9 +148,7 @@ def create_server(service, runtime=None):
             )
 
         @server.tool()
-        def preparar_issue_finops(
-            expediente_id: str, responsable_github: str
-        ) -> dict:
+        def preparar_issue_finops(expediente_id: str, responsable_github: str) -> dict:
             """Prepara el issue FinOps después del merge aprobado."""
             return call(
                 runtime.architecture.prepare_finops_issue,

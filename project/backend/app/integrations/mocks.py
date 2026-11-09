@@ -16,9 +16,12 @@ FIXTURES = BACKEND_DIR / "fixtures/preparation"
 
 
 def load_projects():
-    projects = json.loads((FIXTURES / "projects.json").read_text())
+    projects = json.loads((FIXTURES / "projects.json").read_text(encoding="utf-8"))
     return [
-        {**p, "transcript": (FIXTURES / p["transcript_file"]).read_text()}
+        {
+            **p,
+            "transcript": (FIXTURES / p["transcript_file"]).read_text(encoding="utf-8"),
+        }
         for p in projects
     ]
 

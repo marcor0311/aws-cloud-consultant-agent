@@ -83,7 +83,8 @@ def test_no_match_is_empty_and_results_have_verifiable_evidence():
     matches = search_references("merchandising")
     assert matches and matches[0]["is_fictitious"]
     source = REFERENCE_DIR.parent / matches[0]["path"]
-    assert matches[0]["sha256"] == hashlib.sha256(source.read_bytes()).hexdigest()
+    normalized = source.read_text(encoding="utf-8").encode()
+    assert matches[0]["sha256"] == hashlib.sha256(normalized).hexdigest()
     assert matches[0]["evidence"]
     full = read_reference(matches[0]["project_id"])
     assert full["is_fictitious"] and len(full["documents"]) == 4
@@ -91,7 +92,9 @@ def test_no_match_is_empty_and_results_have_verifiable_evidence():
         read_reference("../../project/secrets")
     manifest = json.loads((REFERENCE_DIR / "provenance.json").read_text())
     for item in manifest["files"]:
-        content = (REFERENCE_DIR.parent / item["path"]).read_bytes()
+        content = (
+            (REFERENCE_DIR.parent / item["path"]).read_text(encoding="utf-8").encode()
+        )
         assert hashlib.sha256(content).hexdigest() == item["sha256"]
 
 

@@ -73,7 +73,9 @@ class ArchitectureTopology(TopologyContract):
         known = set(node_ids)
         for relation in self.relations:
             if relation.source == relation.target:
-                raise ValueError("Una relación no puede conectar un recurso consigo mismo.")
+                raise ValueError(
+                    "Una relación no puede conectar un recurso consigo mismo."
+                )
             if relation.source not in known or relation.target not in known:
                 raise ValueError("Toda relación debe referenciar nodos existentes.")
         return self
@@ -89,7 +91,9 @@ class ArchitectureTopology(TopologyContract):
             for node in self.nodes
         }
         for relation in sorted(self.relations, key=lambda item: item.relation_id):
-            arrow = "-.->" if relation.relation_type == "deployment_dependency" else "-->"
+            arrow = (
+                "-.->" if relation.relation_type == "deployment_dependency" else "-->"
+            )
             label = relation.label.replace('"', "'")
             lines.append(
                 f'  {identifiers[relation.source]} {arrow}|"{label}"| '
@@ -136,4 +140,3 @@ class ArchitectureTopology(TopologyContract):
             sort_keys=False,
             allow_unicode=True,
         )
-

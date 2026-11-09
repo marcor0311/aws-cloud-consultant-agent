@@ -198,16 +198,12 @@ def test_legacy_economic_1_0_is_readable_but_requires_explicit_upgrade(proposal)
     pricing_input = contract["pricing_inputs"][0]
     pricing_input.pop("service_type")
     dimension = pricing_input["dimensions"][0]
-    dimension["pricing_attributes"] = {
-        "storage_class": dimension.pop("storage_class")
-    }
+    dimension["pricing_attributes"] = {"storage_class": dimension.pop("storage_class")}
 
     package = ArchitecturePackage.model_validate(legacy)
 
     assert package.economic_contract.contract_version == "1.0"
-    assert package.finops_blocking_reasons() == [
-        "economic_contract_upgrade_required"
-    ]
+    assert package.finops_blocking_reasons() == ["economic_contract_upgrade_required"]
 
 
 @pytest.mark.parametrize(
@@ -286,9 +282,7 @@ def test_unknown_values_are_explicit_and_block_handoff(proposal, tmp_path):
     )
     connection, service = service_at(tmp_path / "blocked.sqlite3")
     current = service.start("blocked", "issue-19", incomplete)["state"]
-    final = service.review(
-        "blocked", 1, current["artifact_sha256"], "approve"
-    )["state"]
+    final = service.review("blocked", 1, current["artifact_sha256"], "approve")["state"]
 
     assert final["status"] == "blocked_for_finops_inputs"
     assert final["handoff"]["handoff_status"] == "blocked"

@@ -76,9 +76,7 @@ class ArchitectureNodes:
         return {
             "decision": response["decision"],
             "feedback": response.get("feedback", ""),
-            "status": "approved"
-            if decision == "approve"
-            else "changes_requested",
+            "status": "approved" if decision == "approve" else "changes_requested",
             "approval_history": [*approvals, approval],
             "revision_history": [*revisions, revision_record],
         }
@@ -105,9 +103,7 @@ class ArchitectureNodes:
         ]
         return {
             "status": (
-                "blocked_for_finops_inputs"
-                if blocking_reasons
-                else "ready_for_finops"
+                "blocked_for_finops_inputs" if blocking_reasons else "ready_for_finops"
             ),
             "handoff": handoff_payload,
             "handoff_history": [*previous, handoff_payload],

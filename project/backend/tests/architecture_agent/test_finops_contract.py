@@ -68,7 +68,10 @@ def test_finops_consumer_detects_explicit_missing_information(tmp_path):
 
     assert handoff.handoff_status == "blocked"
     assert "budget_unknown" in handoff.blocking_reasons
-    assert any(item.startswith("quantity_unknown:documents") for item in handoff.blocking_reasons)
+    assert any(
+        item.startswith("quantity_unknown:documents")
+        for item in handoff.blocking_reasons
+    )
 
 
 def test_finops_consumer_rejects_invalid_or_tampered_handoff(tmp_path):

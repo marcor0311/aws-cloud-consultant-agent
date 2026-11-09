@@ -1,6 +1,7 @@
 """Typed topology, deterministic artifacts and pinned awsdac adapter."""
 
 import json
+import os
 import re
 import subprocess
 from copy import deepcopy
@@ -115,9 +116,10 @@ def test_topology_generates_mermaid_awsdac_manifests_and_policy(proposal):
         "aws_resource_type": "AWS::S3::Bucket",
         "dependencies": ["documents-key"],
     }
-    assert yaml.safe_load(artifacts["module-selection.yaml"])["modules"][0][
-        "commit"
-    ] == "2450a17830d40439e4eb673d1459140b52d9b93f"
+    assert (
+        yaml.safe_load(artifacts["module-selection.yaml"])["modules"][0]["commit"]
+        == "2450a17830d40439e4eb673d1459140b52d9b93f"
+    )
     policy = json.loads(artifacts["policies/deny-insecure-transport.json"])
     assert policy["Version"] == "2012-10-17"
     assert policy["Statement"][0]["Effect"] == "Deny"
@@ -182,7 +184,9 @@ def test_awsdac_renderer_requires_pinned_version_and_nonempty_png(
 
     def run(command, **kwargs):
         if "--version" in command:
-            return subprocess.CompletedProcess(command, 0, f"awsdac v{AWSDAC_VERSION}\n", "")
+            return subprocess.CompletedProcess(
+                command, 0, f"awsdac v{AWSDAC_VERSION}\n", ""
+            )
         output.write_bytes(b"\x89PNG\r\n\x1a\nblock-d")
         return subprocess.CompletedProcess(command, 0, "", "")
 
@@ -203,3 +207,15 @@ def test_awsdac_renderer_rejects_another_version(tmp_path, monkeypatch):
     )
     with pytest.raises(RuntimeError, match="se requiere 0.24"):
         AwsDacRenderer().verify_version()
+
+
+@pytest.mark.skipif(
+    not os.getenv("AWSDAC_EXECUTABLE"),
+    reason="real pinned awsdac executable not configured",
+)
+def test_real_pinned_awsdac_renders_generated_architecture(proposal):
+    package = ArchitecturePackage.model_validate(architecture_1_2(proposal))
+    source = package.artifacts()["architecture.aws-dac.yaml"]
+    image = AwsDacRenderer().render_bytes(source)
+    assert image.startswith(b"\x89PNG\r\n\x1a\n")
+    assert len(image) > 1024

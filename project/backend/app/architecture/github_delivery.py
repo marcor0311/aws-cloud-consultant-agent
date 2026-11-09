@@ -21,8 +21,13 @@ class GitHubFile(GitHubContract):
 
     @model_validator(mode="after")
     def path_and_hash_are_valid(self):
-        if not self.path.startswith("docs/03-architecture/versions/v") or ".." in self.path:
-            raise ValueError("Los archivos deben pertenecer a la revisión de Arquitectura.")
+        if (
+            not self.path.startswith("docs/03-architecture/versions/v")
+            or ".." in self.path
+        ):
+            raise ValueError(
+                "Los archivos deben pertenecer a la revisión de Arquitectura."
+            )
         try:
             raw = (
                 self.content.encode("utf-8")

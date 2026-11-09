@@ -83,7 +83,9 @@ class ArchitectureService:
         key = f"architecture-project-context:{context['case_id']}"
         previous = self.store.get(key) if self.store else self.project_contexts.get(key)
         if previous and previous != context:
-            raise ValueError("El expediente ya tiene otra entrega aprobada del agente 2.")
+            raise ValueError(
+                "El expediente ya tiene otra entrega aprobada del agente 2."
+            )
         if not previous:
             if self.store:
                 self.store.put(key, "architecture_project_context", context)
@@ -94,7 +96,9 @@ class ArchitectureService:
     def publish_to_project(self, case_id):
         state = self.get(case_id)["state"]
         if state.get("status") != "ready_for_finops":
-            raise ValueError("Solo se publica una revisión aprobada y lista para FinOps.")
+            raise ValueError(
+                "Solo se publica una revisión aprobada y lista para FinOps."
+            )
         key = f"architecture-project-context:{case_id}"
         context = self.store.get(key) if self.store else self.project_contexts.get(key)
         if not context:
@@ -169,14 +173,11 @@ class ArchitectureService:
             for item in stored["handoffs"]
             if item["from_phase"] == "stage-3" and item["to_phase"] == "stage-4"
         ]
-        agent_seconds = (
-            phase["recorded_effort_seconds"]["agent"] if phase else 0.0
-        )
+        agent_seconds = phase["recorded_effort_seconds"]["agent"] if phase else 0.0
         human_seconds = sum(item["seconds"] for item in human_decisions)
         lead_seconds = phase["lead_seconds"] if phase else 0.0
         intervals = [
-            (item["requested_at"], item["decided_at"])
-            for item in human_decisions
+            (item["requested_at"], item["decided_at"]) for item in human_decisions
         ]
         intervals.extend(
             (item["started_at"], item["ended_at"])
@@ -218,7 +219,9 @@ class ArchitectureService:
             raise ValueError("La aceptación FinOps corresponde a otro expediente.")
         handoff = self.get_finops_handoff(case_id, validated.revision)
         if handoff["artifact_sha256"] != validated.artifact_sha256:
-            raise ValueError("La aceptación FinOps no corresponde al artefacto vigente.")
+            raise ValueError(
+                "La aceptación FinOps no corresponde al artefacto vigente."
+            )
         handoff_id = f"{case_id}:stage-3:stage-4:v{validated.revision}"
         persisted = self.store.handoff(handoff_id)
         if not persisted:
@@ -268,9 +271,7 @@ class ArchitectureService:
                 {
                     "path": name,
                     "sha256": hashlib.sha256(
-                        content.encode("utf-8")
-                        if isinstance(content, str)
-                        else content
+                        content.encode("utf-8") if isinstance(content, str) else content
                     ).hexdigest(),
                 }
                 for name, content in sorted(documents.items())
@@ -336,11 +337,15 @@ class ArchitectureService:
             or validated.branch != plan["branch"]
             or validated.base_branch != plan["base_branch"]
             or validated.base_commit != plan["base_commit"]
-            or not validated.pull_request_url.startswith(plan["repository_url"] + "/pull/")
+            or not validated.pull_request_url.startswith(
+                plan["repository_url"] + "/pull/"
+            )
         ):
             raise ValueError("El PR no corresponde al repositorio y rama planificados.")
         expected_files = {item["path"]: item["sha256"] for item in plan["files"]}
-        actual_files = {item.get("path"): item.get("sha256") for item in validated.files}
+        actual_files = {
+            item.get("path"): item.get("sha256") for item in validated.files
+        }
         if actual_files != expected_files:
             raise ValueError("El commit del PR no contiene los artefactos aprobados.")
         key = f"architecture-github-pr:{case_id}:{plan['revision']}"
@@ -384,7 +389,9 @@ class ArchitectureService:
         approval = self.store.get(f"architecture-github-approval:{case_id}:{revision}")
         plan = self.store.get(f"architecture-github-plan:{case_id}:{revision}")
         if not approval or not plan:
-            raise ValueError("El PR de Arquitectura todavía no está aprobado y fusionado.")
+            raise ValueError(
+                "El PR de Arquitectura todavía no está aprobado y fusionado."
+            )
         package = state["package"]
         handoff = self.get_finops_handoff(case_id, revision)
         budget = package["economic_contract"]["budget"]
@@ -430,9 +437,7 @@ class ArchitectureService:
     def register_finops_issue(self, case_id, receipt):
         validated = GitHubFinOpsIssueReceipt.model_validate(receipt)
         revision = self.get(case_id)["state"]["revision"]
-        draft = self.store.get(
-            f"architecture-finops-issue-draft:{case_id}:{revision}"
-        )
+        draft = self.store.get(f"architecture-finops-issue-draft:{case_id}:{revision}")
         if not draft:
             raise ValueError("Primero se debe preparar el issue FinOps.")
         if (
@@ -600,7 +605,9 @@ class ArchitectureService:
             if correction.project_id != package.project_id:
                 raise ValueError("La corrección corresponde a otro proyecto.")
             if correction.source_revision != state["revision"]:
-                raise ValueError("La corrección no corresponde a la revisión entregada.")
+                raise ValueError(
+                    "La corrección no corresponde a la revisión entregada."
+                )
             known_resources = {item.resource_id for item in package.resources}
             if not set(correction.affected_resources) <= known_resources:
                 raise ValueError("La corrección referencia recursos desconocidos.")

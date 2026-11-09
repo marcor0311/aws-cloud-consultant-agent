@@ -51,9 +51,7 @@ class BaselineCatalog:
             capture_output=True,
         )
         if result.returncode:
-            raise ValueError(
-                f"El commit baseline no contiene el módulo {module_id}."
-            )
+            raise ValueError(f"El commit baseline no contiene el módulo {module_id}.")
         try:
             return yaml.safe_load(result.stdout.decode("utf-8"))
         except (UnicodeDecodeError, yaml.YAMLError) as error:

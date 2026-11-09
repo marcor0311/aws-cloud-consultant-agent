@@ -1,6 +1,7 @@
 """OAuth security and subscription-only LangGraph proof, without real credentials."""
 
 import json
+import os
 import re
 import time
 from urllib.parse import parse_qs, urlparse
@@ -168,7 +169,8 @@ def test_oauth_then_real_langgraph_saves_only_completed_result(provider, tmp_pat
     assert len([r for r in requests if r.url.path == "/v1/responses"]) == 1
     saved = connection.registration_file.read_text()
     assert "oauth-test-access" not in saved and "id_token" not in saved
-    assert connection.registration_file.stat().st_mode & 0o777 == 0o600
+    if os.name != "nt":
+        assert connection.registration_file.stat().st_mode & 0o777 == 0o600
     with pytest.raises(DemoError):
         connection.finish(params)  # Callback cannot be replayed.
 

@@ -55,12 +55,24 @@ class AwsDacRenderer:
         source = source.resolve()
         output = output.resolve()
         output.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run(
-            [self._resolved_executable(), str(source), "-o", str(output), "--force"],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
+        try:
+            subprocess.run(
+                [
+                    self._resolved_executable(),
+                    str(source),
+                    "-o",
+                    str(output),
+                    "--force",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as error:
+            detail = (error.stderr or error.stdout or "sin diagnóstico").strip()
+            raise RuntimeError(
+                f"awsdac no pudo renderizar el diagrama: {detail}"
+            ) from error
         if not output.is_file() or output.stat().st_size == 0:
             raise RuntimeError("awsdac no produjo un PNG válido.")
         return output

@@ -25,13 +25,16 @@ class ApprovedInput(RepositoryContract):
     ]
     path: str = Field(min_length=1, max_length=500)
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    media_type: Literal[
-        "text/markdown",
-        "text/html",
-        "application/json",
-        "application/yaml",
-        "application/pdf",
-    ] | None = None
+    media_type: (
+        Literal[
+            "text/markdown",
+            "text/html",
+            "application/json",
+            "application/yaml",
+            "application/pdf",
+        ]
+        | None
+    ) = None
 
     @model_validator(mode="after")
     def path_is_an_approved_phase_input(self):
@@ -55,7 +58,10 @@ class ApprovedInput(RepositoryContract):
             ".yml": "application/yaml",
             ".pdf": "application/pdf",
         }
-        if self.media_type and self.media_type != expected_media_types[path.suffix.lower()]:
+        if (
+            self.media_type
+            and self.media_type != expected_media_types[path.suffix.lower()]
+        ):
             raise ValueError("El media_type no coincide con la extensión del insumo.")
         return self
 
@@ -171,9 +177,7 @@ class ArchitectureProjectHandoff(RepositoryContract):
     case_id: str = Field(min_length=1, max_length=120)
     project_id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{2,59}$")
     repository_path: str = Field(min_length=1, max_length=1000)
-    repository_url: str = Field(
-        pattern=r"^https://github\.com/[^/]+/[^/]+(?:\.git)?$"
-    )
+    repository_url: str = Field(pattern=r"^https://github\.com/[^/]+/[^/]+(?:\.git)?$")
     source_commit: str = Field(pattern=r"^[0-9a-f]{40}$")
     architecture_issue_url: str = Field(
         pattern=r"^https://github\.com/[^/]+/[^/]+/issues/[0-9]+$"
@@ -196,12 +200,18 @@ class ArchitectureProjectHandoff(RepositoryContract):
                     "La entrega requiere requirements, constraints, decision y budget."
                 )
             if any(item.media_type is not None for item in self.inputs):
-                raise ValueError("ArchitectureProjectHandoff 1.1 no declara media_type.")
+                raise ValueError(
+                    "ArchitectureProjectHandoff 1.1 no declara media_type."
+                )
         else:
             discovery = [
-                item for item in self.inputs if item.document_type == "discovery_evidence"
+                item
+                for item in self.inputs
+                if item.document_type == "discovery_evidence"
             ]
-            board = [item for item in self.inputs if item.document_type == "board_record"]
+            board = [
+                item for item in self.inputs if item.document_type == "board_record"
+            ]
             if not discovery or len(board) != 1:
                 raise ValueError(
                     "La entrega 1.2 requiere evidencias discovery y un board_record."
@@ -268,7 +278,9 @@ class ProjectRepositoryBridge:
         root = Path(path).resolve()
         if not root.is_dir() or not (root / ".git").exists():
             raise ValueError("La entrega no apunta a un repositorio Git local.")
-        missing = [name for name in cls.REQUIRED_DIRECTORIES if not (root / name).is_dir()]
+        missing = [
+            name for name in cls.REQUIRED_DIRECTORIES if not (root / name).is_dir()
+        ]
         if missing:
             raise ValueError("El repositorio no conserva la estructura del template.")
         return root
@@ -291,7 +303,9 @@ class ProjectRepositoryBridge:
                 try:
                     content = raw.decode("utf-8")
                 except UnicodeDecodeError as error:
-                    raise ValueError("Los insumos textuales deben ser UTF-8.") from error
+                    raise ValueError(
+                        "Los insumos textuales deben ser UTF-8."
+                    ) from error
             documents.append(
                 {
                     "document_type": approved.document_type,
@@ -306,9 +320,7 @@ class ProjectRepositoryBridge:
         budget = None
         if delivery.contract_version == "1.2":
             board_input = next(
-                item
-                for item in delivery.inputs
-                if item.document_type == "board_record"
+                item for item in delivery.inputs if item.document_type == "board_record"
             )
             try:
                 board_payload = json.loads(raw_by_path[board_input.path])
@@ -318,13 +330,17 @@ class ProjectRepositoryBridge:
             if board.case_id != delivery.case_id:
                 raise ValueError("El acta corresponde a otro expediente.")
             if board.request_sha256 != delivery.approved_artifact_sha256:
-                raise ValueError("El request_sha256 del acta no coincide con la entrega.")
+                raise ValueError(
+                    "El request_sha256 del acta no coincide con la entrega."
+                )
             if board.digest != delivery.approval.decision_digest:
                 raise ValueError("El digest del acta no coincide con la aprobación.")
             if board.is_simulated != delivery.approval.simulated:
                 raise ValueError("La condición simulada del acta no coincide.")
             if board.closed_at != delivery.approval.approved_at:
-                raise ValueError("La fecha de aprobación no coincide con el cierre del acta.")
+                raise ValueError(
+                    "La fecha de aprobación no coincide con el cierre del acta."
+                )
             discovery_inputs = [
                 item
                 for item in delivery.inputs
@@ -342,7 +358,9 @@ class ProjectRepositoryBridge:
                         "Los archivos del acta no coinciden con las evidencias aprobadas."
                     )
             if len(board.files) != len(discovery_inputs):
-                raise ValueError("El acta debe enumerar todas las evidencias discovery.")
+                raise ValueError(
+                    "El acta debe enumerar todas las evidencias discovery."
+                )
             board_validation = {
                 "record_id": board.id,
                 "request_sha256": board.request_sha256,
@@ -394,7 +412,9 @@ class ProjectRepositoryBridge:
             actual = {
                 path.relative_to(target).as_posix(): (
                     path.read_bytes()
-                    if isinstance(expected.get(path.relative_to(target).as_posix()), bytes)
+                    if isinstance(
+                        expected.get(path.relative_to(target).as_posix()), bytes
+                    )
                     else path.read_text(encoding="utf-8")
                 )
                 for path in target.rglob("*")

@@ -20,5 +20,7 @@ def test_demo_exports_architecture_and_finops_handoff(tmp_path):
     assert handoff["contract_version"] == "1.0"
     assert handoff["architecture_schema_version"] == "1.1"
     assert handoff["architecture"]["region"] == "us-east-1"
-    assert handoff["economic_contract"]["pricing_inputs"][0]["service_code"] == "AmazonS3"
+    assert (
+        handoff["economic_contract"]["pricing_inputs"][0]["service_code"] == "AmazonS3"
+    )
     assert not list(Path(tmp_path).glob("*.tf"))

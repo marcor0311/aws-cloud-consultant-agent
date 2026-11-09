@@ -481,10 +481,16 @@ confundir el estado local con una aprobación remota.
 
 ### 11. Regresión completa del repositorio
 
-Las pruebas propias del agente pasan. La regresión completa tiene problemas
-preexistentes relacionados con referencias de preparación ausentes, entre ellas
-`references/provenance.json`. Deben resolverse o documentarse antes de presentar
-la integración completa como estable.
+Las pruebas propias del agente pasan. El catálogo `references/`, incluido
+`references/provenance.json`, fue recuperado sin cambios desde la versión
+existente en `main`; sus hashes vuelven a ser verificables en esta rama.
+
+La ejecución completa local dentro del sandbox Windows no termina en las pruebas
+que crean el portal asíncrono de `TestClient`: `asyncio` queda esperando el
+`socketpair` interno del Proactor. Esto no se presenta como una regresión del
+agente 3. El job Linux de GitHub Actions conserva la suite completa y el job
+específico de Arquitectura prueba además PostgreSQL; ambos deben quedar verdes
+remotamente antes de declarar estable la integración completa.
 
 ## Plan incremental
 
@@ -549,7 +555,24 @@ con referencias verificables.
 **Criterio de salida:** Lead Time, Process Time, espera y retrabajo consultables con
 procedencia explícita y persistencia después de reiniciar.
 
+### Incremento G — Calidad y evidencia
+
+- [x] Añadir un job CI específico del agente 3.
+- [x] Validar contratos, artefactos, proceso principal y formato.
+- [x] Ejecutar PostgreSQL 16 desechable dentro del job.
+- [x] Instalar el binario `awsdac v0.24` verificado y exigir un render real.
+- [x] Restaurar el catálogo histórico `references/` con su manifiesto de hashes.
+- [x] Mantener una matriz que separa evidencia local, CI y remota.
+- [ ] Obtener la primera ejecución verde del job en GitHub Actions.
+- [ ] Conservar evidencia de invocaciones MCP y aprobación remota reales.
+
+**Criterio de salida:** CI verde con PostgreSQL y render AWS reales, más evidencia
+MCP/GitHub verificable. Preparar el job no equivale a haberlo ejecutado.
+
 ## Criterio para completar el issue #19
+
+La matriz verificable de calidad, CI y pendientes remotos se mantiene en
+`docs/agent3-quality-evidence.md`.
 
 El issue no debe marcarse como completado hasta demostrar, como mínimo:
 

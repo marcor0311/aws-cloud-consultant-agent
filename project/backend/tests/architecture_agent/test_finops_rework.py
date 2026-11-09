@@ -65,9 +65,7 @@ def correction(revision=1, request_id="finops-correction-001"):
 
 def approve_revision_one(service):
     started = service.start("case-19", "issue-19-v1", package())["state"]
-    return service.review(
-        "case-19", 1, started["artifact_sha256"], "approve"
-    )["state"]
+    return service.review("case-19", 1, started["artifact_sha256"], "approve")["state"]
 
 
 def close(connection, store):
@@ -150,9 +148,7 @@ def test_complete_finops_rework_cycle_preserves_history_and_handoffs(tmp_path):
         "case-19", "finops-correction-001", corrected
     )["state"]
 
-    retry = service.revise_from_finops(
-        "case-19", "finops-correction-001", corrected
-    )
+    retry = service.revise_from_finops("case-19", "finops-correction-001", corrected)
     assert retry["duplicate"] is True
     assert retry["state"]["revision"] == 2
 
@@ -165,9 +161,9 @@ def test_complete_finops_rework_cycle_preserves_history_and_handoffs(tmp_path):
     with pytest.raises(ValueError, match="revisión pendiente exacta"):
         service.review("case-19", 1, first_hash, "approve")
 
-    final = service.review(
-        "case-19", 2, revision_two["artifact_sha256"], "approve"
-    )["state"]
+    final = service.review("case-19", 2, revision_two["artifact_sha256"], "approve")[
+        "state"
+    ]
     assert final["status"] == "ready_for_finops"
     assert final["handoff"]["revision"] == 2
     assert final["handoff"] != first_handoff
@@ -199,9 +195,7 @@ def test_finops_revision_must_change_architecture(tmp_path):
     service.request_finops_correction("case-19", correction())
 
     with pytest.raises(ValueError, match="debe modificar"):
-        service.revise_from_finops(
-            "case-19", "finops-correction-001", package()
-        )
+        service.revise_from_finops("case-19", "finops-correction-001", package())
 
     close(connection, store)
 
@@ -212,9 +206,9 @@ def test_history_survives_restart(tmp_path):
     service.request_finops_correction("case-19", correction())
     corrected = package()
     corrected["open_questions"] = ["Validar el nuevo límite de transferencia."]
-    pending = service.revise_from_finops(
-        "case-19", "finops-correction-001", corrected
-    )["state"]
+    pending = service.revise_from_finops("case-19", "finops-correction-001", corrected)[
+        "state"
+    ]
     service.review("case-19", 2, pending["artifact_sha256"], "approve")
     close(connection, store)
 
@@ -245,7 +239,9 @@ def test_specialized_rework_stays_coherent_with_main_process(tmp_path):
     }
     process.internal("case-19", "transcript:1", "transcript.available")
     process.internal("case-19", "preparation:1", "preparation.ready", **preparation)
-    process.internal("case-19", "preparation-approved:1", "preparation.approved", **preparation)
+    process.internal(
+        "case-19", "preparation-approved:1", "preparation.approved", **preparation
+    )
     process.internal("case-19", "direction-approved:1", "stage.approved", **preparation)
 
     catalog = BaselineCatalog(BASELINES)
@@ -278,9 +274,9 @@ def test_specialized_rework_stays_coherent_with_main_process(tmp_path):
 
     architecture.request_finops_correction("case-19", correction())
     corrected = package()
-    corrected["economic_contract"]["pricing_inputs"][0]["dimensions"][2][
-        "quantity"
-    ] = "5"
+    corrected["economic_contract"]["pricing_inputs"][0]["dimensions"][2]["quantity"] = (
+        "5"
+    )
     second = architecture.revise_from_finops(
         "case-19", "finops-correction-001", corrected
     )["state"]

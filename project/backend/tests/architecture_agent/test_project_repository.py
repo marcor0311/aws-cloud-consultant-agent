@@ -362,9 +362,7 @@ def test_service_renders_and_publishes_architecture_1_2(tmp_path):
 @pytest.mark.skipif(not NIKE_PROJECT.is_dir(), reason="Nike Agent 2 repo not present")
 def test_reads_real_agent_2_delivery_without_transmitting_pdf_binaries():
     commit = git(NIKE_PROJECT, "rev-parse", "HEAD")
-    board_path = (
-        "docs/02-board/acta-junta-609a2ec8c4bf4045a0e9a2cd9f98e4e1.json"
-    )
+    board_path = "docs/02-board/acta-junta-609a2ec8c4bf4045a0e9a2cd9f98e4e1.json"
     board = json.loads(git_bytes(NIKE_PROJECT, "show", f"{commit}:{board_path}"))
     media_types = {
         ".md": "text/markdown",
@@ -457,9 +455,7 @@ def test_reads_real_agent_2_delivery_without_transmitting_pdf_binaries():
 @pytest.mark.skipif(not NIKE_PROJECT.is_dir(), reason="Nike Agent 2 repo not present")
 def test_real_agent_2_delivery_rejects_false_signature_claim():
     commit = git(NIKE_PROJECT, "rev-parse", "HEAD")
-    board_path = (
-        "docs/02-board/acta-junta-609a2ec8c4bf4045a0e9a2cd9f98e4e1.json"
-    )
+    board_path = "docs/02-board/acta-junta-609a2ec8c4bf4045a0e9a2cd9f98e4e1.json"
     raw = git_bytes(NIKE_PROJECT, "show", f"{commit}:{board_path}")
     board = json.loads(raw)
     board["votes"][next(iter(board["votes"]))]["signature_verified"] = False
@@ -495,8 +491,7 @@ def test_codex_github_boundary_requires_exact_pr_before_finops(tmp_path):
         "base_commit": plan["base_commit"],
         "commit_sha": "a" * 40,
         "files": [
-            {"path": item["path"], "sha256": item["sha256"]}
-            for item in plan["files"]
+            {"path": item["path"], "sha256": item["sha256"]} for item in plan["files"]
         ],
         "pull_request_number": 7,
         "pull_request_url": "https://github.com/example/documentos-demo/pull/7",
@@ -510,9 +505,10 @@ def test_codex_github_boundary_requires_exact_pr_before_finops(tmp_path):
 
     registered = service.register_github_pull_request("project-case", receipt)
     assert registered["duplicate"] is False
-    assert service.register_github_pull_request("project-case", receipt)[
-        "duplicate"
-    ] is True
+    assert (
+        service.register_github_pull_request("project-case", receipt)["duplicate"]
+        is True
+    )
     approval = {
         "contract_version": "1.0",
         "plan_sha256": publication["plan_sha256"],
@@ -527,9 +523,9 @@ def test_codex_github_boundary_requires_exact_pr_before_finops(tmp_path):
         "source_issue_state": "closed",
         "source_issue_closed_at": "2026-11-08T18:12:00-06:00",
     }
-    assert service.register_github_approval("project-case", approval)[
-        "duplicate"
-    ] is False
+    assert (
+        service.register_github_approval("project-case", approval)["duplicate"] is False
+    )
     assert service.get_finops_handoff("project-case", 1)["revision"] == 1
 
     draft = service.prepare_finops_issue("project-case", "finops-owner")
@@ -543,11 +539,13 @@ def test_codex_github_boundary_requires_exact_pr_before_finops(tmp_path):
         "body_sha256": draft["body_sha256"],
         "assignees": ["finops-owner"],
     }
-    assert service.register_finops_issue("project-case", issue_receipt)[
-        "duplicate"
-    ] is False
-    assert service.register_finops_issue("project-case", issue_receipt)[
-        "duplicate"
-    ] is True
+    assert (
+        service.register_finops_issue("project-case", issue_receipt)["duplicate"]
+        is False
+    )
+    assert (
+        service.register_finops_issue("project-case", issue_receipt)["duplicate"]
+        is True
+    )
     store.engine.dispose()
     connection.close()

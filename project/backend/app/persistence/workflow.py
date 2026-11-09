@@ -833,7 +833,7 @@ class WorkflowStore:
         }
 
     def import_references(self, root):
-        manifest = json.loads((root / "provenance.json").read_text())
+        manifest = json.loads((root / "provenance.json").read_text(encoding="utf-8"))
         for file in manifest["files"]:
             path = root.parent / file["path"]
             content = path.read_text(encoding="utf-8")

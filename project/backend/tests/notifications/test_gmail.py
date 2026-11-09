@@ -1,5 +1,6 @@
 import base64
 import json
+import os
 import stat
 from email import policy
 from email.parser import BytesParser
@@ -107,7 +108,8 @@ def test_expired_token_refreshes_and_is_saved_atomically_with_private_permission
     credentials.refresh.assert_called_once()
     saved = json.loads(mailer.settings.token_file.read_text())
     assert saved["token"] == "refreshed-test-token"
-    assert stat.S_IMODE(mailer.settings.token_file.stat().st_mode) == 0o600
+    if os.name != "nt":
+        assert stat.S_IMODE(mailer.settings.token_file.stat().st_mode) == 0o600
     assert list(mailer.settings.token_file.parent.iterdir()) == [
         mailer.settings.token_file
     ]
@@ -194,4 +196,5 @@ def test_authorization_requests_only_send_scope_and_dedicated_token(
     assert authorize_gmail.authorize() == token
     assert factory.call_args.kwargs["scopes"] == [GMAIL_SEND_SCOPE]
     assert flow.run_local_server.call_args.kwargs["login_hint"] == "sender@example.com"
-    assert stat.S_IMODE(token.stat().st_mode) == 0o600
+    if os.name != "nt":
+        assert stat.S_IMODE(token.stat().st_mode) == 0o600

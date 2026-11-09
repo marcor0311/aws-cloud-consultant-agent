@@ -35,7 +35,9 @@ class Budget(EconomicContractModel):
     def values_match_status(self):
         values = (self.amount, self.currency, self.period)
         if self.status == "known" and any(value is None for value in values):
-            raise ValueError("Un presupuesto conocido requiere monto, moneda y periodo.")
+            raise ValueError(
+                "Un presupuesto conocido requiere monto, moneda y periodo."
+            )
         if self.status == "unknown" and any(value is not None for value in values):
             raise ValueError("Un presupuesto desconocido no puede inventar valores.")
         return self
@@ -69,15 +71,18 @@ class S3UsageDimension(UsageDimension):
         "lifecycle_transitions",
     ]
     unit: Literal["GB-month", "requests/month", "GB/month"]
-    storage_class: Literal[
-        "STANDARD",
-        "INTELLIGENT_TIERING",
-        "STANDARD_IA",
-        "ONEZONE_IA",
-        "GLACIER_INSTANT_RETRIEVAL",
-        "GLACIER_FLEXIBLE_RETRIEVAL",
-        "DEEP_ARCHIVE",
-    ] | None = None
+    storage_class: (
+        Literal[
+            "STANDARD",
+            "INTELLIGENT_TIERING",
+            "STANDARD_IA",
+            "ONEZONE_IA",
+            "GLACIER_INSTANT_RETRIEVAL",
+            "GLACIER_FLEXIBLE_RETRIEVAL",
+            "DEEP_ARCHIVE",
+        ]
+        | None
+    ) = None
     operation: Literal["GET", "SELECT", "PUT", "COPY", "POST", "LIST"] | None = None
     destination: Literal["internet", "same_region", "cross_region"] | None = None
 

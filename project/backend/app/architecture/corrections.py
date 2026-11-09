@@ -45,8 +45,7 @@ class FinOpsCorrectionRequest(CorrectionContract):
         if len(resources) != len(set(resources)):
             raise ValueError("Los recursos afectados no pueden repetirse.")
         dimensions = [
-            (item.resource_id, item.dimension_id)
-            for item in self.affected_dimensions
+            (item.resource_id, item.dimension_id) for item in self.affected_dimensions
         ]
         if len(dimensions) != len(set(dimensions)):
             raise ValueError("Las dimensiones afectadas no pueden repetirse.")
@@ -55,4 +54,3 @@ class FinOpsCorrectionRequest(CorrectionContract):
     @property
     def requested_at_utc(self) -> datetime:
         return self.requested_at
-
