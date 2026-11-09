@@ -36,7 +36,6 @@ console-recordings/
 *.log
 project/generated/
 insumos/
-/insumos temporales de agente 1/
 *.zip
 .terraform/
 *.tfstate
