@@ -86,11 +86,3 @@ La consulta del histórico de proyectos por MCP ya está desarrollada y se utili
 El dashboard permite identificar la etapa del flujo de trabajo en la que se encuentra el agente y el equipo con el que colabora para ese proyecto.
 
 ![Vista de la oficina virtual con el agente en el área de Arquitectura](docs/live-dashboard.png)
-
-## Credenciales locales
-
-Guardar credenciales fuera del repositorio en `~/.config/aws-cloud-consultant-agent/dev/`.
-`project/.env` conserva solo configuración no sensible y la ruta a ese directorio.
-La [estructura de ejemplo](config/local-secrets.example/README.md) describe los archivos
-privados, la migración con respaldo y el contrato de producción. Los ejemplos se
-versionan con valores vacíos; los tokens y sesiones reales nunca se suben.
