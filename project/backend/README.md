@@ -86,13 +86,14 @@ Generar cada secreto por separado con
 
 Con Gmail no se necesitan contraseña de correo ni credenciales SMTP. Habilitar
 Gmail API en el mismo proyecto de Google Cloud que utiliza el cliente OAuth.
-Configurar en el `.env` privado del backend:
+Configurar el proveedor y las rutas en `project/.env`; la cuenta se guarda en
+el `secrets.env` externo:
 
 ```dotenv
 CALENDAR_MAIL_PROVIDER=gmail
 GOOGLE_ACCOUNT_EMAIL=<cuenta de Google autorizada>
-CALENDAR_GMAIL_CLIENT_FILE="agents/1. calendar assistant/secrets/google_oauth_client.json"
-CALENDAR_GMAIL_TOKEN_FILE=secrets/gmail_token.json
+CALENDAR_GMAIL_CLIENT_FILE=google/oauth-client.json
+CALENDAR_GMAIL_TOKEN_FILE=google/gmail-token.json
 ```
 
 Desde la raíz del repositorio, autorizar una vez:
@@ -104,7 +105,7 @@ make gmail-auth
 El navegador solicita el permiso `gmail.send` para la cuenta configurada. El
 usuario debe aceptar el consentimiento de Google; habilitar la API no concede
 este permiso. No se solicita lectura del buzón. El cliente OAuth puede reutilizarse,
-pero el token de envío se guarda por separado en `project/secrets/`, excluido de
+pero el token de envío se guarda por separado en el directorio privado externo, fuera de
 Git y con permisos 600. El token de Calendar no se modifica.
 
 Gmail envía desde la cuenta autorizada o sus alias permitidos. Seleccionar esa
@@ -135,10 +136,12 @@ uv run ruff format --check src tests demos
 uv run ruff check src tests demos
 ```
 
-Las pruebas locales usan SQLite temporal, buzón y calendario ficticios. Cubren
-colisiones, concurrencia, persistencia, privacidad, cambios de registro, OTP,
-límites, reenvíos y reglas de Calendar. No ejecutan simulaciones cloud ni llamadas
-reales al agente.
+La suite reducida conserva cuatro recorridos de integración: acceso/OTP,
+transcripción y persistencia, preparación→agente 2→handoffs, y OAuth→LangGraph→MCP.
+Usa almacenamiento temporal y proveedores ficticios; no consume inferencia.
+Los casos unitarios redundantes y las comprobaciones de estructura se eliminaron.
+Para el recorrido completo o PostgreSQL aislado, ejecutar bajo demanda
+`make test-e2e` o `make test-postgres`. Ver [criterio y comandos](../../docs/testing.md).
 
 ## Organización del backend
 
@@ -159,7 +162,7 @@ reales al agente.
 - `app/worker.py`: bucle del único worker; `app/workflow/runtime.py` despacha tareas.
 - `app/demos/`: demostraciones con sus interfaces; `app/cli/` mantiene lanzadores pequeños.
 - `app/cli/`: registro administrativo de empresas y consentimiento de Gmail.
-- `tests/`: pruebas por capacidad y comprobaciones de arquitectura.
+- `tests/`: integraciones esenciales y recorrido completo opcional.
 
 El agente solo usa la API HTTP. No recibe el OTP generado ni las credenciales de
 envío. La plantilla se conserva con el código que la renderiza en el backend.
@@ -222,3 +225,11 @@ El SQL de OTP está en `app/verification/repository.py`; los servicios reciben
 `VerificationRepository`. Las operaciones de continuidad de los grafos se reciben
 por `WorkflowExecution` (`app/workflow/ports.py`) y su adaptador está en
 `app/integrations/langgraph.py`. El schema OTP y los thread IDs existentes se conservan.
+
+## Credenciales locales
+
+`project/.env` contiene configuración no sensible. `CLOUD_CONSULTANT_SECRETS_DIR`
+apunta por defecto a `~/.config/aws-cloud-consultant-agent/dev/`, donde viven
+`secrets.env`, credenciales Google y sesiones ChatGPT. Los valores del proceso
+tienen prioridad; las rutas de credenciales relativas usan esa raíz privada.
+Ver [estructura de ejemplo y migración](../../config/local-secrets.example/README.md).

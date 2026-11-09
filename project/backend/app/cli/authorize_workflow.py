@@ -4,7 +4,7 @@ import os
 
 from google_auth_oauthlib.flow import InstalledAppFlow
 
-from app.core.config import load_environment, project_path
+from app.core.config import load_environment, private_path
 
 SCOPES = [
     "https://www.googleapis.com/auth/meetings.space.readonly",
@@ -21,13 +21,13 @@ def main():
         raise SystemExit(
             "Configurar WORKFLOW_GOOGLE_CLIENT_FILE y WORKFLOW_GOOGLE_TOKEN_FILE."
         )
-    target = project_path(token_file)
+    target = private_path(token_file)
     if target.exists():
         raise SystemExit(
             "El token ya existe; no se reemplaza una autorización existente."
         )
     credentials = InstalledAppFlow.from_client_secrets_file(
-        str(project_path(client_file)), SCOPES
+        str(private_path(client_file)), SCOPES
     ).run_local_server(port=0)
     target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)

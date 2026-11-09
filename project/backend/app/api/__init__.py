@@ -2,8 +2,8 @@
 
 from fastapi import APIRouter
 
-from app.api import calendar_access, meetings, webhooks, workflow
+from app.api import board, calendar_access, meetings, webhooks, workflow
 
 router = APIRouter()
-for feature in (calendar_access, meetings, webhooks, workflow):
+for feature in (calendar_access, meetings, webhooks, workflow, board):
     router.include_router(feature.router)

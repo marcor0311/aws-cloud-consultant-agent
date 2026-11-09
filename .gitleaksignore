@@ -1,0 +1,4 @@
+# Historical offline fixture: synthetic OTP secret, never used with a provider.
+62c3617633c193aff7e2ac822709a81fa281488d:project/backend/tests/verification/test_composition.py:generic-api-key:20
+# Historical upstream Terraform comment: resource dependency chain, no credential.
+c2d326c1d685235f2898b7dea37f4898476001d2:project/app/modules/aws/s3-bucket/main.tf:generic-api-key:609

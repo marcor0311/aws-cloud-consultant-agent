@@ -13,7 +13,6 @@ Desde la raíz, con las dependencias del backend instaladas:
 ```sh
 make prepare-capture
 make backend
-make workflow
 ```
 
 La primera preparación descarga la versión fijada; las siguientes usan una copia
@@ -25,12 +24,25 @@ de Google ni las credenciales del agente de voz.
 1. Abrir `chrome://extensions` en el Chrome donde Stuart participará.
 2. Activar **Modo de desarrollador** y pulsar **Cargar descomprimida**.
 3. Seleccionar `project/generated/transcriptonic` y fijar su icono.
-4. Abrir una sola reunión usando su enlace `https://meet.google.com/xxx-xxxx-xxx`.
+4. Abrir una sola reunión usando su enlace `https://meet.google.com/xxx-xxxx-xxx`
+   o `https://meet.google.com/meet/xxx-xxxx-xxx`. También se detecta la entrada
+   desde la pantalla de inicio de Meet sin recargar la página.
    Evitar recargar esa pestaña: la reserva impide sobrescribir una captura activa.
 5. Comprobar los subtítulos y seleccionar español en Meet. La extensión intenta
    activarlos, pero la captura real debe comprobarse en pantalla y en su popup.
 6. Salir mediante el botón de colgar de Meet. La extensión entrega el transcript
    al backend de esta computadora, en `http://127.0.0.1:8000`.
+
+Después de reconstruir una extensión ya instalada, pulsar **Recargar** en su
+tarjeta de `chrome://extensions` y comprobar la versión **v1.0.1** en el popup.
+Luego recargar la pestaña de Meet antes de entrar a una nueva llamada. Recargar
+solo la página no actualiza el código que Chrome ya tenía cargado de la extensión.
+Hacer estos pasos cuando no haya una captura activa. Si cambió el código del
+backend, reiniciar también `make backend` para que use el validador actualizado.
+
+El popup se actualiza mientras permanece abierto: **Meet abierto** confirma la
+activación; el contador muestra intervenciones ya guardadas y aumenta al finalizar
+un bloque de habla. La intervención que aún está en curso se vacía al colgar.
 
 La carpeta generada contiene una credencial privada y está ignorada por Git.
 No distribuirla ni cargar simultáneamente la extensión original: esta adaptación
@@ -69,13 +81,20 @@ Salir de Meet finaliza la captura de Stuart; no prueba que todos los demás sali
 
 ## Verificación
 
-```sh
-make test-capture
-CAPTURE_EXTENSION_DIR="$PWD/project/generated/transcriptonic" make test-capture
-```
+Para comprobar únicamente captura y recepción, se puede usar una reunión
+instantánea sin cita registrada, sin LiveKit y sin iniciar el worker. Activar los
+subtítulos en español, hablar unos segundos y colgar con el botón de Meet. El
+popup debe pasar de **Meet abierto** a **Recibida por el backend**; esto confirma
+la aceptación HTTP 202 y la persistencia del payload como `captured_transcript`
+en `workflow_jobs`. La copia JSON sigue disponible en la extensión.
 
-Las pruebas ordinarias son offline. La segunda variante además prueba el código
-real del observador fijado con mutaciones de subtítulos simuladas: cuatro nombres,
-revisiones de texto y vaciado final. Los tests del backend prueban HTTP, SQL y
-LangGraph reales con proveedores ficticios. No se ejecutan llamadas de LiveKit.
+Para asociar después una captura a un expediente y avanzar a preparación, usar
+una cita registrada dentro de la ventana de correlación indicada arriba y ejecutar
+`make workflow` con la configuración correspondiente. La recepción de una reunión
+instantánea por sí sola no crea una cita ni un expediente.
+
+El recorrido conservado se ejecuta con
+`make test-backend TESTS=tests/workflow/test_transcript_capture.py`.
+Comprueba HTTP, SQL, cola y LangGraph con una transcripción simulada.
+No se ejecutan llamadas de LiveKit. Ver [suite mínima](../../docs/testing.md).
 La comprobación final de selectores, idioma y recepción requiere una reunión humana.

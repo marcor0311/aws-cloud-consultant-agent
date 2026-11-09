@@ -20,7 +20,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from langgraph.graph import END, START, StateGraph
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from app.core.config import PROJECT_DIR
+from app.core.config import PROJECT_DIR, load_environment, private_path
 from app.integrations.ai.oauth import DemoError, PlanConnection
 
 
@@ -366,13 +366,14 @@ def create_app(connection, output_dir):
 
 
 def main():
+    load_environment()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=8766)
     args = parser.parse_args()
     with httpx.Client(timeout=120, follow_redirects=False) as client:
         connection = PlanConnection(
             client,
-            PROJECT_DIR / "secrets/chatgpt-plan-demo/registration.json",
+            private_path("chatgpt/plan-demo/registration.json"),
             f"http://127.0.0.1:{args.port}/auth/callback",
         )
         app = create_app(connection, PROJECT_DIR / "generated/chatgpt-plan-demo")

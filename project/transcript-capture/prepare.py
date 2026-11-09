@@ -130,7 +130,7 @@ startCaptureOnMeetingRoute();
     manifest = {
         "manifest_version": 3,
         "name": "Consultoría — captura de Meet (TranscripTonic)",
-        "version": "1.0.0",
+        "version": "1.0.1",
         "description": "Captura local de subtítulos para el backend de desarrollo.",
         "permissions": ["storage", "alarms", "downloads"],
         "host_permissions": ["http://127.0.0.1/*"],

@@ -1,0 +1,297 @@
+{
+  "repository": "https://github.com/marcor0311/aws-cloud-consultant-agent",
+  "commit": "cdd46e5d9a832f5f0d05dea368b55ef305dfc90d",
+  "recovered_on": "2026-11-06",
+  "is_fictitious": true,
+  "changes": "Markdown fiction notice and YAML fiction flags; executable Terraform excluded.",
+  "files": [
+    {
+      "path": "references/companies/inter-miami-cf/company.yaml",
+      "source_path": "project/catalog/companies/inter-miami-cf/company.yaml",
+      "source_sha256": "aafe734ea7403d4041c7fa90ca11edf1ed7005107177fb115c9c4043baa0c6de",
+      "sha256": "3f02d6ea397f6ab40a8a71c78fff4511bf9a5327f2496dbbb2dbe22549251236"
+    },
+    {
+      "path": "references/companies/inter-miami-cf/profile.md",
+      "source_path": "project/catalog/companies/inter-miami-cf/profile.md",
+      "source_sha256": "b8430ca456b855688f66fa5be4dfae27ad1301a4e6c376f027dd63ab277af70b",
+      "sha256": "6ecfd9648095e692fdce2ccdb35b8ee4dc5044310985a01f5672383b57027334"
+    },
+    {
+      "path": "references/companies/mercedes-benz-canada/company.yaml",
+      "source_path": "project/catalog/companies/mercedes-benz-canada/company.yaml",
+      "source_sha256": "e13003c72f4551cf1a695bee47dc25636ab6a0f9de864f6302242a788eac8ab4",
+      "sha256": "4b7ca0aad9e074cfd60388cc9c0dd22f87c7600b775bee728ee09cffd51c88d0"
+    },
+    {
+      "path": "references/companies/mercedes-benz-canada/profile.md",
+      "source_path": "project/catalog/companies/mercedes-benz-canada/profile.md",
+      "source_sha256": "c7fd608851e194d2f1b1ec5f90ff3746f837c7479971081028131772e4fb83de",
+      "sha256": "0643208dac5926eb62987634252b514c6b67ccc7877b5197277e5283685c3965"
+    },
+    {
+      "path": "references/companies/verbier-4-vallees/company.yaml",
+      "source_path": "project/catalog/companies/verbier-4-vallees/company.yaml",
+      "source_sha256": "6ed53676d6aa9ea6bf03c8b743a837d8a222f3973c7419a791fcefe8621ecbf2",
+      "sha256": "f53595912df801bed105888cdc8cb51f0c26dfb16c6b9ad5329d77672cf65f39"
+    },
+    {
+      "path": "references/companies/verbier-4-vallees/profile.md",
+      "source_path": "project/catalog/companies/verbier-4-vallees/profile.md",
+      "source_sha256": "a6f402cdda7f3478ab75077b9f0ba6c06c594f146aee4c9647be25fd39aaf07b",
+      "sha256": "88e3aaff2d42b92f57f464e5d092824d004a66462e0c44416e8fe943dfc695e2"
+    },
+    {
+      "path": "references/projects/inter-miami-merchandise-ecommerce/CHANGELOG.md",
+      "source_path": "project/catalog/projects/inter-miami-merchandise-ecommerce/CHANGELOG.md",
+      "source_sha256": "4f553fa02587429a921a70ec10b439726d0fa04b62b0ac64b4e59d75862ca884",
+      "sha256": "0c58a16ff989a015b0e3d85c4dbe12f8b27f5f97e31f9225c981488b33f38ce3"
+    },
+    {
+      "path": "references/projects/inter-miami-merchandise-ecommerce/README.md",
+      "source_path": "project/catalog/projects/inter-miami-merchandise-ecommerce/README.md",
+      "source_sha256": "9c6a3d7aeaaf9145334d183bc31901719bfac9d0087f06e46ed76454e468794b",
+      "sha256": "889d250365a3cd3774e149f421bffd466eb4d2a3cdebaf518c0263f74574c4fa"
+    },
+    {
+      "path": "references/projects/inter-miami-merchandise-ecommerce/project-brief.md",
+      "source_path": "project/catalog/projects/inter-miami-merchandise-ecommerce/project-brief.md",
+      "source_sha256": "71b87287f00f415a495648e64963ebc1b21830e513cd9d385dcddd74d63823ca",
+      "sha256": "c8b3a03ab16b47ff19e526c641f38ab66f9576d7d71d6bee42bf39f24b1e7c1c"
+    },
+    {
+      "path": "references/projects/inter-miami-merchandise-ecommerce/project.yaml",
+      "source_path": "project/catalog/projects/inter-miami-merchandise-ecommerce/project.yaml",
+      "source_sha256": "2d23e95346a5c4b4517173604f5cbde35371ac50cfb07ed361dc8b939fa21a33",
+      "sha256": "bcec70ce9c11e4b639d38c9a773d6aa35ec1721a6ccfc1446932359411573fa3"
+    },
+    {
+      "path": "references/projects/inter-miami-merchandise-ecommerce/versions/1.0.0/architecture.drawio",
+      "source_path": "project/catalog/projects/inter-miami-merchandise-ecommerce/versions/1.0.0/architecture.drawio",
+      "source_sha256": "70a2f272ddad972328e90cf9ccc4856096290d8173fcdff55052fcbc08e3c0ec",
+      "sha256": "70a2f272ddad972328e90cf9ccc4856096290d8173fcdff55052fcbc08e3c0ec"
+    },
+    {
+      "path": "references/projects/inter-miami-merchandise-ecommerce/versions/1.0.0/architecture.md",
+      "source_path": "project/catalog/projects/inter-miami-merchandise-ecommerce/versions/1.0.0/architecture.md",
+      "source_sha256": "2f05077be8e358512cff7261fb4a79072e6b66e050c5994e64b8063f4cdb72f8",
+      "sha256": "d605841114e938aae45b19e8066753e7f82ce7f185a5f1b1094ebec58ace0c7b"
+    },
+    {
+      "path": "references/projects/inter-miami-merchandise-ecommerce/versions/1.0.0/audit-record.yaml",
+      "source_path": "project/catalog/projects/inter-miami-merchandise-ecommerce/versions/1.0.0/audit-record.yaml",
+      "source_sha256": "5b9c1747225ca2f2aa729d9166559c8f73880a86251725a5e20b403ad90cce83",
+      "sha256": "a701e9814bd28f527cb4c8629f0ee7226ffdc872bb94c8cf48065fbcffbdf770"
+    },
+    {
+      "path": "references/projects/inter-miami-merchandise-ecommerce/versions/1.0.0/terraform/README.md",
+      "source_path": "project/catalog/projects/inter-miami-merchandise-ecommerce/versions/1.0.0/terraform/README.md",
+      "source_sha256": "ed1372776b54c2dd86348a3afbcf132fafe74d983432d3981495ebe7410fb87f",
+      "sha256": "7e9195f3a70214d95b94566c09e21e404422089a4a16928a45b700197734585e"
+    },
+    {
+      "path": "references/projects/inter-miami-merchandise-ecommerce/versions/1.1.0/architecture.drawio",
+      "source_path": "project/catalog/projects/inter-miami-merchandise-ecommerce/versions/1.1.0/architecture.drawio",
+      "source_sha256": "716214c32cc7a94dbc340d6ecb219c6615cf2051f5c51c6abaa61e36b29812ea",
+      "sha256": "716214c32cc7a94dbc340d6ecb219c6615cf2051f5c51c6abaa61e36b29812ea"
+    },
+    {
+      "path": "references/projects/inter-miami-merchandise-ecommerce/versions/1.1.0/architecture.md",
+      "source_path": "project/catalog/projects/inter-miami-merchandise-ecommerce/versions/1.1.0/architecture.md",
+      "source_sha256": "2756154df454e779740594b9bca9bdd35b0a04a083d6d5fe48e7fad9203ccce9",
+      "sha256": "71a8684eef76cf59c9aaba0f342abdd31d3832c18cf59d8b03eaf631fd60eb8a"
+    },
+    {
+      "path": "references/projects/inter-miami-merchandise-ecommerce/versions/1.1.0/audit-record.yaml",
+      "source_path": "project/catalog/projects/inter-miami-merchandise-ecommerce/versions/1.1.0/audit-record.yaml",
+      "source_sha256": "c0ec232387dad3584052c47c6c052065233ba62878adc276b335376f5fae22de",
+      "sha256": "fe1ee990d731212240f74a2fdb53ad39a916d8ec326b714d9dde7f6a11e1048a"
+    },
+    {
+      "path": "references/projects/inter-miami-merchandise-ecommerce/versions/1.1.0/terraform/README.md",
+      "source_path": "project/catalog/projects/inter-miami-merchandise-ecommerce/versions/1.1.0/terraform/README.md",
+      "source_sha256": "7e865685ece2e73e95005cfb37df9458e21b69a89d4dcd70b30b62c248f1b50a",
+      "sha256": "bdc1097bdd7e96d69ed37b825d2d8de0fd4b1289640e475fc1c8a7f523e49e71"
+    },
+    {
+      "path": "references/projects/mercedes-benz-canada-vehicle-showroom/CHANGELOG.md",
+      "source_path": "project/catalog/projects/mercedes-benz-canada-vehicle-showroom/CHANGELOG.md",
+      "source_sha256": "c64daa1994fd1b7b83c5bc364328442d53dd95c9e3fef7b36d29c640a7d303e3",
+      "sha256": "2b71990611354d28bf87ba89f99af61e8f2e59ef6f5a598d42b2c77846e0893b"
+    },
+    {
+      "path": "references/projects/mercedes-benz-canada-vehicle-showroom/README.md",
+      "source_path": "project/catalog/projects/mercedes-benz-canada-vehicle-showroom/README.md",
+      "source_sha256": "f4b512e8b0a3e8e306f97161e75c685b2c404fef11c3aefeb547619be166da82",
+      "sha256": "35ca373b97b4a66cf2e4b54437e2e30b6a992c46cb12e8479763b2f8d329e7f9"
+    },
+    {
+      "path": "references/projects/mercedes-benz-canada-vehicle-showroom/project-brief.md",
+      "source_path": "project/catalog/projects/mercedes-benz-canada-vehicle-showroom/project-brief.md",
+      "source_sha256": "ed6b9ac0ea0f6c736d62044506973fb5a9244fe1150014db5379d9c4fa2f9446",
+      "sha256": "9d3b9292c2dbccc35120020445abe12763c854385bdfb996dba1233ad72f17ab"
+    },
+    {
+      "path": "references/projects/mercedes-benz-canada-vehicle-showroom/project.yaml",
+      "source_path": "project/catalog/projects/mercedes-benz-canada-vehicle-showroom/project.yaml",
+      "source_sha256": "e70e57e43b54ff34f401cc8d9c74824901463c80ba69ef71c47ad27b90703fcb",
+      "sha256": "41ce80b50c9f8b64ac6af32d78258b79586cba005b18fb24c7a6ab0dd3867678"
+    },
+    {
+      "path": "references/projects/mercedes-benz-canada-vehicle-showroom/versions/1.0.0/architecture.drawio",
+      "source_path": "project/catalog/projects/mercedes-benz-canada-vehicle-showroom/versions/1.0.0/architecture.drawio",
+      "source_sha256": "5726352bb70dfa90aace8ea7197254487102ac23ce3b61d88b072db919dc4483",
+      "sha256": "5726352bb70dfa90aace8ea7197254487102ac23ce3b61d88b072db919dc4483"
+    },
+    {
+      "path": "references/projects/mercedes-benz-canada-vehicle-showroom/versions/1.0.0/architecture.md",
+      "source_path": "project/catalog/projects/mercedes-benz-canada-vehicle-showroom/versions/1.0.0/architecture.md",
+      "source_sha256": "27fa062f8a22e3d739defc56a121fa3ff2f988595bf342a675e1bfca147873de",
+      "sha256": "1921260bfecf9d8630732d94a9620b52a43fb0f86a3d576c440aa76cddcb84d5"
+    },
+    {
+      "path": "references/projects/mercedes-benz-canada-vehicle-showroom/versions/1.0.0/audit-record.yaml",
+      "source_path": "project/catalog/projects/mercedes-benz-canada-vehicle-showroom/versions/1.0.0/audit-record.yaml",
+      "source_sha256": "cd1d38c7468dddd3a0cb204ecb7d074475abc0ced0d6a94ea0bbf0a74f4e911e",
+      "sha256": "7e5e25c6d7d3a0e2cc6cc21682abfc7a3575fb12be30e6297cec513e94e1509f"
+    },
+    {
+      "path": "references/projects/mercedes-benz-canada-vehicle-showroom/versions/1.0.0/terraform/README.md",
+      "source_path": "project/catalog/projects/mercedes-benz-canada-vehicle-showroom/versions/1.0.0/terraform/README.md",
+      "source_sha256": "ed1372776b54c2dd86348a3afbcf132fafe74d983432d3981495ebe7410fb87f",
+      "sha256": "7e9195f3a70214d95b94566c09e21e404422089a4a16928a45b700197734585e"
+    },
+    {
+      "path": "references/projects/mercedes-benz-canada-vehicle-showroom/versions/1.1.0/architecture.drawio",
+      "source_path": "project/catalog/projects/mercedes-benz-canada-vehicle-showroom/versions/1.1.0/architecture.drawio",
+      "source_sha256": "b9e65451f0a546ac8d67a1fd2452d3bd7cfc0cb07e1dccb16fcb7613a891881b",
+      "sha256": "b9e65451f0a546ac8d67a1fd2452d3bd7cfc0cb07e1dccb16fcb7613a891881b"
+    },
+    {
+      "path": "references/projects/mercedes-benz-canada-vehicle-showroom/versions/1.1.0/architecture.md",
+      "source_path": "project/catalog/projects/mercedes-benz-canada-vehicle-showroom/versions/1.1.0/architecture.md",
+      "source_sha256": "2852dce8a2393c8744856f4ab61719434bf0f27cc513e7121ae44173026a02e4",
+      "sha256": "9cccf6e3d761564f8cdd7f79e97cac86c8a18e229666590c49c792c85a5ce2f7"
+    },
+    {
+      "path": "references/projects/mercedes-benz-canada-vehicle-showroom/versions/1.1.0/audit-record.yaml",
+      "source_path": "project/catalog/projects/mercedes-benz-canada-vehicle-showroom/versions/1.1.0/audit-record.yaml",
+      "source_sha256": "9a22aa7e7df3ed64de7af108ab3ddae0bbc6e9c7adaec49f9558cf63becfdb21",
+      "sha256": "1cc30d55de9115a53d9481e3ec6dea9a3d87b88096b93479f446484c97713acd"
+    },
+    {
+      "path": "references/projects/mercedes-benz-canada-vehicle-showroom/versions/1.1.0/terraform/README.md",
+      "source_path": "project/catalog/projects/mercedes-benz-canada-vehicle-showroom/versions/1.1.0/terraform/README.md",
+      "source_sha256": "7e865685ece2e73e95005cfb37df9458e21b69a89d4dcd70b30b62c248f1b50a",
+      "sha256": "bdc1097bdd7e96d69ed37b825d2d8de0fd4b1289640e475fc1c8a7f523e49e71"
+    },
+    {
+      "path": "references/projects/verbier-4-vallees-skipass-operations/CHANGELOG.md",
+      "source_path": "project/catalog/projects/verbier-4-vallees-skipass-operations/CHANGELOG.md",
+      "source_sha256": "f545b6224b62b30e6e2f10d4099a830b6f85d835181ecdbd720091182be67575",
+      "sha256": "19fa88d8e88763d57cdb76ae3132ca0b88f080e439c2f12b871b9b5acdcf92ce"
+    },
+    {
+      "path": "references/projects/verbier-4-vallees-skipass-operations/README.md",
+      "source_path": "project/catalog/projects/verbier-4-vallees-skipass-operations/README.md",
+      "source_sha256": "4e1520167f2027e281e2c826fec40622ecb257aeebe282462984729fc46dad1d",
+      "sha256": "7f60d28565167fd2eb6fe6a0b7ee18d205a2fa20aa0d094bd8ba7a75c10a78ca"
+    },
+    {
+      "path": "references/projects/verbier-4-vallees-skipass-operations/project-brief.md",
+      "source_path": "project/catalog/projects/verbier-4-vallees-skipass-operations/project-brief.md",
+      "source_sha256": "1440c0e784efb593f4bd6969da49dd00cd62665ef01f05515dd621f094b86a8c",
+      "sha256": "f70236c38c8f615ea537262ac4f1563cca46d895be939ed14486075827325732"
+    },
+    {
+      "path": "references/projects/verbier-4-vallees-skipass-operations/project.yaml",
+      "source_path": "project/catalog/projects/verbier-4-vallees-skipass-operations/project.yaml",
+      "source_sha256": "4e7b5084f84cb264da1cfed47eb267b9b25554335e7dddf54739cd1e9784edd1",
+      "sha256": "5aaa5f81e9679bba54e603cf6e68bbbcda50a3438e6d02f631a6ef920c61ca4a"
+    },
+    {
+      "path": "references/projects/verbier-4-vallees-skipass-operations/versions/1.0.0/architecture.drawio",
+      "source_path": "project/catalog/projects/verbier-4-vallees-skipass-operations/versions/1.0.0/architecture.drawio",
+      "source_sha256": "a2d7ec05bc3eeb55e279313f8d5ac12a7eef8b7b69c3e05aaef1116e0b293fcb",
+      "sha256": "a2d7ec05bc3eeb55e279313f8d5ac12a7eef8b7b69c3e05aaef1116e0b293fcb"
+    },
+    {
+      "path": "references/projects/verbier-4-vallees-skipass-operations/versions/1.0.0/architecture.md",
+      "source_path": "project/catalog/projects/verbier-4-vallees-skipass-operations/versions/1.0.0/architecture.md",
+      "source_sha256": "4a9d2e6912be262cd4ac5b0041e3751ba9a817a7669e54597d442bbe4aabfe50",
+      "sha256": "db92f5e541e171b6a4939b5b16cdda076f1919d33aa05e60b3c44e780d30b487"
+    },
+    {
+      "path": "references/projects/verbier-4-vallees-skipass-operations/versions/1.0.0/audit-record.yaml",
+      "source_path": "project/catalog/projects/verbier-4-vallees-skipass-operations/versions/1.0.0/audit-record.yaml",
+      "source_sha256": "b048ea38ab71de01d9f8241e5ef13e74448e8997988c1cce909d9960f2dfcc43",
+      "sha256": "cd2242ec296bd87721ad0972da22dc2c90da1eeec447971d13aabf7671819b0c"
+    },
+    {
+      "path": "references/projects/verbier-4-vallees-skipass-operations/versions/1.0.0/terraform/README.md",
+      "source_path": "project/catalog/projects/verbier-4-vallees-skipass-operations/versions/1.0.0/terraform/README.md",
+      "source_sha256": "ed1372776b54c2dd86348a3afbcf132fafe74d983432d3981495ebe7410fb87f",
+      "sha256": "7e9195f3a70214d95b94566c09e21e404422089a4a16928a45b700197734585e"
+    },
+    {
+      "path": "references/projects/verbier-4-vallees-skipass-operations/versions/1.1.0/architecture.drawio",
+      "source_path": "project/catalog/projects/verbier-4-vallees-skipass-operations/versions/1.1.0/architecture.drawio",
+      "source_sha256": "e2bf09d843be482d1723846c60df8cc810607a96f029a4eb6e1679943829e624",
+      "sha256": "e2bf09d843be482d1723846c60df8cc810607a96f029a4eb6e1679943829e624"
+    },
+    {
+      "path": "references/projects/verbier-4-vallees-skipass-operations/versions/1.1.0/architecture.md",
+      "source_path": "project/catalog/projects/verbier-4-vallees-skipass-operations/versions/1.1.0/architecture.md",
+      "source_sha256": "29a033d929b6568b436e708f07c6c64cd7c4a49deb82fa238f7bd6fcbd3d875b",
+      "sha256": "f09e1b0141b09968443d6b64003bb81171bdef7a07b1e37e92982a4b13df509e"
+    },
+    {
+      "path": "references/projects/verbier-4-vallees-skipass-operations/versions/1.1.0/audit-record.yaml",
+      "source_path": "project/catalog/projects/verbier-4-vallees-skipass-operations/versions/1.1.0/audit-record.yaml",
+      "source_sha256": "cd5fe1f13510ca00a2ba7e38f1549edc1b6e58d3b942777bb1fd750bf5433b5e",
+      "sha256": "53747dbdc1c9ed972db75bdc31e49a0e897f0a408d36bab0ce17ad1a84132e0c"
+    },
+    {
+      "path": "references/projects/verbier-4-vallees-skipass-operations/versions/1.1.0/terraform/README.md",
+      "source_path": "project/catalog/projects/verbier-4-vallees-skipass-operations/versions/1.1.0/terraform/README.md",
+      "source_sha256": "7e865685ece2e73e95005cfb37df9458e21b69a89d4dcd70b30b62c248f1b50a",
+      "sha256": "bdc1097bdd7e96d69ed37b825d2d8de0fd4b1289640e475fc1c8a7f523e49e71"
+    },
+    {
+      "path": "references/templates/architecture.template.md",
+      "source_path": "project/catalog/templates/architecture.template.md",
+      "source_sha256": "1309645911ca985359be91b3f716d43d5036d5b78e7d14618e55a674cd3b5c49",
+      "sha256": "daca6155e9c23b9b3aaac5134d11d164bb0861afc21d12a7f440e3a0c3fb0ca5"
+    },
+    {
+      "path": "references/templates/audit-record.template.yaml",
+      "source_path": "project/catalog/templates/audit-record.template.yaml",
+      "source_sha256": "e18054bf8fd1930faa1570feead722e9782a33d358444641728dae9e8142daf5",
+      "sha256": "de49740ee6a77e3e941551320bca5a0c519870c9c7652484ee3998fd87785e6f"
+    },
+    {
+      "path": "references/templates/changelog.template.md",
+      "source_path": "project/catalog/templates/changelog.template.md",
+      "source_sha256": "1398560808d5136b20938b9d68ac8495ddbad42bf8619adfe4972d46777aa788",
+      "sha256": "043b774f8787570b9308c35d0546bfd99170f6fe91349204ef7fd64e5ccdf8c9"
+    },
+    {
+      "path": "references/templates/company-manifest.template.yaml",
+      "source_path": "project/catalog/templates/company-manifest.template.yaml",
+      "source_sha256": "b8a56e801c2b9b4b3e11692b510d72f4693ebe033307009d97291b1f78804687",
+      "sha256": "8af612231effab21ffc43e0b582f6b93cd8cec1083fe1d593b72eddd9ae6b3d8"
+    },
+    {
+      "path": "references/templates/project-brief.template.md",
+      "source_path": "project/catalog/templates/project-brief.template.md",
+      "source_sha256": "e5ed6301c95cad42ed5c2b2a750b80d78a75dae7421d5065c2a7d9f47ff14590",
+      "sha256": "51aca58dea13d94c01871022a0e50bd8302a7d61f265c5ebdb9321f4e26c4cd4"
+    },
+    {
+      "path": "references/templates/project-manifest.template.yaml",
+      "source_path": "project/catalog/templates/project-manifest.template.yaml",
+      "source_sha256": "4e7f0a2e91a7e2f2094701fc1c8ba46b66bb87beec313fcf8ea31c952670de48",
+      "sha256": "f9e3ee21159393a400e51d112148e1b28d19cb1fc8b7d940e5853e1d679804bc"
+    }
+  ]
+}
