@@ -39,6 +39,9 @@ todo el alcance del issue #19.
 - Solicitud de cambios y creación de revisiones posteriores.
 - Aprobación protegida mediante número de revisión y SHA-256.
 - Persistencia de checkpoints y artefactos.
+- Persistencia SQLite o PostgreSQL configurable para checkpoints y estado.
+- Métricas de Lead Time, Process Time, espera y ciclos de retrabajo.
+- Aceptación FinOps tipada, trazable e idempotente por revisión y artefacto.
 - Handoff de Arquitectura hacia FinOps.
 - Retorno estructurado FinOps → Arquitectura con revisiones inmutables.
 - Lectura de entregas del agente 2 fijadas a un commit del repo de proyecto.
@@ -108,6 +111,8 @@ transporte STDIO. Expone únicamente las herramientas de Arquitectura:
 | `solicitar_correccion_finops` | Reabre una entrega mediante una solicitud FinOps versionada. |
 | `aplicar_correccion_finops` | Crea una revisión nueva vinculada a la solicitud recibida. |
 | `consultar_historial_arquitectura` | Devuelve revisiones, correcciones, aprobaciones y handoffs. |
+| `consultar_metricas_arquitectura` | Devuelve tiempos medidos, espera, retrabajo y aceptación de handoffs. |
+| `registrar_aceptacion_handoff_finops` | Registra el recibo exacto devuelto por FinOps mediante Codex. |
 
 La configuración puede comprobarse con:
 
@@ -158,6 +163,7 @@ Esta carpeta contiene resultados generados, no código fuente del agente.
 | `project/backend/app/architecture/models.py` | Modelos Pydantic del contrato de entrada, recursos, módulos, ADRs, seguridad y costos. |
 | `project/backend/app/architecture/economics.py` | Contrato económico, unidades, procedencia, consumos y reglas de bloqueo. |
 | `project/backend/app/architecture/corrections.py` | Contrato versionado de correcciones solicitadas por FinOps. |
+| `project/backend/app/architecture/metrics.py` | Contrato tipado de aceptación FinOps y frontera de métricas. |
 | `project/backend/app/architecture/project_repository.py` | Contrato agente 2 → 3, lectura Git fijada a commit y publicación local versionada. |
 | `project/backend/app/architecture/state.py` | Estado serializable conservado por LangGraph. |
 | `project/backend/app/architecture/catalog.py` | Lectura y validación del repositorio de módulos baseline. |
@@ -344,7 +350,8 @@ El workflow general y el especializado ya permiten regresar de etapa 4 a etapa
 3. La solicitud identifica la revisión, recursos, dimensiones, evaluación y
 restricciones. Cada paquete modificado obtiene revisión y hash nuevos, vuelve a
 aprobación humana y produce un handoff diferente. SQLite conserva las revisiones
-anteriores sin sobrescribirlas; PostgreSQL continúa pendiente del Bloque F.
+anteriores sin sobrescribirlas. El mismo `WorkflowStore` y los checkpoints
+LangGraph admiten PostgreSQL; la prueba real requiere una base de prueba aislada.
 
 El contrato `FinOpsCorrectionRequest` 1.0 exige una referencia trazable a la
 evaluación (`finops://`, `artifact://` o `https://`), alcance afectado, cambios,
@@ -435,23 +442,35 @@ en consumidores y abrir un PR que requiera aprobación del arquitecto.
 
 ### 8. Métricas completas
 
-Se registra el límite de la etapa, pero falta instrumentar de forma completa:
+El Bloque F instrumenta y consulta:
 
-- Trabajo activo de Codex.
-- Tiempo de revisión humana.
-- Espera de aprobación.
+- Trabajo activo del agente mediante sesiones persistidas.
+- Tiempo entre solicitud y decisión humana, separado del trabajo del agente.
+- Espera sin evidencia, sin convertirla artificialmente en trabajo.
 - Retrabajo solicitado por el arquitecto o FinOps.
-- Aceptación del handoff por FinOps.
+- Entrega y aceptación exacta del handoff por FinOps.
 
 Lead Time y Process Time no deben inferirse a partir de la apertura o cierre de
 issues; deben calcularse con eventos e intervalos persistidos.
 
+`consultar_metricas_arquitectura` informa la cobertura. Los intervalos
+superpuestos se unen para evitar doble conteo y el tiempo no instrumentado se
+mantiene clasificado como espera.
+
 ### 9. PostgreSQL para el recorrido integrado
 
-El MCP dedicado utiliza SQLite para la demostración local. El issue establece
-PostgreSQL para la orquestación. Se debe ejecutar una prueba integrada con
-PostgreSQL para checkpoints, artefactos, métricas y handoffs, manteniendo SQLite
-como alternativa local cuando corresponda.
+El MCP dedicado utiliza SQLite por defecto y admite PostgreSQL con:
+
+```powershell
+$env:ARCHITECTURE_DATABASE_URL = "postgresql://usuario:clave@localhost/agente3"
+$env:ARCHITECTURE_CHECKPOINT_URL = "postgresql://usuario:clave@localhost/agente3"
+python -m app.architecture.mcp_server
+```
+
+La primera URL persiste artefactos, eventos, sesiones, métricas y handoffs; la
+segunda persiste checkpoints LangGraph. SQLite sigue siendo la alternativa local.
+Continúa pendiente ejecutar y conservar evidencia contra PostgreSQL real; una
+prueba SQLite no se presenta como evidencia PostgreSQL.
 
 ### 10. Validación de commits y procedencia
 
@@ -521,10 +540,11 @@ con referencias verificables.
 
 ### Incremento F — Métricas y PostgreSQL
 
-- Instrumentar intervalos humanos y del agente.
-- Registrar aceptación del handoff.
-- Probar recuperación, concurrencia e idempotencia con PostgreSQL.
-- Incorporar los checks a CI.
+- [x] Instrumentar intervalos humanos y del agente.
+- [x] Registrar aceptación tipada e idempotente del handoff.
+- [x] Probar recuperación después de reiniciar con SQLite.
+- [ ] Ejecutar recuperación, concurrencia e idempotencia en PostgreSQL real.
+- [ ] Incorporar la prueba PostgreSQL y los checks del agente 3 a CI (Bloque G).
 
 **Criterio de salida:** Lead Time, Process Time, espera y retrabajo consultables con
 procedencia explícita y persistencia después de reiniciar.

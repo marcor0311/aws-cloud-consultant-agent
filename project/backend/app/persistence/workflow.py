@@ -169,6 +169,17 @@ class WorkflowStore:
         except IntegrityError:
             return False
 
+    def case_events(self, case_id):
+        with self.engine.connect() as db:
+            return [
+                dict(row)
+                for row in db.execute(
+                    select(events)
+                    .where(events.c.case_id == case_id)
+                    .order_by(events.c.at, events.c.id)
+                ).mappings()
+            ]
+
     def register_project(
         self,
         case_id,
@@ -281,7 +292,7 @@ class WorkflowStore:
                 ).mappings()
             ]
 
-    def accept_handoff(self, handoff_id, actor):
+    def accept_handoff(self, handoff_id, actor, accepted_at=None):
         with self.engine.begin() as db:
             row = (
                 db.execute(select(handoffs).where(handoffs.c.id == handoff_id))
@@ -292,17 +303,18 @@ class WorkflowStore:
                 raise ValueError("La entrega no está asignada a este responsable.")
             if row["accepted_at"] is not None:
                 return dict(row)
+            acceptance_time = self.clock() if accepted_at is None else accepted_at
             db.execute(
                 update(handoffs)
                 .where(handoffs.c.id == handoff_id, handoffs.c.accepted_at.is_(None))
-                .values(accepted_at=self.clock(), accepted_by=actor)
+                .values(accepted_at=acceptance_time, accepted_by=actor)
             )
             db.execute(
                 insert(events).values(
                     id=f"accepted:{handoff_id}",
                     case_id=row["case_id"],
                     kind="handoff.accepted",
-                    at=self.clock(),
+                    at=acceptance_time,
                     payload={"handoff_id": handoff_id, "actor": actor},
                 )
             )
@@ -672,6 +684,13 @@ class WorkflowStore:
         if current and current["completed_at"] is None:
             self.put(key, "phase", dict(current, completed_at=self.clock()))
 
+    def reopen_phase(self, case_id, phase):
+        """Reopen a completed phase for traceable rework without changing its start."""
+        key = f"phase:{case_id}:{phase}"
+        current = self.get(key)
+        if current and current["completed_at"] is not None:
+            self.put(key, "phase", dict(current, completed_at=None))
+
     def stage_one_metrics(self, case_id, work):
         with self.engine.connect() as db:
             project = (
@@ -791,6 +810,7 @@ class WorkflowStore:
                     e["kind"] == "approval.decided"
                     and e["payload"].get("decision") == "revise"
                     or e["payload"].get("requires_rework", False)
+                    or e["kind"] == "architecture.finops_correction_requested"
                 )
                 for e in history
             ),

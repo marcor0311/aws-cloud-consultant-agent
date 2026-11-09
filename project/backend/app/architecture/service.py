@@ -3,7 +3,7 @@
 import base64
 import hashlib
 import json
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 from threading import RLock
 
 from app.architecture.corrections import FinOpsCorrectionRequest
@@ -14,6 +14,7 @@ from app.architecture.github_delivery import (
     GitHubPublicationPlan,
     GitHubPullRequestReceipt,
 )
+from app.architecture.metrics import FinOpsHandoffAcceptance
 from app.architecture.models import ArchitecturePackage
 from app.architecture.project_repository import ProjectRepositoryBridge
 
@@ -37,6 +38,24 @@ class ArchitectureService:
         self.github_required = github_required
         self.project_contexts = {}
         self.lock = RLock()
+
+    @contextmanager
+    def _agent_work(self, case_id, operation):
+        """Measure real execution only; human and external waits remain separate."""
+        if not self.store:
+            yield
+            return
+        session_id = self.store.start_work(
+            case_id,
+            "stage-3",
+            self.architect_id,
+            "agent",
+            issue_url=operation,
+        )
+        try:
+            yield
+        finally:
+            self.store.stop_work(session_id, self.architect_id)
 
     @staticmethod
     def thread_id(case_id):
@@ -112,6 +131,119 @@ class ArchitectureService:
             "approvals": state.get("approval_history", []),
             "handoffs": state.get("handoff_history", []),
         }
+
+    def metrics(self, case_id):
+        """Return auditable Architecture metrics without inferring missing work."""
+        if not self.store:
+            raise ValueError("Las métricas requieren persistencia.")
+        self.get(case_id)
+        stored = self.store.metrics(case_id)
+        phase = next(
+            (item for item in stored["phases"] if item["phase"] == "stage-3"),
+            None,
+        )
+        events = self.store.case_events(case_id)
+        requested = {
+            item["payload"].get("revision"): item["at"]
+            for item in events
+            if item["kind"] == "approval.requested"
+        }
+        human_decisions = []
+        for item in events:
+            if item["kind"] != "approval.decided":
+                continue
+            revision = item["payload"].get("revision")
+            start = requested.get(revision)
+            if start is not None:
+                human_decisions.append(
+                    {
+                        "revision": revision,
+                        "requested_at": start,
+                        "decided_at": item["at"],
+                        "decision": item["payload"].get("decision"),
+                        "seconds": max(0, item["at"] - start),
+                    }
+                )
+        handoffs = [
+            item
+            for item in stored["handoffs"]
+            if item["from_phase"] == "stage-3" and item["to_phase"] == "stage-4"
+        ]
+        agent_seconds = (
+            phase["recorded_effort_seconds"]["agent"] if phase else 0.0
+        )
+        human_seconds = sum(item["seconds"] for item in human_decisions)
+        lead_seconds = phase["lead_seconds"] if phase else 0.0
+        intervals = [
+            (item["requested_at"], item["decided_at"])
+            for item in human_decisions
+        ]
+        intervals.extend(
+            (item["started_at"], item["ended_at"])
+            for item in stored["sessions"]
+            if item["phase"] == "stage-3"
+            and item["actor_type"] == "agent"
+            and item["ended_at"] is not None
+        )
+        recorded_union = 0.0
+        last_end = float("-inf")
+        for start, end in sorted(intervals):
+            recorded_union += max(0, end - max(start, last_end))
+            last_end = max(last_end, end)
+        return {
+            "contract_version": "1.0",
+            "case_id": case_id,
+            "lead_time_seconds": lead_seconds,
+            "process_time_seconds": {
+                "agent": agent_seconds,
+                "human_decision": human_seconds,
+                "total_recorded_union": recorded_union,
+            },
+            "wait_time_seconds": max(0, lead_seconds - recorded_union),
+            "rework_cycles": stored["rework_cycles"],
+            "human_decisions": human_decisions,
+            "finops_handoffs": handoffs,
+            "coverage": (
+                "agent sessions and approval wall time are measured; unrecorded time "
+                "is reported as wait and is never inferred as work"
+            ),
+        }
+
+    def accept_finops_handoff(self, case_id, receipt):
+        """Persist FinOps acceptance of the exact current handoff, idempotently."""
+        if not self.store:
+            raise ValueError("La aceptación FinOps requiere persistencia.")
+        validated = FinOpsHandoffAcceptance.model_validate(receipt)
+        if validated.case_id != case_id:
+            raise ValueError("La aceptación FinOps corresponde a otro expediente.")
+        handoff = self.get_finops_handoff(case_id, validated.revision)
+        if handoff["artifact_sha256"] != validated.artifact_sha256:
+            raise ValueError("La aceptación FinOps no corresponde al artefacto vigente.")
+        handoff_id = f"{case_id}:stage-3:stage-4:v{validated.revision}"
+        persisted = self.store.handoff(handoff_id)
+        if not persisted:
+            raise ValueError("La entrega persistida a FinOps no existe.")
+        if validated.accepted_at.timestamp() < persisted["created_at"]:
+            raise ValueError("La aceptación FinOps precede a la entrega persistida.")
+        key = f"architecture-finops-acceptance:{case_id}:{validated.revision}"
+        payload = validated.model_dump(mode="json")
+        previous = self.store.get(key)
+        if previous and previous != payload:
+            raise ValueError("La revisión ya tiene otra aceptación FinOps.")
+        if not previous:
+            self.store.accept_handoff(
+                handoff_id,
+                validated.accepted_by,
+                validated.accepted_at.timestamp(),
+            )
+            self.store.put(key, "architecture_finops_acceptance", payload)
+            self.store.event(
+                f"architecture-finops-accepted:{case_id}:{validated.revision}",
+                case_id,
+                "architecture.finops_handoff_accepted",
+                payload,
+            )
+        return {"duplicate": bool(previous), "receipt": payload}
 
     def prepare_github_publication(self, case_id):
         if not self.store:
@@ -350,7 +482,7 @@ class ArchitectureService:
         guard = (
             self.store.lock(f"architecture:{case_id}") if self.store else nullcontext()
         )
-        with self.lock, guard:
+        with self.lock, guard, self._agent_work(case_id, "start"):
             context_key = f"architecture-project-context:{case_id}"
             context = (
                 self.store.get(context_key)
@@ -404,6 +536,7 @@ class ArchitectureService:
         with (
             self.lock,
             self.store.lock(f"architecture:{case_id}") if self.store else nullcontext(),
+            self._agent_work(case_id, "replace"),
         ):
             current = self.get(case_id)
             state = current["state"]
@@ -439,6 +572,7 @@ class ArchitectureService:
         with (
             self.lock,
             self.store.lock(f"architecture:{case_id}") if self.store else nullcontext(),
+            self._agent_work(case_id, "finops-correction-request"),
         ):
             current = self.get(case_id)
             state = current["state"]
@@ -507,6 +641,7 @@ class ArchitectureService:
         with (
             self.lock,
             self.store.lock(f"architecture:{case_id}") if self.store else nullcontext(),
+            self._agent_work(case_id, "finops-revision"),
         ):
             current = self.get(case_id)
             state = current["state"]
@@ -560,6 +695,7 @@ class ArchitectureService:
         with (
             self.lock,
             self.store.lock(f"architecture:{case_id}") if self.store else nullcontext(),
+            self._agent_work(case_id, "human-review-recording"),
         ):
             current = self.get(case_id)
             state = current["state"]
@@ -582,6 +718,8 @@ class ArchitectureService:
         state = self.get(case_id)["state"]
         revision = state["revision"]
         self.store.phase(case_id, "stage-3", self.architect_id)
+        if state["status"] == "finops_changes_requested":
+            self.store.reopen_phase(case_id, "stage-3")
         artifact_key = f"architecture-artifact:{case_id}:{revision}"
         artifact = {
             "case_id": case_id,

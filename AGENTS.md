@@ -33,6 +33,10 @@ Cuando el usuario solicite diseñar una arquitectura o trabajar el issue #19:
     a FinOps una revisión sujeta a GitHub hasta que el PR aprobado esté fusionado.
 12. Preparar y crear el issue FinOps únicamente después del merge. Un webhook,
     cierre de issue o merge sin revisión aprobada no constituye aprobación humana.
+13. Después de que Codex entregue el handoff al MCP de FinOps, registrar su recibo
+    exacto con `registrar_aceptacion_handoff_finops`. Consultar métricas con
+    `consultar_metricas_arquitectura`; no convertir tiempos sin evidencia en
+    trabajo humano o del agente.
 
 El servidor MCP local se llama `aws_architecture`. Si no está disponible,
 informar el problema y no sustituir sus validaciones con supuestos.

@@ -196,12 +196,28 @@ def create_server(service, runtime=None):
             return call(runtime.architecture.history, expediente_id)
 
         @server.tool()
+        def consultar_metricas_arquitectura(expediente_id: str) -> dict:
+            """Consulta tiempos medidos, espera, retrabajo y entregas a FinOps."""
+            return call(runtime.architecture.metrics, expediente_id)
+
+        @server.tool()
         def obtener_handoff_finops(expediente_id: str, revision: int) -> dict:
             """Entrega a Codex el handoff aprobado para invocar posteriormente FinOps."""
             return call(
                 runtime.architecture.get_finops_handoff,
                 expediente_id,
                 revision,
+            )
+
+        @server.tool()
+        def registrar_aceptacion_handoff_finops(
+            expediente_id: str, recibo: dict[str, Any]
+        ) -> dict:
+            """Registra la aceptación tipada devuelta por FinOps mediante Codex."""
+            return call(
+                runtime.architecture.accept_finops_handoff,
+                expediente_id,
+                recibo,
             )
 
         @server.tool()

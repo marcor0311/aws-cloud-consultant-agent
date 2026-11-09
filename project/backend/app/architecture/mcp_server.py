@@ -25,6 +25,7 @@ def create_service(
     *,
     database_url: str | None = None,
     checkpoint_path: Path | None = None,
+    checkpoint_url: str | None = None,
     baseline_root: Path = BASELINES,
 ):
     data = Path(
@@ -32,10 +33,28 @@ def create_service(
     ).resolve()
     data.mkdir(parents=True, exist_ok=True)
     resources = ExitStack()
-    store = WorkflowStore(database_url or f"sqlite:///{data / 'workflow.sqlite3'}")
+    database = database_url or os.environ.get(
+        "ARCHITECTURE_DATABASE_URL", f"sqlite:///{data / 'workflow.sqlite3'}"
+    )
+    if database.startswith("postgresql://"):
+        database = database.replace("postgresql://", "postgresql+psycopg://", 1)
+    store = WorkflowStore(database)
     resources.callback(store.engine.dispose)
+    configured_checkpoint = checkpoint_url or os.environ.get(
+        "ARCHITECTURE_CHECKPOINT_URL", ""
+    )
+    if not configured_checkpoint:
+        configured_checkpoint = (
+            str(checkpoint_path)
+            if checkpoint_path
+            else (
+                database.replace("postgresql+psycopg://", "postgresql://", 1)
+                if database.startswith("postgresql+")
+                else str(data / "checkpoints.sqlite3")
+            )
+        )
     saver = resources.enter_context(
-        open_checkpointer(str(checkpoint_path or data / "checkpoints.sqlite3"))
+        open_checkpointer(configured_checkpoint)
     )
     catalog = BaselineCatalog(baseline_root)
     service = ArchitectureService(
@@ -137,9 +156,21 @@ def create_server(service):
         return call(service.history, expediente_id)
 
     @server.tool()
+    def consultar_metricas_arquitectura(expediente_id: str) -> dict:
+        """Consulta Lead Time, Process Time, esperas, retrabajo y handoffs."""
+        return call(service.metrics, expediente_id)
+
+    @server.tool()
     def obtener_handoff_finops(expediente_id: str, revision: int) -> dict:
         """Entrega a Codex el contrato económico aprobado de la revisión vigente."""
         return call(service.get_finops_handoff, expediente_id, revision)
+
+    @server.tool()
+    def registrar_aceptacion_handoff_finops(
+        expediente_id: str, recibo: dict[str, Any]
+    ) -> dict:
+        """Registra el recibo tipado devuelto por el MCP de FinOps vía Codex."""
+        return call(service.accept_finops_handoff, expediente_id, recibo)
 
     @server.tool()
     def solicitar_correccion_finops(

@@ -137,6 +137,8 @@ def test_complete_finops_rework_cycle_preserves_history_and_handoffs(tmp_path):
     reopened = service.request_finops_correction("case-19", correction())
     assert reopened["state"]["status"] == "finops_changes_requested"
     assert reopened["state"]["revision"] == 1
+    phase = store.get("phase:case-19:stage-3")
+    assert phase["completed_at"] is None
 
     corrected = package()
     transfer = corrected["economic_contract"]["pricing_inputs"][0]["dimensions"][2]
@@ -187,6 +189,7 @@ def test_complete_finops_rework_cycle_preserves_history_and_handoffs(tmp_path):
     ]
     assert [item["revision"] for item in handoffs] == [1, 2]
     assert len(store.list("architecture_handoff")) == 2
+    assert service.metrics("case-19")["rework_cycles"] == 1
     close(connection, store)
 
 
