@@ -7,9 +7,12 @@ import pytest
 from pydantic import ValidationError
 
 from app.architecture.demo import DEFAULT_INPUT
+from app.architecture.economics import S3PricingInput
+from app.architecture.metrics import FinOpsHandoffAcceptance
 from app.architecture.models import ArchitectureFinOpsHandoff, ArchitecturePackage
 from app.architecture.service import ArchitectureService
-from app.finops.models import FinOpsEvaluationDecision
+from app.finops.calculator import PricingCalculatorPreparer
+from app.finops.models import FinOpsEvaluationDecision, FinOpsIntake
 from app.finops.service import FinOpsIntakeService
 from app.persistence.workflow import WorkflowStore
 
@@ -117,3 +120,67 @@ def test_budget_result_does_not_authorize_evaluation():
     )
     assert approved.budget_result == "within_budget"
     assert approved.decision == "approved"
+
+
+def test_calculator_preparation_preserves_s3_values_and_traceability():
+    payload = handoff_payload()
+    intake = FinOpsIntake(
+        case_id="case-finops",
+        project_id=payload["architecture"]["project_id"],
+        handoff=payload,
+        acceptance=FinOpsHandoffAcceptance(
+            case_id="case-finops",
+            revision=1,
+            artifact_sha256=payload["artifact_sha256"],
+            accepted_by="finops-agent",
+            accepted_at=datetime.now(timezone.utc),
+            finops_reference="finops://case-finops/intakes/1",
+        ),
+    )
+
+    prepared = PricingCalculatorPreparer().prepare(intake)
+
+    assert prepared.status == "partial"
+    assert prepared.architecture_sha256 == payload["artifact_sha256"]
+    s3 = next(item for item in prepared.resources if item.service_type == "s3")
+    assert s3.status == "ready"
+    assert [item.dimension_id for item in s3.dimensions] == [
+        "standard-storage",
+        "get-requests",
+        "internet-transfer",
+    ]
+    storage = s3.dimensions[0]
+    assert storage.calculator_parameter == "monthly_storage"
+    assert storage.quantity == 100
+    assert storage.unit == "GB-month"
+    assert storage.attributes == {"storage_class": "STANDARD"}
+    assert storage.source.source_reference == "REQ-001"
+    assert storage.requirement_ids == ["REQ-001"]
+    kms = next(item for item in prepared.resources if item.service_type == "kms")
+    assert kms.status == "blocked"
+    assert kms.dimensions[1].attributes == {"operation_group": "symmetric"}
+    assert all(
+        item.blocking_reason.startswith("unsupported_dimension:kms:")
+        for item in kms.dimensions
+    )
+
+
+def test_s3_missing_quantity_is_blocked_without_default_value():
+    package = ArchitecturePackage.model_validate_json(DEFAULT_INPUT.read_text("utf-8"))
+    s3_payload = package.economic_contract.pricing_inputs[0].model_dump(mode="json")
+    dimension = s3_payload["dimensions"][0]
+    dimension["quantity"] = None
+    dimension["missing_reason"] = "El cliente debe confirmar el volumen mensual."
+    dimension["source"] = {
+        "source_type": "unknown",
+        "notes": "No existe evidencia de la cantidad.",
+    }
+    s3 = S3PricingInput.model_validate(s3_payload)
+
+    prepared = PricingCalculatorPreparer().prepare_resource(s3)
+
+    missing = prepared.dimensions[0]
+    assert prepared.status == "blocked"
+    assert missing.quantity is None
+    assert missing.calculator_parameter == "monthly_storage"
+    assert missing.blocking_reason.startswith("missing_quantity:standard-storage:")

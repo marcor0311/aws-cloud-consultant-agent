@@ -74,6 +74,10 @@ no aparecen valores por defecto inventados; S3 produce pasos reproducibles.
 **Pruebas mínimas:** S3 completo, cantidad desconocida, dimensión no soportada y
 trazabilidad uno a uno.
 
+**Estado:** implementado para S3. Los demás servicios conservan todos sus datos y
+producen bloqueos explícitos por dimensión hasta incorporar un adaptador validado;
+no se generan precios, conversiones ni selectores de interfaz en este bloque.
+
 ## Bloque C — Automatización real de AWS Pricing Calculator
 
 **Objetivo:** demostrar que Codex introduce una configuración S3 conocida en la
