@@ -37,6 +37,18 @@ organización de los proyectos de consultoría:
 | [aws-cloud-consultant-baseline-modules](https://github.com/marcor0311/aws-cloud-consultant-baseline-modules) | Catálogo de módulos Terraform versionados para diseñar e implementar las arquitecturas AWS. |
 | [aws-cloud-consulting-project-template](https://github.com/marcor0311/aws-cloud-consulting-project-template) | Estructura inicial para crear un repositorio independiente por proyecto, con sus áreas numeradas. |
 
+Todos los proyectos creados desde templates conservan la convención
+`AWS Cloud Consulting Project <Compañía> <NN> <Proyecto>`. En GitHub se utiliza su
+equivalente en minúsculas, sin tildes y con guiones; por ejemplo,
+`aws-cloud-consulting-project-nike-01-lindora-run`. El número es correlativo por
+compañía y se reserva en PostgreSQL.
+
+El [agente 2, Meeting Assistant](project/agents/2.%20meeting%20assistant/README.md),
+recibe una decisión aprobada y abre el repositorio para Arquitectura. La cola,
+prioridad y comentarios de dirección se guardan en la base de datos; el issue
+uniforme presenta el encargo y su presupuesto. Para verificar el agente mediante
+LangGraph y PostgreSQL aislado sin publicar en GitHub: `make agent2-preview`.
+
 ## Contexto del sistema
 
 ![C4 nivel 1: contexto objetivo de AWS Cloud Consultant Agent](docs/c4-context.svg)
@@ -86,11 +98,3 @@ La consulta del histórico de proyectos por MCP ya está desarrollada y se utili
 El dashboard permite identificar la etapa del flujo de trabajo en la que se encuentra el agente y el equipo con el que colabora para ese proyecto.
 
 ![Vista de la oficina virtual con el agente en el área de Arquitectura](docs/live-dashboard.png)
-
-## Credenciales locales
-
-Guardar credenciales fuera del repositorio en `~/.config/aws-cloud-consultant-agent/dev/`.
-`project/.env` conserva solo configuración no sensible y la ruta a ese directorio.
-La [estructura de ejemplo](config/local-secrets.example/README.md) describe los archivos
-privados, la migración con respaldo y el contrato de producción. Los ejemplos se
-versionan con valores vacíos; los tokens y sesiones reales nunca se suben.
