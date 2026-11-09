@@ -93,6 +93,12 @@ precio inventado.
 
 **Pruebas mínimas:** recorrido real S3 y una entrada inválida o incompleta.
 
+**Estado:** validado el 9 de noviembre de 2026 mediante una sesión aislada del
+navegador integrado de Codex. AWS Pricing Calculator confirmó S3 Standard en
+`us-east-1` con 100 GB/mes, 100 000 solicitudes GET/mes y 10 GB/mes a Internet.
+La evidencia oficial exportada y su contrato tipado están en
+`docs/evidence/agent4/block-c-s3/`.
+
 ## Bloque D — Análisis económico y presupuestario
 
 **Objetivo:** interpretar resultados verificados y calcular indicadores

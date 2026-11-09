@@ -1,7 +1,11 @@
 """Focused integration journey for the FinOps intake boundary."""
 
+import hashlib
+import json
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -12,6 +16,7 @@ from app.architecture.metrics import FinOpsHandoffAcceptance
 from app.architecture.models import ArchitectureFinOpsHandoff, ArchitecturePackage
 from app.architecture.service import ArchitectureService
 from app.finops.calculator import PricingCalculatorPreparer
+from app.finops.evidence import S3ExportEvidenceBuilder
 from app.finops.models import FinOpsEvaluationDecision, FinOpsIntake
 from app.finops.service import FinOpsIntakeService
 from app.persistence.workflow import WorkflowStore
@@ -184,3 +189,67 @@ def test_s3_missing_quantity_is_blocked_without_default_value():
     assert missing.quantity is None
     assert missing.calculator_parameter == "monthly_storage"
     assert missing.blocking_reason.startswith("missing_quantity:standard-storage:")
+
+
+def test_real_s3_export_matches_the_prepared_calculator_input():
+    payload = handoff_payload()
+    intake = FinOpsIntake(
+        case_id="block-c-s3",
+        project_id=payload["architecture"]["project_id"],
+        handoff=payload,
+        acceptance=FinOpsHandoffAcceptance(
+            case_id="block-c-s3",
+            revision=1,
+            artifact_sha256=payload["artifact_sha256"],
+            accepted_by="finops-agent",
+            accepted_at="2026-11-09T00:50:02-06:00",
+            finops_reference="finops://block-c-s3/intakes/1",
+        ),
+    )
+    preparation = PricingCalculatorPreparer().prepare(intake)
+    export_path = (
+        Path(__file__).resolve().parents[4]
+        / "docs/evidence/agent4/block-c-s3/aws-pricing-calculator-export.json"
+    )
+    raw = export_path.read_bytes()
+
+    evidence = S3ExportEvidenceBuilder().build(
+        preparation,
+        "documents",
+        json.loads(raw),
+        {
+            "artifact_type": "export_json",
+            "path": "docs/evidence/agent4/block-c-s3/"
+            "aws-pricing-calculator-export.json",
+            "media_type": "application/json",
+            "sha256": hashlib.sha256(raw).hexdigest(),
+        },
+        datetime(2026, 11, 9, 0, 50, 2, tzinfo=timezone(timedelta(hours=-6))),
+    )
+
+    assert evidence.status == "verified"
+    assert evidence.monthly_cost == Decimal("3.24")
+    assert evidence.currency == "USD"
+    assert evidence.region == "us-east-1"
+    assert evidence.estimate_url.endswith("bad2a0531379cb5d5aec0c4b36c820b57532c8bd")
+    assert {item.dimension_id for item in evidence.parameters} == {
+        "standard-storage",
+        "get-requests",
+        "internet-transfer",
+    }
+
+    changed_ui = deepcopy(json.loads(raw))
+    changed_ui["Groups"]["Services"][0]["Properties"][
+        "S3 Standard storage"
+    ] = "100 TB per month"
+    partial = S3ExportEvidenceBuilder().build(
+        preparation,
+        "documents",
+        changed_ui,
+        evidence.artifacts[0],
+        evidence.executed_at,
+    )
+    assert partial.status == "partial"
+    assert partial.unrepresentable_parameters[0].startswith(
+        "ui_mismatch:standard-storage:"
+    )

@@ -1,0 +1,60 @@
+{
+  "contract_version": "1.0",
+  "execution_id": "pricing-f4695d9248fcc8ecbf7f94e07bda1069010839f5bf499184d7051412c4443dda",
+  "case_id": "block-c-s3",
+  "project_id": "documentos-demo",
+  "architecture_revision": 1,
+  "architecture_sha256": "792b54259f7360106f532e17db90c9da12a50a38ca73de3326dbbcb601a3c74a",
+  "resource_id": "documents",
+  "service_type": "s3",
+  "aws_service": "Amazon S3",
+  "region": "us-east-1",
+  "parameters": [
+    {
+      "dimension_id": "standard-storage",
+      "calculator_parameter": "monthly_storage",
+      "planned_quantity": "100",
+      "unit": "GB-month",
+      "attributes": {
+        "storage_class": "STANDARD"
+      },
+      "verified_display": "100 GB per month"
+    },
+    {
+      "dimension_id": "get-requests",
+      "calculator_parameter": "monthly_requests",
+      "planned_quantity": "100000",
+      "unit": "requests/month",
+      "attributes": {
+        "operation": "GET"
+      },
+      "verified_display": "100000"
+    },
+    {
+      "dimension_id": "internet-transfer",
+      "calculator_parameter": "monthly_data_transfer_out",
+      "planned_quantity": "10",
+      "unit": "GB/month",
+      "attributes": {
+        "destination": "internet"
+      },
+      "verified_display": "10 GB per month"
+    }
+  ],
+  "monthly_cost": "3.24",
+  "currency": "USD",
+  "executed_at": "2026-11-09T00:50:02-06:00",
+  "estimate_url": "https://calculator.aws/#/estimate?id=bad2a0531379cb5d5aec0c4b36c820b57532c8bd",
+  "artifacts": [
+    {
+      "artifact_type": "export_json",
+      "path": "docs/evidence/agent4/block-c-s3/aws-pricing-calculator-export.json",
+      "media_type": "application/json",
+      "sha256": "f583d2348512d253d67baad7a628de8cf213454c9e66d49c29e8e47ef2c96fa0"
+    }
+  ],
+  "unrepresentable_parameters": [],
+  "status": "verified",
+  "provenance": "aws_pricing_calculator",
+  "automation": "codex_iab_playwright"
+}
