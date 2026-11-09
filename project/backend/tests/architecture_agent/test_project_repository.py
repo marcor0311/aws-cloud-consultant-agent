@@ -466,3 +466,88 @@ def test_real_agent_2_delivery_rejects_false_signature_claim():
 
     with pytest.raises(ValidationError, match="no declara verificadas"):
         BoardRecord.model_validate(board)
+
+
+def test_codex_github_boundary_requires_exact_pr_before_finops(tmp_path):
+    repo = tmp_path / "project"
+    repo.mkdir()
+    commit, inputs = project_repository(repo)
+    connection, store, service = service_at(tmp_path / "state")
+    service.github_required = True
+    context = service.read_project_handoff(handoff(repo, commit, inputs))
+    package = json.loads(DEFAULT_INPUT.read_text(encoding="utf-8"))
+    package["source_issue"] = context["architecture_issue_url"]
+    package["requirements"][0]["source"] = "docs/01-discovery/requirements.md"
+    started = service.start("project-case", commit, package)["state"]
+    service.review("project-case", 1, started["artifact_sha256"], "approve")
+
+    with pytest.raises(ValueError, match="espera aprobación"):
+        service.get_finops_handoff("project-case", 1)
+
+    publication = service.prepare_github_publication("project-case")
+    plan = publication["plan"]
+    receipt = {
+        "contract_version": "1.0",
+        "plan_sha256": publication["plan_sha256"],
+        "repository_url": plan["repository_url"],
+        "branch": plan["branch"],
+        "base_branch": plan["base_branch"],
+        "base_commit": plan["base_commit"],
+        "commit_sha": "a" * 40,
+        "files": [
+            {"path": item["path"], "sha256": item["sha256"]}
+            for item in plan["files"]
+        ],
+        "pull_request_number": 7,
+        "pull_request_url": "https://github.com/example/documentos-demo/pull/7",
+        "state": "open",
+        "created_at": "2026-11-08T18:00:00-06:00",
+    }
+    tampered = deepcopy(receipt)
+    tampered["files"][0]["sha256"] = "0" * 64
+    with pytest.raises(ValueError, match="no contiene los artefactos"):
+        service.register_github_pull_request("project-case", tampered)
+
+    registered = service.register_github_pull_request("project-case", receipt)
+    assert registered["duplicate"] is False
+    assert service.register_github_pull_request("project-case", receipt)[
+        "duplicate"
+    ] is True
+    approval = {
+        "contract_version": "1.0",
+        "plan_sha256": publication["plan_sha256"],
+        "pull_request_url": receipt["pull_request_url"],
+        "head_sha": receipt["commit_sha"],
+        "decision": "approved",
+        "reviewer": "cloud-architect",
+        "review_id": "review-7",
+        "reviewed_at": "2026-11-08T18:10:00-06:00",
+        "merge_commit_sha": "b" * 40,
+        "source_issue_url": plan["source_issue_url"],
+        "source_issue_state": "closed",
+        "source_issue_closed_at": "2026-11-08T18:12:00-06:00",
+    }
+    assert service.register_github_approval("project-case", approval)[
+        "duplicate"
+    ] is False
+    assert service.get_finops_handoff("project-case", 1)["revision"] == 1
+
+    draft = service.prepare_finops_issue("project-case", "finops-owner")
+    assert approval["pull_request_url"] in draft["body"]
+    issue_receipt = {
+        "contract_version": "1.0",
+        "plan_sha256": draft["plan_sha256"],
+        "issue_url": "https://github.com/example/documentos-demo/issues/8",
+        "issue_number": 8,
+        "created_at": "2026-11-08T18:15:00-06:00",
+        "body_sha256": draft["body_sha256"],
+        "assignees": ["finops-owner"],
+    }
+    assert service.register_finops_issue("project-case", issue_receipt)[
+        "duplicate"
+    ] is False
+    assert service.register_finops_issue("project-case", issue_receipt)[
+        "duplicate"
+    ] is True
+    store.engine.dispose()
+    connection.close()

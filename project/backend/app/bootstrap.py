@@ -100,6 +100,7 @@ def create_runtime(
             store,
             process,
             architect_id="cloud-solutions-architect",
+            github_required=True,
         )
         service = PreparationService(
             LangGraphExecution(build_graph(saver, references.search, drafter, store)),

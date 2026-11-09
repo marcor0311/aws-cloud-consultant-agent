@@ -98,6 +98,11 @@ transporte STDIO. Expone únicamente las herramientas de Arquitectura:
 | `iniciar_arquitectura` | Valida y persiste la primera propuesta de un expediente. |
 | `consultar_arquitectura` | Devuelve el estado, revisión, paquete y decisión pendiente. |
 | `obtener_handoff_finops` | Devuelve a Codex únicamente el handoff vigente, aprobado y listo. |
+| `preparar_publicacion_github` | Entrega a Codex el plan inmutable de rama, commit, archivos y PR. |
+| `registrar_pull_request_github` | Valida y conserva el recibo devuelto por GitHub MCP. |
+| `registrar_aprobacion_pr_github` | Valida aprobación, `head_sha` y merge commit exactos. |
+| `preparar_issue_finops` | Construye el issue FinOps desde el handoff aprobado. |
+| `registrar_issue_finops_github` | Conserva el recibo del issue creado por GitHub MCP. |
 | `corregir_arquitectura` | Crea una revisión completa después de cambios solicitados. |
 | `revisar_arquitectura` | Registra `approve` o `revise` para la revisión y SHA-256 exactos. |
 | `solicitar_correccion_finops` | Reabre una entrega mediante una solicitud FinOps versionada. |
@@ -398,21 +403,29 @@ La prueba de integración local utiliza como referencia
 `aws-cloud-consulting-project-nike-01-lindora-run`, pero el contrato no contiene
 nombres de Nike ni nombres fijos de actas o evidencias.
 
-### 6. Integración con GitHub MCP
+### 6. Integración con GitHub MCP — frontera local implementada
 
-Falta implementar el recorrido documentado en el issue:
+Codex, no el agente 3, ejecuta GitHub MCP. El agente 3 produce un plan inmutable
+con repositorio, commit base, rama determinista, archivos con SHA-256, mensaje de
+commit y contenido del PR. Después valida y persiste los recibos que Codex obtiene
+de GitHub MCP.
 
-- Leer el issue asignado y los insumos anteriores.
-- Crear una rama de trabajo autorizada.
-- Publicar documentos de Arquitectura.
-- Crear un PR y solicitar revisión del arquitecto.
-- Comprobar la aprobación real del PR.
-- Cerrar el issue de Arquitectura.
-- Crear y asignar el issue de FinOps con commit, módulos, región, recursos,
-  presupuesto, supuestos y referencias anteriores.
+En modo GitHub obligatorio, el handoff FinOps no se libera hasta registrar:
 
-Los webhooks y un issue cerrado deben utilizarse como evidencia, no como aprobación
-humana implícita.
+- El commit con exactamente todos los archivos y hashes planificados.
+- El PR abierto sobre `main` y el commit base esperado.
+- La aprobación del `head_sha` exacto.
+- El merge commit resultante.
+
+Solo entonces se prepara el issue FinOps con PR, merge commit, región, recursos,
+módulos, revisión, hash y handoff tipado. Los reintentos idénticos son idempotentes
+y un recibo diferente para la misma revisión se rechaza.
+
+Continúa pendiente la demostración remota mediante un GitHub MCP conectado y
+autorizado: crear realmente rama, commit, PR e issue, consultar la revisión y
+registrar sus recibos. También falta el flujo separado para solicitar cambios en
+el repositorio baseline cuando no exista un módulo. Los webhooks y un issue
+cerrado siguen siendo evidencia; nunca aprueban automáticamente una etapa.
 
 ### 7. Modificaciones del catálogo baseline
 

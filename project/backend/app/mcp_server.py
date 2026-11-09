@@ -121,6 +121,55 @@ def create_server(service, runtime=None):
             return call(runtime.architecture.publish_to_project, expediente_id)
 
         @server.tool()
+        def preparar_publicacion_github(expediente_id: str) -> dict:
+            """Prepara rama, archivos y PR para ejecución externa mediante GitHub MCP."""
+            return call(runtime.architecture.prepare_github_publication, expediente_id)
+
+        @server.tool()
+        def registrar_pull_request_github(
+            expediente_id: str, recibo: dict[str, Any]
+        ) -> dict:
+            """Registra el commit y PR creados por Codex mediante GitHub MCP."""
+            return call(
+                runtime.architecture.register_github_pull_request,
+                expediente_id,
+                recibo,
+            )
+
+        @server.tool()
+        def registrar_aprobacion_pr_github(
+            expediente_id: str, recibo: dict[str, Any]
+        ) -> dict:
+            """Registra la aprobación y merge exactos del PR de Arquitectura."""
+            return call(
+                runtime.architecture.register_github_approval,
+                expediente_id,
+                recibo,
+            )
+
+        @server.tool()
+        def preparar_issue_finops(
+            expediente_id: str, responsable_github: str
+        ) -> dict:
+            """Prepara el issue FinOps después del merge aprobado."""
+            return call(
+                runtime.architecture.prepare_finops_issue,
+                expediente_id,
+                responsable_github,
+            )
+
+        @server.tool()
+        def registrar_issue_finops_github(
+            expediente_id: str, recibo: dict[str, Any]
+        ) -> dict:
+            """Registra el issue FinOps creado externamente por Codex."""
+            return call(
+                runtime.architecture.register_finops_issue,
+                expediente_id,
+                recibo,
+            )
+
+        @server.tool()
         def iniciar_arquitectura(
             expediente_id: str, entrada_id: str, propuesta: dict[str, Any]
         ) -> dict:

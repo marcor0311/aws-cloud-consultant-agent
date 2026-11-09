@@ -43,6 +43,7 @@ def create_service(
         catalog,
         store,
         architect_id="codex-cloud-architect",
+        github_required=True,
     )
     return service, resources
 
@@ -79,6 +80,35 @@ def create_server(service):
     def publicar_arquitectura_local(expediente_id: str) -> dict:
         """Publica la revisión aprobada bajo docs/03-architecture sin hacer commit."""
         return call(service.publish_to_project, expediente_id)
+
+    @server.tool()
+    def preparar_publicacion_github(expediente_id: str) -> dict:
+        """Prepara archivos, rama y PR para que Codex invoque GitHub MCP."""
+        return call(service.prepare_github_publication, expediente_id)
+
+    @server.tool()
+    def registrar_pull_request_github(expediente_id: str, recibo: dict[str, Any]) -> dict:
+        """Registra el commit y PR creados externamente por Codex mediante GitHub MCP."""
+        return call(service.register_github_pull_request, expediente_id, recibo)
+
+    @server.tool()
+    def registrar_aprobacion_pr_github(
+        expediente_id: str, recibo: dict[str, Any]
+    ) -> dict:
+        """Registra aprobación y merge del PR y libera el handoff vigente."""
+        return call(service.register_github_approval, expediente_id, recibo)
+
+    @server.tool()
+    def preparar_issue_finops(expediente_id: str, responsable_github: str) -> dict:
+        """Prepara el issue FinOps después de la aprobación y merge de Arquitectura."""
+        return call(service.prepare_finops_issue, expediente_id, responsable_github)
+
+    @server.tool()
+    def registrar_issue_finops_github(
+        expediente_id: str, recibo: dict[str, Any]
+    ) -> dict:
+        """Registra el issue FinOps creado externamente mediante GitHub MCP."""
+        return call(service.register_finops_issue, expediente_id, recibo)
 
     @server.tool()
     def iniciar_arquitectura(

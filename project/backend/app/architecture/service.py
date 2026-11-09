@@ -1,5 +1,6 @@
 """Application service for architecture revisions and handoff to FinOps."""
 
+import base64
 import hashlib
 import json
 from contextlib import nullcontext
@@ -7,6 +8,12 @@ from threading import RLock
 
 from app.architecture.corrections import FinOpsCorrectionRequest
 from app.architecture.diagram_renderer import AwsDacRenderer
+from app.architecture.github_delivery import (
+    GitHubApprovalReceipt,
+    GitHubFinOpsIssueReceipt,
+    GitHubPublicationPlan,
+    GitHubPullRequestReceipt,
+)
 from app.architecture.models import ArchitecturePackage
 from app.architecture.project_repository import ProjectRepositoryBridge
 
@@ -21,11 +28,13 @@ class ArchitectureService:
         architect_id="architect",
         project_repository=None,
         diagram_renderer=None,
+        github_required=False,
     ):
         self.graph, self.catalog, self.store = graph, catalog, store
         self.process, self.architect_id = process, architect_id
         self.project_repository = project_repository or ProjectRepositoryBridge()
         self.diagram_renderer = diagram_renderer or AwsDacRenderer()
+        self.github_required = github_required
         self.project_contexts = {}
         self.lock = RLock()
 
@@ -104,6 +113,212 @@ class ArchitectureService:
             "handoffs": state.get("handoff_history", []),
         }
 
+    def prepare_github_publication(self, case_id):
+        if not self.store:
+            raise ValueError("La publicación GitHub requiere persistencia.")
+        state = self.get(case_id)["state"]
+        if state.get("status") != "ready_for_finops":
+            raise ValueError("Solo una arquitectura aprobada puede preparar su PR.")
+        context = self.store.get(f"architecture-project-context:{case_id}")
+        if not context:
+            raise ValueError("Falta la entrega validada del repositorio del proyecto.")
+        revision = state["revision"]
+        documents = dict(state["documents"])
+        if state["package"].get("schema_version") == "1.2":
+            source = documents.get("architecture.aws-dac.yaml")
+            if not source:
+                raise ValueError("La revisión 1.2 no contiene el YAML de diagrama.")
+            documents["architecture.png"] = self.diagram_renderer.render_bytes(source)
+        manifest = {
+            "contract_version": "1.0",
+            "revision": revision,
+            "files": [
+                {
+                    "path": name,
+                    "sha256": hashlib.sha256(
+                        content.encode("utf-8")
+                        if isinstance(content, str)
+                        else content
+                    ).hexdigest(),
+                }
+                for name, content in sorted(documents.items())
+            ],
+        }
+        documents["manifest.json"] = json.dumps(manifest, indent=2) + "\n"
+        prefix = f"docs/03-architecture/versions/v{revision:03d}"
+        files = []
+        for name, content in sorted(documents.items()):
+            raw = content.encode("utf-8") if isinstance(content, str) else content
+            files.append(
+                {
+                    "path": f"{prefix}/{name}",
+                    "encoding": "utf-8" if isinstance(content, str) else "base64",
+                    "content": (
+                        content
+                        if isinstance(content, str)
+                        else base64.b64encode(content).decode("ascii")
+                    ),
+                    "sha256": hashlib.sha256(raw).hexdigest(),
+                }
+            )
+        package = ArchitecturePackage.model_validate(state["package"])
+        plan = GitHubPublicationPlan(
+            case_id=case_id,
+            project_id=package.project_id,
+            revision=revision,
+            artifact_sha256=state["artifact_sha256"],
+            repository_url=context["repository_url"].removesuffix(".git"),
+            source_issue_url=context["architecture_issue_url"],
+            base_commit=context["source_commit"],
+            branch=f"agent3/{package.project_id}/architecture-v{revision:03d}",
+            commit_message=f"docs(architecture): publish revision {revision}",
+            pull_request_title=f"[Arquitectura] {package.project_id} v{revision:03d}",
+            pull_request_body=(
+                f"Publica la revisión {revision} de Arquitectura.\n\n"
+                f"Issue de origen: {package.source_issue}\n\n"
+                f"SHA-256 del artefacto: `{state['artifact_sha256']}`\n\n"
+                "Requiere aprobación humana explícita; cerrar el PR no sustituye la revisión."
+            ),
+            files=files,
+        ).model_dump(mode="json")
+        plan_sha256 = self.digest(plan)
+        record = {"plan_sha256": plan_sha256, "plan": plan}
+        key = f"architecture-github-plan:{case_id}:{revision}"
+        previous = self.store.get(key)
+        if previous and previous != record:
+            raise ValueError("El plan GitHub de la revisión es inmutable.")
+        if not previous:
+            self.store.put(key, "architecture_github_plan", record)
+        return record
+
+    def register_github_pull_request(self, case_id, receipt):
+        validated = GitHubPullRequestReceipt.model_validate(receipt)
+        plan_record = self.store.get(
+            f"architecture-github-plan:{case_id}:{self.get(case_id)['state']['revision']}"
+        )
+        if not plan_record or validated.plan_sha256 != plan_record["plan_sha256"]:
+            raise ValueError("El recibo no corresponde al plan GitHub vigente.")
+        plan = plan_record["plan"]
+        if (
+            validated.repository_url != plan["repository_url"]
+            or validated.branch != plan["branch"]
+            or validated.base_branch != plan["base_branch"]
+            or validated.base_commit != plan["base_commit"]
+            or not validated.pull_request_url.startswith(plan["repository_url"] + "/pull/")
+        ):
+            raise ValueError("El PR no corresponde al repositorio y rama planificados.")
+        expected_files = {item["path"]: item["sha256"] for item in plan["files"]}
+        actual_files = {item.get("path"): item.get("sha256") for item in validated.files}
+        if actual_files != expected_files:
+            raise ValueError("El commit del PR no contiene los artefactos aprobados.")
+        key = f"architecture-github-pr:{case_id}:{plan['revision']}"
+        payload = validated.model_dump(mode="json")
+        previous = self.store.get(key)
+        if previous and previous != payload:
+            raise ValueError("La revisión ya tiene otro PR registrado.")
+        if not previous:
+            self.store.put(key, "architecture_github_pr", payload)
+        return {"duplicate": bool(previous), "receipt": payload}
+
+    def register_github_approval(self, case_id, receipt):
+        validated = GitHubApprovalReceipt.model_validate(receipt)
+        revision = self.get(case_id)["state"]["revision"]
+        plan = self.store.get(f"architecture-github-plan:{case_id}:{revision}")
+        pr = self.store.get(f"architecture-github-pr:{case_id}:{revision}")
+        if not plan or not pr:
+            raise ValueError("Primero se debe registrar el PR de Arquitectura.")
+        if (
+            validated.plan_sha256 != plan["plan_sha256"]
+            or validated.pull_request_url != pr["pull_request_url"]
+            or validated.head_sha != pr["commit_sha"]
+            or validated.source_issue_url != plan["plan"]["source_issue_url"]
+        ):
+            raise ValueError("La aprobación no corresponde al PR y commit exactos.")
+        key = f"architecture-github-approval:{case_id}:{revision}"
+        payload = validated.model_dump(mode="json")
+        previous = self.store.get(key)
+        if previous and previous != payload:
+            raise ValueError("La revisión ya tiene otra aprobación GitHub.")
+        if not previous:
+            self.store.put(key, "architecture_github_approval", payload)
+        self._sync(case_id)
+        return {"duplicate": bool(previous), "receipt": payload}
+
+    def prepare_finops_issue(self, case_id, assignee):
+        if not isinstance(assignee, str) or not assignee.strip():
+            raise ValueError("Indicar el usuario GitHub responsable de FinOps.")
+        state = self.get(case_id)["state"]
+        revision = state["revision"]
+        approval = self.store.get(f"architecture-github-approval:{case_id}:{revision}")
+        plan = self.store.get(f"architecture-github-plan:{case_id}:{revision}")
+        if not approval or not plan:
+            raise ValueError("El PR de Arquitectura todavía no está aprobado y fusionado.")
+        package = state["package"]
+        handoff = self.get_finops_handoff(case_id, revision)
+        budget = package["economic_contract"]["budget"]
+        assumptions = "; ".join(
+            f"{item['resource_id']}: {', '.join(item['sizing_assumptions'])}"
+            for item in package["resources"]
+        )
+        body = (
+            f"Arquitectura aprobada: {approval['pull_request_url']}\n\n"
+            f"Merge commit: `{approval['merge_commit_sha']}`\n\n"
+            f"Región: `{package['region']}`\n\n"
+            f"Recursos: {', '.join(item['resource_id'] for item in package['resources'])}\n\n"
+            f"Módulos: {', '.join(item['module_id'] for item in package['baselines']) or 'ninguno'}\n\n"
+            f"Presupuesto: {budget['status']}"
+            + (
+                f" {budget['amount']} {budget['currency']} por {budget['period']}"
+                if budget["status"] == "known"
+                else ""
+            )
+            + "\n\n"
+            f"Supuestos: {assumptions}\n\n"
+            f"Revisión: {revision}; artefacto: `{state['artifact_sha256']}`."
+        )
+        draft = {
+            "contract_version": "1.0",
+            "plan_sha256": plan["plan_sha256"],
+            "repository_url": plan["plan"]["repository_url"],
+            "title": f"[FinOps] {package['project_id']} arquitectura v{revision:03d}",
+            "body": body,
+            "body_sha256": hashlib.sha256(body.encode()).hexdigest(),
+            "labels": ["finops", "architecture-approved"],
+            "assignees": [assignee.strip()],
+            "handoff": handoff,
+        }
+        key = f"architecture-finops-issue-draft:{case_id}:{revision}"
+        previous = self.store.get(key)
+        if previous and previous != draft:
+            raise ValueError("El borrador FinOps de la revisión es inmutable.")
+        if not previous:
+            self.store.put(key, "architecture_finops_issue_draft", draft)
+        return draft
+
+    def register_finops_issue(self, case_id, receipt):
+        validated = GitHubFinOpsIssueReceipt.model_validate(receipt)
+        revision = self.get(case_id)["state"]["revision"]
+        draft = self.store.get(
+            f"architecture-finops-issue-draft:{case_id}:{revision}"
+        )
+        if not draft:
+            raise ValueError("Primero se debe preparar el issue FinOps.")
+        if (
+            validated.plan_sha256 != draft["plan_sha256"]
+            or validated.body_sha256 != draft["body_sha256"]
+            or not validated.issue_url.startswith(draft["repository_url"] + "/issues/")
+            or validated.assignees != draft["assignees"]
+        ):
+            raise ValueError("El issue FinOps no corresponde al borrador aprobado.")
+        key = f"architecture-finops-issue:{case_id}:{revision}"
+        payload = validated.model_dump(mode="json")
+        previous = self.store.get(key)
+        if previous and previous != payload:
+            raise ValueError("La revisión ya tiene otro issue FinOps.")
+        if not previous:
+            self.store.put(key, "architecture_finops_issue", payload)
+        return {"duplicate": bool(previous), "receipt": payload}
+
     def get_finops_handoff(self, case_id, revision):
         state = self.get(case_id)["state"]
         handoff = next(
@@ -120,6 +335,12 @@ class ArchitectureService:
             raise ValueError("Solo se entrega la revisión vigente aprobada.")
         if handoff["handoff_status"] != "ready":
             raise ValueError("El handoff tiene insumos económicos pendientes.")
+        if self.github_required and self.store:
+            approval = self.store.get(
+                f"architecture-github-approval:{case_id}:{revision}"
+            )
+            if not approval:
+                raise ValueError("El handoff espera aprobación y merge del PR GitHub.")
         return handoff
 
     def start(self, case_id, input_id, package):
@@ -411,6 +632,10 @@ class ArchitectureService:
                 {"actor": self.architect_id, "revision": revision},
             )
         if state["status"] == "ready_for_finops":
+            if self.github_required and not self.store.get(
+                f"architecture-github-approval:{case_id}:{revision}"
+            ):
+                return
             self.store.complete_phase(case_id, "stage-3")
             self.store.create_handoff(
                 f"{case_id}:stage-3:stage-4:v{revision}",
