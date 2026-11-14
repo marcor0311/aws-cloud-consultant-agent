@@ -10,6 +10,7 @@ from datetime import datetime
 
 from app.integrations.errors import ConfigurationError, ProviderError
 from app.persistence.locking import Busy
+from app.project_opening.decisions import BoardDecisionBlocked
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ class WorkflowRuntime:
         *,
         store,
         process,
+        board_rejections,
         service,
         google,
         notifier,
@@ -40,6 +42,7 @@ class WorkflowRuntime:
     ):
         self.settings, self.store = settings, store
         self.process, self.service = process, service
+        self.board_rejections = board_rejections
         self.google, self.notifier, self.drafter = google, notifier, drafter
         self.search, self.read_reference = references.search, references.read_reference
         self.worker_lock, self.stack = worker_lock, resources
@@ -408,6 +411,10 @@ class WorkflowRuntime:
                 process_capture(self, job["payload"], job["id"])
             elif job["kind"] == "process_event":
                 self.process.apply(job["payload"]["case_id"], job["payload"]["event"])
+            elif job["kind"] == "board_rejection":
+                receipt = self.board_rejections.deliver(job["payload"])
+                self.store.finish_job(job["id"], receipt=receipt)
+                return True
             elif job["kind"] == "preparation_command":
                 self._preparation_command(job["payload"])
             elif job["kind"] == "renew":
@@ -433,6 +440,13 @@ class WorkflowRuntime:
             else:
                 raise ValueError("Tipo de tarea desconocido.")
             self.store.finish_job(job["id"])
+        except BoardDecisionBlocked as error:
+            self.store.finish_job(
+                job["id"],
+                status="failed",
+                error=str(error)[:120],
+                receipt={"status": "blocked", "reason": str(error)},
+            )
         except ConfigurationError as error:
             self.store.finish_job(job["id"], status="failed", error=str(error))
         except ProviderError as error:

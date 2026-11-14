@@ -8,6 +8,10 @@ from app.persistence.locking import Busy
 from app.project_opening.board import digest
 
 
+def rejection_key(ballot):
+    return f"board-rejection:{ballot['id']}:{ballot['certificate']['digest']}"
+
+
 class BoardRepository:
     def __init__(self, store):
         self.store = store
@@ -78,7 +82,26 @@ class BoardRepository:
             raise ValueError(
                 "Un acta cerrada no se modifica; requiere nueva convocatoria."
             )
-        self.store.put("board-ballot:" + ballot["id"], "board-ballot", ballot)
+        with self.store.engine.begin() as db:
+            self.store.put_in(
+                db, "board-ballot:" + ballot["id"], "board-ballot", ballot
+            )
+            if (
+                not previous.get("certificate")
+                and ballot.get("certificate")
+                and ballot["status"] == "not_approved"
+            ):
+                self.store.receive_in(
+                    db,
+                    rejection_key(ballot),
+                    "board_rejection",
+                    {
+                        "case_id": ballot["case_id"],
+                        "ballot_id": ballot["id"],
+                        "certificate_sha256": ballot["certificate"]["digest"],
+                    },
+                    case_id=ballot["case_id"],
+                )
         self._sync_handoffs(ballot)
         if ballot.get("certificate"):
             self.store.event(

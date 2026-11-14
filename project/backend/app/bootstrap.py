@@ -11,12 +11,15 @@ from app.integrations.google_workspace import GoogleWorkspace
 from app.integrations.langgraph import LangGraphExecution
 from app.integrations.slack import SlackNotifier
 from app.notifications.provider import EnvironmentMailer
+from app.persistence.board_votes import BoardRepository
 from app.persistence.checkpoints import open_checkpointer
 from app.persistence.locking import LocalWorkerLock
+from app.persistence.project_opening import ProjectOpeningRepository
 from app.persistence.workflow import WorkflowStore
 from app.preparation.graph import build_graph
 from app.preparation.references import REFERENCE_DIR, ReferenceCatalog
 from app.preparation.service import PreparationService
+from app.project_opening.decisions import BoardRejectionDelivery
 from app.verification.repository import SQLiteVerificationRepository
 from app.verification.service import CalendarAccessService
 from app.workflow.graph import build_process_graph
@@ -225,6 +228,9 @@ def create_runtime(
             settings,
             store=store,
             process=process,
+            board_rejections=BoardRejectionDelivery(
+                BoardRepository(store), ProjectOpeningRepository(store), process
+            ),
             service=service,
             google=google,
             notifier=notifier,

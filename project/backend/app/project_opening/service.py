@@ -49,6 +49,8 @@ class OpeningService:
 
     def preflight(self, case_id):
         record = self.get(case_id)
+        if record["status"] == "declined":
+            raise ValueError("El proyecto fue rechazado en Dirección.")
         self.repository.validate_preparation(record)
         self.validate_files(
             OpeningRequest.model_validate(
@@ -78,6 +80,8 @@ class OpeningService:
     def run(self, case_id):
         with self.repository.lock(case_id):
             record = self.get(case_id)
+            if record["status"] == "declined":
+                raise ValueError("El proyecto fue rechazado en Dirección.")
             self.repository.validate_preparation(record)
             self.validate_files(
                 OpeningRequest.model_validate(
@@ -114,5 +118,7 @@ class OpeningService:
             return self.get(case_id)
 
     def run_next(self):
-        pending = [r for r in self.queue() if r["status"] != "delivered"]
+        pending = [
+            r for r in self.queue() if r["status"] not in {"delivered", "declined"}
+        ]
         return self.run(pending[0]["case_id"]) if pending else {"status": "idle"}

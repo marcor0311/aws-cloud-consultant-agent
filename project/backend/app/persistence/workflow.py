@@ -416,25 +416,33 @@ class WorkflowStore:
         # ACK only after both the event and its pending job commit.
         try:
             with self.engine.begin() as db:
-                db.execute(
-                    insert(events).values(
-                        id=event_id, kind=kind, at=self.clock(), payload=payload
-                    )
-                )
-                db.execute(
-                    insert(jobs).values(
-                        id=event_id,
-                        kind=kind,
-                        payload=payload,
-                        status="pending",
-                        available_at=self.clock(),
-                        lease_until=0,
-                        attempts=0,
-                    )
-                )
+                self.receive_in(db, event_id, kind, payload)
             return True
         except IntegrityError:
             return False
+
+    def receive_in(self, db, event_id, kind, payload, *, case_id=None):
+        """Commit a delivery with its source record in the caller's transaction."""
+        db.execute(
+            insert(events).values(
+                id=event_id,
+                case_id=case_id,
+                kind=kind,
+                at=self.clock(),
+                payload=payload,
+            )
+        )
+        db.execute(
+            insert(jobs).values(
+                id=event_id,
+                kind=kind,
+                payload=payload,
+                status="pending",
+                available_at=self.clock(),
+                lease_until=0,
+                attempts=0,
+            )
+        )
 
     def claim(self):
         now = self.clock()
