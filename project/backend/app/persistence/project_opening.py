@@ -77,8 +77,7 @@ class ProjectOpeningRepository:
         expected = self.preparation_delivery(record["case_id"], record["files"])
         received = record.get("incoming_preparation") or {}
         if (
-            received.get("handoff_id") != expected["handoff_id"]
-            or received.get("files_sha256") != expected["files_sha256"]
+            any(received.get(key) != value for key, value in expected.items())
             or not self.store.handoff(expected["handoff_id"])["accepted_at"]
         ):
             raise ValueError("El agente 2 todavía no recibió la entrega del agente 1.")
@@ -182,6 +181,14 @@ class ProjectOpeningRepository:
                 "is_simulated": ballot["is_simulated"],
             }
             if ballot
+            else None,
+            "process": self.store.get(f"process:{case_id}"),
+            "board_workflow_delivery": self.store.job(
+                f"board-rejection:{ballot['id']}:{ballot['certificate']['digest']}"
+            )
+            if ballot
+            and ballot.get("certificate")
+            and ballot["status"] == "not_approved"
             else None,
             "handoffs": self.store.case_handoffs(case_id),
             "events": self.store.case_events(case_id),

@@ -4,7 +4,7 @@ La suite tiene cinco recorridos habituales:
 
 1. Registro de cliente → API de verificación → OTP → acceso a agenda, con SQL temporal.
 2. Captura de transcripción → HTTP → cola → LangGraph → estado persistido tras reinicio; inicio CLI/MCP sin notas y conciliación exigida al añadir notas a la misma entrada.
-3. Transcripción y notas separadas → borrador con citas por fuente y discrepancia pendiente de revisión → archivos de presentación → aprobación → guion → cambio de presentación invalida el guion → aprobación del guion → exportación versionada de seis archivos → validación de hashes → agente 2 → junta simulada → rama documental → PR pendiente → merge → issue con manifiesto → handoffs en SQL.
+3. Transcripción y notas separadas → borrador con citas por fuente y discrepancia pendiente de revisión → archivos de presentación → aprobación → guion → cambio de presentación invalida el guion → aprobación del guion → exportación versionada de seis archivos → validación de hashes → agente 2 → junta simulada → rama documental → PR pendiente → merge → issue con manifiesto → handoffs en SQL. El mismo recorrido cubre junta negativa (rechazo y abstención) → cola → bloqueo si la versión no coincide → Dirección `declined`, con reintento tras reinicio sin duplicar el rechazo ni abrir repo/issue.
 4. Sesión OAuth y SDK simulados → LangGraph → transporte MCP real → resultado guardado; reabrir la ejecución reutiliza el resultado.
 5. Agente 1 → conexión STDIO con su servidor MCP → invocación de una herramienta.
 
