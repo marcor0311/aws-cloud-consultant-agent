@@ -207,23 +207,18 @@ Tools propias por implementar y exponer por MCP:
 ## 5. Cloud Infrastructure Engineer — Implementación
 
 ```mermaid
-%%{init: {"theme":"base","themeVariables":{"darkMode":false,"background":"#ffffff","primaryColor":"#eff6ff","primaryTextColor":"#0f172a","primaryBorderColor":"#2563eb","lineColor":"#64748b","edgeLabelBackground":"#ffffff","clusterBkg":"#ffffff","clusterBorder":"#cbd5e1"},"flowchart":{"diagramPadding":0,"wrappingWidth":360}}}%%
+%%{init: {"theme":"base","themeVariables":{"darkMode":false,"background":"#ffffff","primaryColor":"#eff6ff","primaryTextColor":"#0f172a","primaryBorderColor":"#2563eb","lineColor":"#64748b","edgeLabelBackground":"#ffffff","clusterBkg":"#ffffff","clusterBorder":"#cbd5e1"},"flowchart":{"diagramPadding":0}}}%%
 flowchart TB
     subgraph lienzo[" "]
         direction TB
         issue["Nuevo issue asignado por FinOps<br/>Arquitectura, módulos y dos insumos de costos"] --> agente["Ingeniero trabaja con Codex<br/>Mismo repo del arquitecto"]
         agente -->|Consulta mediante GitHub MCP| baselines["Repo de baseline modules"]
-        baselines -->|Módulos con versión aprobada| compatibilidad
-        agente --> compatibilidad["Consultar compatibilidad antes de implementar<br/>Skill aws-emulator, servicios, recursos y módulos"]
-        catalogo[("Catálogo versionado<br/>Éxitos, errores y limitaciones")] --> compatibilidad
-        compatibilidad --> implementar["Implementar Terraform<br/>con módulos versionados"]
-        implementar --> validar["Automatizar fmt, validate y plan<br/>Análisis de seguridad y políticas como código"]
-        validar --> local["AWS Emulator: entorno oficial local y en GitHub Actions<br/>apply y pruebas de integración; destroy incluso ante fallos<br/>Sin credenciales reales ni infraestructura AWS"]
-        local --> resultados["Clasificar resultados<br/>Error Terraform, limitación del emulador o por investigar"]
-        resultados --> catalogo
-        resultados --> evidencia["LangGraph y PostgreSQL<br/>Evidencias, resultados, Lead Time y Process Time"]
-        evidencia --> pr["El agente abre el PR de implementación<br/>Documentación, catálogo y evidencias"]
-        pr --> arquitecto["Cloud Solutions Architect revisa<br/>Aprobación obligatoria"]
+        baselines -->|Módulos con versión aprobada| implementar
+        agente --> implementar["Implementar Terraform<br/>con módulos versionados"]
+        implementar --> validar["Pruebas, seguridad y políticas como código"]
+        validar --> local["Despliegue local<br/>Documentación y evidencias"]
+        local --> pr["El agente abre el PR de implementación"]
+        pr --> arquitecto["Arquitecto revisa y aprueba"]
         arquitecto --> main["Integrar en main protegido"]
         main --> entrega["Notificar al Engagement Manager"]
         classDef default fill:#eff6ff,stroke:#2563eb,color:#0f172a;
@@ -235,46 +230,27 @@ flowchart TB
     style lienzo fill:#ffffff,stroke:#ffffff,stroke-width:128px;
 ```
 
-**Stack recomendado:** Codex con la skill oficial `aws-emulator`, Terraform, AWS Emulator como entorno oficial de pruebas locales, GitHub Actions, LangGraph y PostgreSQL.
+**Stack recomendado:** Codex, Terraform, LangGraph y PostgreSQL.
 
 **Herramientas recomendadas:**
 
-- [AWS Emulator](https://github.com/aws/aws-emulator) y su [skill oficial `aws-emulator`](https://docs.aws.amazon.com/emulator/latest/userguide/getting-started-agent.html) para consultar compatibilidad y preparar el entorno local.
-- [Guía de compatibilidad de AWS Emulator](https://docs.aws.amazon.com/emulator/latest/userguide/check-project.html), pruebas y puntuaciones de fidelidad de la versión utilizada; documentación del proveedor AWS y de los módulos Terraform seleccionados.
-- Terraform CLI y GitHub Actions para automatizar el ciclo de validación; herramientas de análisis de seguridad de IaC (por ejemplo, Checkov) y políticas como código sobre configuración y plan (por ejemplo, OPA/Conftest).
 - [Agent Toolkit for AWS](https://docs.aws.amazon.com/agent-toolkit/latest/userguide/what-is-agent-toolkit.html)
 - [AWS DevOps Agent](https://docs.aws.amazon.com/devopsagent/latest/userguide/working-with-devops-agent-accessing-devops-agent-index.html)
 - [AWS Security Agent](https://docs.aws.amazon.com/securityagent/latest/userguide/what-is.html)
 
 > Acceso complementario: el mismo **GitHub MCP** para trabajar en el repo del proyecto y leer `aws-cloud-consultant-baseline-modules`. AWS Pricing MCP, AWS MCP y Terraform MCP configurados para el puesto.
 
-**Entrada:** nuevo issue creado por el agente FinOps en el mismo repo del proyecto donde trabajó el arquitecto, con rama/commit, requisitos, diseño, módulos, enlace de AWS Pricing Calculator y Excel de costos validados; entorno y accesos preparados, incluidas las versiones de Terraform, proveedor AWS, módulos y AWS Emulator.
+**Entrada:** nuevo issue creado por el agente FinOps en el mismo repo del proyecto donde trabajó el arquitecto, con rama/commit, requisitos, diseño, módulos, enlace de AWS Pricing Calculator y Excel de costos validados; entorno y accesos preparados.
 
-**Entrega:** PR abierto por el agente de Codex en el mismo repo con los cambios de ingeniería, documentación, catálogo de compatibilidad y evidencias de pruebas reales ejecutadas contra AWS Emulator, para revisión y aprobación obligatoria del **Cloud Solutions Architect**. Los documentos de FinOps ya están integrados y se referencian desde la implementación.
-
-**Alcance de esta actualización:** definir el contrato documental de la futura implementación. No se implementan ni ejecutan todavía el pipeline, Terraform o el emulador. Se conserva el flujo FinOps → ingeniería → revisión del arquitecto → integración en main protegido → notificación al Engagement Manager.
-
-> **Límites de la validación:** distinguir errores de configuración, módulos o proveedor Terraform de operaciones no implementadas y diferencias de comportamiento de AWS Emulator. Un fallo sin causa demostrada queda **por investigar**; una limitación no se registra como prueba exitosa ni se omite silenciosamente. Las pruebas exitosas solo validan los escenarios y versiones ejecutados; **no garantizan compatibilidad completa con AWS real**. Según la [guía de seguridad de AWS Emulator](https://docs.aws.amazon.com/emulator/latest/userguide/security.html), el emulador no valida la seguridad de IAM, políticas de recursos, KMS ni controles entre cuentas o regiones. Los análisis de IaC y políticas como código se ejecutan como controles independientes; la validación en AWS real antes de producción queda fuera de estas pruebas locales y requiere autorización explícita para cada ejecución.
+**Entrega:** PR abierto por el agente de Codex en el mismo repo con los cambios de ingeniería, documentación, pruebas y evidencias locales, para revisión y aprobación del arquitecto. Los documentos de FinOps ya están integrados y se referencian desde la implementación.
 
 **Funcionalidades:**
 
 - [ ] Implementar la infraestructura con Codex en el repo del proyecto, a partir del diseño aprobado.
-- [ ] Consultar baselines por GitHub MCP y reutilizar módulos aprobados con versión fijada. Antes de implementar, Codex consulta con `aws-emulator` la compatibilidad de los servicios, operaciones y recursos AWS requeridos por cada módulo Terraform, revisa sus dependencias y las pruebas/puntuaciones de fidelidad de la versión del emulador, y registra fuentes, fecha y brechas conocidas.
-- [ ] Automatizar `terraform fmt` local y `terraform fmt -check -recursive` en CI, `terraform init`, `terraform validate`, `terraform plan`, `terraform apply` del plan revisado, pruebas de integración y `terraform destroy`. Ejecutar además análisis de seguridad y políticas como código sobre IaC y plan, conservando sus resultados independientes del emulador. Intentar `destroy` aun cuando fallen el despliegue o las pruebas, registrar su resultado y detener la instancia al finalizar.
-- [ ] Verificar la compatibilidad prevista mediante ejecuciones reales de Terraform e integración contra AWS Emulator, tanto localmente como en GitHub Actions. Aislar instancia y estado por ejecución, fijar versiones, esperar disponibilidad y configurar explícitamente los endpoints del proveedor y sus dependencias hacia el emulador. Usar únicamente credenciales generadas por esa instancia, sin credenciales, perfiles, roles ni acceso a AWS real y sin costos de infraestructura AWS; los posibles costos del runner de CI se contabilizan por separado.
-- [ ] Mantener en el repositorio del proyecto un catálogo versionado de servicios, operaciones y recursos Terraform probados, vinculados al módulo y su versión. Registrar versión del emulador, Terraform y proveedor, escenario, fecha, commit/run, resultado esperado y observado, éxitos, errores, limitaciones y enlaces a evidencias. Distinguir validado en emulador, error Terraform, limitación del emulador, por investigar y no probado; conservar el historial sin presentar una consulta documental como validación ejecutada.
-- [ ] Orquestar con LangGraph y persistir en PostgreSQL el estado de cada ejecución, referencias y hashes de evidencias de despliegue, planes, logs sin secretos, resultados de integración, seguridad, políticas y limpieza. Correlacionar proyecto, issue, versión, commit, run, PR y aprobación; conservar artefactos fuera del estado efímero del emulador y evitar duplicados en reintentos.
-- [ ] Registrar Lead Time desde la recepción de la entrega de FinOps hasta la aceptación de ingeniería y su handoff; medir Process Time mediante intervalos explícitos de trabajo humano y del agente. Registrar esperas, revisiones y retrabajo por separado mediante LangGraph/PostgreSQL, sin inferir trabajo activo del tiempo entre eventos o sumar dos veces reintentos.
-- [ ] El agente de Codex abre el PR de implementación al terminar las pruebas, con documentación, catálogo, evidencias, limitaciones y referencias a los insumos de FinOps, y solicita la revisión y aprobación obligatoria del Cloud Solutions Architect. Los fallos y brechas pendientes permanecen visibles para su decisión; no se sustituyen por una aprobación automática del pipeline.
+- [ ] Consultar baselines por GitHub MCP y reutilizar módulos aprobados.
+- [ ] Probar la solución, validar seguridad y guardar evidencias del despliegue local.
+- [ ] El agente de Codex abre el PR de implementación al terminar las pruebas, con documentación, evidencias y referencias a los insumos de FinOps, y solicita la revisión y aprobación del arquitecto.
 - [ ] Notificar al Engagement Manager cuando el PR esté aprobado.
-
-**Criterios de aceptación de la futura implementación:**
-
-- [ ] La evaluación de compatibilidad está registrada antes de implementar y se contrasta con pruebas reales en AWS Emulator para cada módulo, servicio y recurso utilizado. Lo no cubierto se identifica como no probado o limitado, sin afirmar compatibilidad total con AWS.
-- [ ] El ciclo automatizado de Terraform, las pruebas de integración, el análisis de seguridad y las políticas como código producen resultados trazables localmente y en GitHub Actions, sin usar credenciales reales ni crear infraestructura AWS. La limpieza se intenta incluso ante fallos y sus errores quedan registrados.
-- [ ] El catálogo contiene éxitos, errores y limitaciones reproducibles con versiones y evidencias. Los errores de Terraform se distinguen de las limitaciones del emulador y de los casos por investigar; una limitación no convierte una ejecución fallida en exitosa.
-- [ ] LangGraph/PostgreSQL conservan referencias verificables a las evidencias, resultados y métricas Lead Time/Process Time por iteración, incluyendo esperas y retrabajo, sin perderlos al detener el emulador ni duplicarlos al reintentar.
-- [ ] Se mantienen los baselines aprobados y versionados, la arquitectura, el enlace de AWS Pricing Calculator y el Excel de FinOps. El PR incluye las limitaciones, exige aprobación expresa del Cloud Solutions Architect antes de integrar en main protegido y conserva la entrega al Engagement Manager.
 
 ## 6. Engagement Manager — Informe ejecutivo
 
