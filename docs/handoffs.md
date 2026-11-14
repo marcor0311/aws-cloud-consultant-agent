@@ -43,6 +43,14 @@ La herramienta MCP equivalente es `consultar_trazabilidad`. Muestra manifiesto,
 procedencia, revisiones, entregas y eventos. El informe local de Nike queda en
 `project/generated/meeting-assistant/handoff-audit-nike.json`.
 
+El resultado negativo de junta se entrega por la cola al proceso principal:
+Dirección termina como `declined`. El Engagement Manager lo consulta en
+`consultar_proceso` o `GET /api/workflow/cases/<case_id>/process`, con el historial
+`stage.rejected` y sus referencias al acta/certificado. La trazabilidad de agente 2
+incluye `process` y `board_workflow_delivery` (tarea pendiente, recibo de entrega o
+motivo de bloqueo). Estos canales no generan avisos nuevos. Una correspondencia
+no verificable conserva la decisión de junta y bloquea su entrega al proceso.
+
 ## Conciliación del caso existente
 
 Los documentos de Nike se habían generado en memoria y su apertura se había

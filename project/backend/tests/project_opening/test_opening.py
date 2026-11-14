@@ -6,18 +6,21 @@ import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import httpx
 import pytest
 
+from app.bootstrap import create_runtime
 from app.cli.agent2_live import resolve_case
 from app.integrations.ai.preparer import OpenAIPreparer
+from app.integrations.board_documents import board_documents
 from app.integrations.langgraph import LangGraphExecution
 from app.integrations.opening_documents import OpeningDocuments
 from app.integrations.opening_preview import simulate_board_approval
 from app.integrations.project_github import ProjectGitHub
 from app.mcp_server import create_server
-from app.persistence.board_votes import BoardRepository
+from app.persistence.board_votes import BoardRepository, rejection_key
 from app.persistence.checkpoints import open_checkpointer
 from app.persistence.project_opening import ProjectOpeningRepository
 from app.persistence.workflow import WorkflowStore
@@ -31,6 +34,7 @@ from app.project_opening.graph import build_opening_graph
 from app.project_opening.service import OpeningService
 from app.workflow.graph import build_process_graph
 from app.workflow.service import ProcessService
+from app.workflow.settings import WorkflowSettings
 
 ROOT = Path(__file__).resolve().parents[4]
 
@@ -171,10 +175,12 @@ def source(tmp_path):
     return request
 
 
-def make_service(store, saver, github, directory):
+def make_service(store, saver, github, directory, *, board_choices=None):
     repo = ProjectOpeningRepository(store)
     docs = OpeningDocuments(directory, TEMPLATE, store)
-    board = BoardService(BoardRepository(store), repo, None, store.clock)
+    board = BoardService(
+        BoardRepository(store), repo, None, store.clock, board_documents
+    )
 
     def gate(case_id):
         return board.require_approval(case_id, allow_simulated=True)
@@ -182,7 +188,7 @@ def make_service(store, saver, github, directory):
     class TestService(OpeningService):
         def register(self, value):
             result = super().register(value)
-            simulate_board_approval(board, result["case_id"])
+            simulate_board_approval(board, result["case_id"], choices=board_choices)
             return result
 
     return TestService(
@@ -461,7 +467,10 @@ def seed_preparation(store, saver, request, directory):
     return {**request, "files": exported["files"]}
 
 
-def test_preparation_to_agent2_documents_issue_and_handoffs_persist(tmp_path, source):
+def test_preparation_to_agent2_documents_issue_and_handoffs_persist(
+    tmp_path, source, monkeypatch
+):
+    negative_source = {**source, "case_id": source["case_id"] + "-declined"}
     database = f"sqlite:///{tmp_path / 'workflow.sqlite3'}"
     checkpoint = str(tmp_path / "checkpoints.sqlite3")
     github = GitHub()
@@ -579,4 +588,124 @@ def test_preparation_to_agent2_documents_issue_and_handoffs_persist(tmp_path, so
                 ).hexdigest()
                 == file["sha256"]
             )
+        # The same journey also delivers a certified negative result to Direction.
+        negative_source = seed_preparation(restarted, saver, negative_source, inputs)
+        negative = make_service(
+            restarted,
+            saver,
+            github,
+            default_directory,
+            board_choices=["approve", "reject", "abstain", "approve"],
+        )
+        case_id = negative_source["case_id"]
+        # A failure to enqueue must leave the last vote and certificate uncommitted.
+        with monkeypatch.context() as patch:
+            patch.setattr(
+                restarted,
+                "receive_in",
+                Mock(side_effect=OSError("offline SQL failure")),
+            )
+            with pytest.raises(OSError, match="offline SQL failure"):
+                negative.register(negative_source)
+        partial = BoardRepository(restarted).latest(case_id)
+        assert partial["status"] == "open" and partial["certificate"] is None
+        assert len(partial["votes"]) == 3
+        assert not any(
+            e["kind"] == "board_rejection" for e in restarted.case_events(case_id)
+        )
+        negative.register(negative_source)
+        ballot = BoardRepository(restarted).latest(case_id)
+        assert ballot["status"] == "not_approved"
+        assert ballot["documents"] == {
+            name: data.decode()
+            for name, data in board_documents(ballot["certificate"]).items()
+        }
+        negative.register(negative_source)  # Registration reuses the sealed decision.
+        assert restarted.job(rejection_key(ballot))["status"] == "pending"
+        with pytest.raises(ValueError, match="no ha aprobado por unanimidad"):
+            negative.run(case_id)
+        assert len(github.repositories) == len(github.issues) == 1
     restarted.engine.dispose()
+
+    google, notifier, drafter = Mock(), Mock(), Mock()
+    settings = WorkflowSettings(
+        database_url=database,
+        checkpoint_url=checkpoint,
+        enabled=True,
+        manager_id=negative_source["approved_by"],
+    )
+    runtime = create_runtime(
+        settings, google=google, notifier=notifier, drafter=drafter
+    )
+    try:
+        repository = ProjectOpeningRepository(runtime.store)
+        record = repository.get(case_id)
+        incoming = record["incoming_preparation"]
+        repository.update(case_id, incoming_preparation={**incoming, "revision": 999})
+        assert runtime.run_once()
+        blocked = repository.audit(case_id)["board_workflow_delivery"]
+        assert blocked["status"] == "failed"
+        assert blocked["receipt"]["status"] == "blocked"
+        assert "vincular el rechazo" in blocked["receipt"]["reason"]
+        assert runtime.process.get(case_id)["state"]["status"] == "awaiting_review"
+        repository.update(case_id, incoming_preparation=incoming)
+        runtime.store.retry_job(rejection_key(ballot))
+
+        # Lose the job receipt after the process checkpoint and projections committed.
+        finish_job = runtime.store.finish_job
+
+        def interrupted_receipt(key, **kwargs):
+            if kwargs.get("receipt", {}).get("status") == "declined":
+                raise OSError("offline crash after checkpoint")
+            return finish_job(key, **kwargs)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(runtime.store, "finish_job", interrupted_receipt)
+            assert runtime.run_once()
+        assert runtime.process.get(case_id)["state"]["status"] == "declined"
+        assert runtime.store.job(rejection_key(ballot))["status"] == "failed"
+        runtime.store.retry_job(rejection_key(ballot))
+    finally:
+        runtime.close()
+
+    runtime = create_runtime(
+        settings, google=google, notifier=notifier, drafter=drafter
+    )
+    try:
+        assert runtime.run_once()
+        assert not runtime.run_once()
+        state = runtime.process.get(case_id)["state"]
+        decisions = [e for e in state["history"] if e["kind"] == "stage.rejected"]
+        assert state["stage"] == 2 and state["status"] == "declined"
+        assert len(decisions) == 1
+        event = decisions[0]
+        assert event["revision"] == incoming["revision"]
+        assert event["artifact_sha256"] == incoming["artifact_sha256"]
+        assert event["comment"] == ballot["certificate"]["status"]
+        assert event["actor"] == "board" and event["origin"] == "internal"
+        assert f"sha256:{ballot['certificate']['digest']}" in event["evidence"]
+        assert any(ref.endswith(".md") for ref in event["evidence"])
+        audit = ProjectOpeningRepository(runtime.store).audit(case_id)
+        assert audit["process"]["status"] == audit["opening_status"] == "declined"
+        assert audit["board_workflow_delivery"]["status"] == "done"
+        applied = [
+            e
+            for e in audit["events"]
+            if e["kind"] == "process.transition"
+            and e["payload"]["kind"] == "stage.rejected"
+        ]
+        assert len(applied) == 1
+        service = OpeningService(
+            ProjectOpeningRepository(runtime.store), None, None, None
+        )
+        assert service.run_next() == {"status": "idle"}
+        with pytest.raises(ValueError, match="rechazado en Dirección"):
+            service.run(case_id)
+        with pytest.raises(ValueError, match="rechazado en Dirección"):
+            service.preflight(case_id)
+        assert len(github.repositories) == len(github.issues) == 1
+        assert (
+            not google.mock_calls and not notifier.mock_calls and not drafter.mock_calls
+        )
+    finally:
+        runtime.close()

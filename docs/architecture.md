@@ -258,8 +258,15 @@ principal, verifica el merge, asigna el issue y registra la entrega. Un merge
 bloqueado conserva el PR y pausa el proceso antes del issue. Los nuevos expedientes
 crean repositorios públicos por defecto (`private=false`) en `aws-cloud-consulting-group`; el template permanece en la
 cuenta personal. `issue_assignee` permite un responsable temporal del issue sin
-cambiar el arquitecto destinatario del handoff. El proceso principal de seis etapas no avanza
-automáticamente: la conexión con las reuniones de dirección queda para después.
+cambiar el arquitecto destinatario del handoff. Una aprobación de junta todavía
+no avanza automáticamente el proceso principal. Un resultado `not_approved`
+encola el rechazo en la misma transacción que sella el certificado; el worker
+existente entrega `stage.rejected` y cierra Dirección como `declined`.
+`project_opening/decisions.py` verifica certificado, apertura, manifiesto, entrega
+aceptada y aprobación exacta de preparación en el proceso. Usa revisión y hash
+persistidos, el emisor de la entrega del acta y el resultado certificado como
+motivo; no infiere una opinión humana. Si falta correspondencia, conserva la tarea
+fallida con un recibo de bloqueo para conciliación. No crea otro worker ni avisos.
 
 Los reintentos concilian identidad del repo, blobs y marcador del issue antes de
 escribir. Los PDF se cargan como blobs base64 y el paquete se publica en un único
