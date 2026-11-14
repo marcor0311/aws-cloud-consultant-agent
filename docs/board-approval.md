@@ -15,7 +15,7 @@ Al recibirse el último voto, el servicio genera y conserva en PostgreSQL:
 
 - `docs/02-board/acta-junta-<votacion_id>.md`: proyecto, resultado, regla,
   miembros, votos, fecha de cada voto y cierre en hora de Costa Rica, presupuesto,
-  condiciones y hashes de los cinco archivos.
+  condiciones y hashes de los seis archivos, incluido el guion aprobado.
 - `docs/02-board/acta-junta-<votacion_id>.json`: evidencia estructurada, fechas UTC,
   workspace, aplicación, canal, mensaje, hashes de las solicitudes verificadas y
   huella del certificado.
@@ -40,7 +40,7 @@ El bot necesita `chat:write`, `users:read` y acceso al canal. Para conciliar un
 envío incierto necesita el historial de ese canal (`channels:history` o
 `groups:history`, según corresponda). La configuración de convocatoria incluye
 workspace, aplicación, canal, IDs de miembros y un enlace HTTPS al paquete de
-cuatro insumos que deben revisar. Los nombres visibles no sustituyen los IDs.
+seis archivos aprobados que deben revisar. Los nombres visibles no sustituyen los IDs.
 
 Herramientas MCP:
 

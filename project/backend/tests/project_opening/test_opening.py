@@ -165,7 +165,7 @@ def source(tmp_path):
 
 def make_service(store, saver, github, directory):
     repo = ProjectOpeningRepository(store)
-    docs = OpeningDocuments(directory, TEMPLATE)
+    docs = OpeningDocuments(directory, TEMPLATE, store)
     board = BoardService(BoardRepository(store), repo, None, store.clock)
 
     def gate(case_id):
@@ -173,7 +173,6 @@ def make_service(store, saver, github, directory):
 
     class TestService(OpeningService):
         def register(self, value):
-            seed_preparation(store, saver, value)
             result = super().register(value)
             simulate_board_approval(board, result["case_id"])
             return result
@@ -188,7 +187,7 @@ def make_service(store, saver, github, directory):
     )
 
 
-def seed_preparation(store, saver, request):
+def seed_preparation(store, saver, request, directory):
     fixture = FIXTURE.parent
     transcript = MeetingTranscript.model_validate_json(
         (fixture / "transcript.json").read_text()
@@ -216,15 +215,127 @@ def seed_preparation(store, saver, request):
         runtime, request["case_id"], transcript, provenance="offline_test"
     )
     revision = result["state"]["revision"]
-    PreparationDeliveries(store).bind(request["case_id"], revision, request["files"])
-    if result["state"]["status"] == "awaiting_review":
-        store.accept_handoff(
-            f"{request['case_id']}:preparation:stuart:v{revision}",
-            request["approved_by"],
+    case_id = request["case_id"]
+    if result["state"]["status"] == "ready_for_stage_2":
+        return request
+    assert result["state"]["package"]["speaker_notes"] == ""
+    assert (
+        "speaker-notes.md"
+        not in store.get(f"artifact:{case_id}:{revision}")["documents"]
+    )
+    with pytest.raises(ValueError, match="Falta la entrega aprobada"):
+        ProjectOpeningRepository(store).preparation_delivery(case_id, request["files"])
+    deliveries = PreparationDeliveries(store)
+    with pytest.raises(ValueError, match="antes de aprobar la presentación"):
+        service.review(case_id, revision, "approve")
+    assert service.get(case_id) == result
+    assert not any(
+        event["kind"] == "approval.decided" for event in store.case_events(case_id)
+    )
+    deliveries.stage(
+        case_id, revision, request["files"], source_directory=str(directory)
+    )
+    service.begin_review(case_id, revision)
+    script = service.review(case_id, revision, "approve", request["approval_reference"])
+    assert script["pending"][0]["subject"] == "speaker_notes"
+    assert script["state"]["status"] == "awaiting_review"
+    with pytest.raises(ValueError, match="revisión vigente aprobada"):
+        OpeningDocuments(directory, TEMPLATE, store).export_preparation(
+            case_id, script["state"]["revision"]
         )
-        service.review(
-            request["case_id"], revision, "approve", request["approval_reference"]
+    assert process.get(case_id)["state"]["stage"] == 1
+    notes = script["state"]["package"]["speaker_notes"]
+    assert "## Apertura" in notes and "## Cierre" in notes
+    for index, slide in enumerate(content.presentation, 1):
+        assert f"## Diapositiva {index} — {slide.title}" in notes
+    assert service.continue_preparation(case_id)["state"] == script["state"]
+    with pytest.raises(ValueError, match="revisión cambió"):
+        service.review(case_id, revision, "approve")
+
+    # An edit to the deck invalidates its approval and removes the old script.
+    revision = script["state"]["revision"]
+    service.begin_review(case_id, revision)
+    presentation = script["state"]["package"]["presentation"]
+    changed = service.update_package(
+        case_id,
+        revision,
+        {
+            "presentation": [
+                {**presentation[0], "title": "Encuadre ejecutivo revisado"},
+                *presentation[1:],
+            ]
+        },
+    )
+    assert changed["pending"][0]["subject"] == "presentation"
+    assert changed["state"]["presentation_approval"] == {}
+    assert changed["state"]["package"]["speaker_notes"] == ""
+    deliveries.stage(
+        case_id,
+        changed["state"]["revision"],
+        request["files"],
+        source_directory=str(directory),
+    )
+    service.begin_review(case_id, changed["state"]["revision"])
+    script = service.review(case_id, changed["state"]["revision"], "approve")
+    assert "Encuadre ejecutivo revisado" in script["state"]["package"]["speaker_notes"]
+
+    # Feedback on the script pauses for a chat edit, preserving the approved deck.
+    revision = script["state"]["revision"]
+    service.begin_review(case_id, revision)
+    waiting = service.review(case_id, revision, "revise", "Acortar la apertura.")
+    assert waiting["pending"][0]["action"] == "revise_speaker_notes"
+    edited = service.resume(
+        case_id,
+        "revise_speaker_notes",
+        script["state"]["package"]["speaker_notes"].replace(
+            "Gracias por el espacio. ", ""
+        ),
+        revision,
+    )
+    assert (
+        edited["state"]["presentation_approval"]
+        == script["state"]["presentation_approval"]
+    )
+    assert edited["pending"][0]["subject"] == "speaker_notes"
+    revision = edited["state"]["revision"]
+    service.begin_review(case_id, revision)
+    delivered = service.review(
+        case_id, revision, "approve", "Guion revisado y aprobado."
+    )
+    assert delivered["state"]["status"] == "ready_for_stage_2"
+    assert process.get(case_id)["state"]["stage"] == 2
+    documents = OpeningDocuments(
+        Path(directory).parent / "export-default", TEMPLATE, store
+    )
+    exported = documents.export_preparation(case_id, revision)
+    assert documents.export_preparation(case_id, revision) == exported
+    # A runtime with another default folder must still locate the same approved bundle.
+    other_directory = Path(directory).parent / "another-default"
+    assert (
+        OpeningDocuments(other_directory, TEMPLATE, store).export_preparation(
+            case_id, revision
         )
+        == exported
+    )
+    assert not other_directory.exists()
+    assert len(exported["files"]) == 6
+    script_bytes = store.get(f"artifact:{case_id}:{revision}")["documents"][
+        "speaker-notes.md"
+    ].encode()
+    assert (
+        Path(exported["directory"]) / "speaker-notes.md"
+    ).read_bytes() == script_bytes
+    assert (
+        len(
+            [
+                event
+                for event in store.case_events(case_id)
+                if event["kind"] == "preparation.speaker_notes_generated"
+            ]
+        )
+        == 2
+    )
+    return {**request, "files": exported["files"]}
 
 
 def test_preparation_to_agent2_documents_issue_and_handoffs_persist(tmp_path, source):
@@ -232,15 +343,23 @@ def test_preparation_to_agent2_documents_issue_and_handoffs_persist(tmp_path, so
     checkpoint = str(tmp_path / "checkpoints.sqlite3")
     github = GitHub()
     store = WorkflowStore(database)
+    inputs = tmp_path / "custom-inputs"
+    inputs.mkdir()
+    for file in source["files"]:
+        (tmp_path / file["name"]).rename(inputs / file["name"])
+    default_directory = tmp_path / "configured-default"
     with open_checkpointer(checkpoint) as saver:
-        service = make_service(store, saver, github, tmp_path)
+        service = make_service(store, saver, github, default_directory)
         without_pdf = {
             **source,
             "files": [f for f in source["files"] if f["name"] != "presentacion.pdf"],
         }
-        with pytest.raises(ValueError, match="cinco archivos"):
+        with pytest.raises(ValueError, match="seis archivos"):
             service.register(without_pdf)
+        with pytest.raises(ValueError, match="seis archivos"):
+            service.register(source)
         assert not github.repositories
+        source = seed_preparation(store, saver, source, inputs)
         approved = service.register(source)
         assert approved["title"] == "AWS Cloud Consulting Project Nike 01 Lindora Run"
         assert (
@@ -249,6 +368,25 @@ def test_preparation_to_agent2_documents_issue_and_handoffs_persist(tmp_path, so
         )
         assert resolve_case(store, None, "new-execution") == source["case_id"]
         assert store.get("opening-number:nike")["last"] == approved["project_number"]
+        manifest = store.get(f"artifact-files:{source['case_id']}:5")
+        script_path = (
+            Path(manifest["source_directory"])
+            / manifest["bundle_path"]
+            / "speaker-notes.md"
+        )
+        original = script_path.read_bytes()
+        script_path.write_bytes(b"Guion alterado despues de aprobar.")
+        with pytest.raises(ValueError, match="cambió después de aprobarse"):
+            service.run(source["case_id"])
+        assert not github.repositories
+        script_path.write_bytes(original)
+        manifest_path = script_path.parent / "manifest.json"
+        original_manifest = manifest_path.read_bytes()
+        manifest_path.write_bytes(b"{}")
+        with pytest.raises(ValueError, match="manifiesto local cambió"):
+            service.run(source["case_id"])
+        assert not github.repositories
+        manifest_path.write_bytes(original_manifest)
         with pytest.raises(ValueError, match="initial_structure_merge_pending"):
             service.run(source["case_id"])
         assert (
@@ -264,7 +402,7 @@ def test_preparation_to_agent2_documents_issue_and_handoffs_persist(tmp_path, so
     store.engine.dispose()
     restarted = WorkflowStore(database)
     with open_checkpointer(checkpoint) as saver:
-        service = make_service(restarted, saver, github, tmp_path)
+        service = make_service(restarted, saver, github, default_directory)
         assert service.register(source)["project_number"] == 1
         result = service.run(source["case_id"])
         assert result["status"] == "delivered"
@@ -273,7 +411,7 @@ def test_preparation_to_agent2_documents_issue_and_handoffs_persist(tmp_path, so
             len(github.repositories) == len(github.commits) == len(github.issues) == 1
         )
         handoffs = restarted.case_handoffs(source["case_id"])
-        assert len(handoffs) == 9
+        assert len(handoffs) == 13
         assert all(
             h["accepted_at"] for h in handoffs if h["to_phase"] != "architecture"
         )
@@ -283,8 +421,10 @@ def test_preparation_to_agent2_documents_issue_and_handoffs_persist(tmp_path, so
         audit = service.audit(source["case_id"])
         assert audit["source"]["provenance"] == "offline_test"
         assert audit["source"]["historical_occurred_at"] is None
-        assert len([e for e in audit["events"] if e["kind"] == "handoff.created"]) == 9
-        assert len([e for e in audit["events"] if e["kind"] == "handoff.accepted"]) == 8
+        assert len([e for e in audit["events"] if e["kind"] == "handoff.created"]) == 13
+        assert (
+            len([e for e in audit["events"] if e["kind"] == "handoff.accepted"]) == 12
+        )
         assert "Primera posición" not in github.body
         assert source["comments"] not in github.body
         assert "queue_position" not in github.body
@@ -293,8 +433,13 @@ def test_preparation_to_agent2_documents_issue_and_handoffs_persist(tmp_path, so
         assert "/blob/" + "a" * 40 + "/docs/01-discovery/" in github.body
         assert (
             len([p for p in github.published if p.startswith("docs/01-discovery/")])
-            == 5
+            == 7  # Six approved inputs and their revision manifest.
         )
+        published_manifest = json.loads(
+            github.published["docs/01-discovery/manifest.json"]
+        )
+        assert published_manifest["revision"] == audit["files_manifest"]["revision"]
+        assert "speaker-notes.md" in github.body
         for file in source["files"]:
             assert (
                 hashlib.sha256(

@@ -14,8 +14,8 @@ def create_server(service, instructions=None, *, board=None):
         "Meeting Assistant",
         instructions=instructions
         or (
-            "Agente 2: registra únicamente decisiones expresas y los hashes exactos de cinco "
-            "archivos aprobados (presentación HTML y PDF). La prioridad, cola y comentarios se guardan en PostgreSQL. "
+            "Agente 2: registra únicamente decisiones expresas y los hashes exactos de seis "
+            "archivos aprobados (incluidos presentación HTML/PDF y speaker-notes.md). La prioridad, cola y comentarios se guardan en PostgreSQL. "
             "Usa siempre AWS Cloud Consulting Project Compañía NN Proyecto y el slug equivalente. "
             "Después ejecuta la apertura para crear desde template, cargar documentos y asignar "
             "el issue uniforme al arquitecto. Reintenta sobre el mismo expediente. No inventes "

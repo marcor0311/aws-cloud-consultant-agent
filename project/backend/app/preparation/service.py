@@ -6,7 +6,9 @@ from contextlib import nullcontext
 from datetime import datetime, timezone
 from threading import RLock
 
+from app.preparation.deliveries import PreparationDeliveries
 from app.preparation.models import ExecutivePackage
+from app.preparation.speaker_notes import presentation_digest
 from app.preparation.state import input_hash, utc_now
 from app.workflow.ports import WorkflowExecution
 
@@ -70,7 +72,11 @@ class PreparationService:
                 f"review-request:{case_id}:{state['revision']}",
                 case_id,
                 "approval.requested",
-                {"revision": state["revision"], "actor": self.manager_id},
+                {
+                    "revision": state["revision"],
+                    "actor": self.manager_id,
+                    "subject": state.get("review_subject", "presentation"),
+                },
             )
         if state.get("status") == "ready_for_stage_2":
             self.store.put(
@@ -287,6 +293,23 @@ class PreparationService:
                 ):
                     raise ValueError("Indicar los ajustes solicitados.")
                 state = current["state"]
+                if value["decision"] == "approve":
+                    package = ExecutivePackage.model_validate(state.get("package", {}))
+                    if not package.presentation or any(
+                        not slide.title.strip() for slide in package.presentation
+                    ):
+                        raise ValueError(
+                            "La aprobación requiere una presentación estructurada."
+                        )
+                    if (
+                        state.get("review_subject") == "speaker_notes"
+                        and not package.speaker_notes.strip()
+                    ):
+                        raise ValueError("El guion no puede estar vacío.")
+                    if state.get("review_subject", "presentation") == "presentation":
+                        PreparationDeliveries(self.store).presentation_files(
+                            case_id, state["revision"], state["package"]
+                        )
                 digest = hashlib.sha256(
                     json.dumps(
                         state.get("package", state["draft"]), sort_keys=True
@@ -302,6 +325,7 @@ class PreparationService:
                         "revision": state["revision"],
                         "artifact_sha256": digest,
                         "feedback": value.get("feedback", ""),
+                        "subject": state.get("review_subject", "presentation"),
                     },
                 )
                 self.store.pause_human_work(case_id, self.manager_id)
@@ -386,6 +410,13 @@ class PreparationService:
                 raise ValueError("La revisión cambió o ya fue aprobada.")
             if not changes or not set(changes) <= set(ExecutivePackage.model_fields):
                 raise ValueError("Indicar secciones válidas para cambiar.")
+            script_only = set(changes) == {"speaker_notes"}
+            if script_only and state.get("review_subject") != "speaker_notes":
+                raise ValueError(
+                    "El guion se genera después de aprobar la presentación."
+                )
+            if script_only and not str(changes["speaker_notes"]).strip():
+                raise ValueError("El guion no puede estar vacío.")
             sources = {"transcript": state["transcript"]}
             sources.update(
                 {d["path"]: d["content"] for d in self.store.list("reference")}
@@ -397,6 +428,13 @@ class PreparationService:
             package.validate_sources(sources, project_ids)
             if package.model_dump() == state["package"]:
                 return self.get(case_id)
+            if not script_only:
+                package = package.model_copy(update={"speaker_notes": ""})
+            approval = state.get("presentation_approval", {}) if script_only else {}
+            if script_only and approval.get(
+                "presentation_sha256"
+            ) != presentation_digest(package.model_dump()):
+                raise ValueError("La presentación requiere nueva aprobación.")
             new_revision = revision + 1
             documents = {
                 "meeting-transcript.md": state["transcript"],
@@ -410,6 +448,7 @@ class PreparationService:
                     "revision": new_revision,
                     "package": package.model_dump(),
                     "documents": documents,
+                    "presentation_approval": approval,
                 },
             )
             self.graph.update(
@@ -420,6 +459,10 @@ class PreparationService:
                     "revision": new_revision,
                     "status": "awaiting_review",
                     "decision": "",
+                    "review_subject": "speaker_notes"
+                    if script_only
+                    else "presentation",
+                    "presentation_approval": approval,
                 },
                 after_step="draft",
             )

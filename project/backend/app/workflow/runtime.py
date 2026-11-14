@@ -628,6 +628,8 @@ class WorkflowRuntime:
             "mode": self.settings.mode,
             "project": project,
             "revision": state["revision"],
+            "review_subject": state.get("review_subject", "presentation"),
+            "pending": self.service.get(project["case_id"])["pending"],
             "package": state.get("package"),
             "documents": artifact["documents"] if artifact else {},
             "comments": self.store.case_notes(project["case_id"]),

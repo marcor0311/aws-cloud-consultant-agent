@@ -105,8 +105,10 @@ class ExecutivePackage(OutputModel):
             f"## {s.title}\n\n" + "\n".join(f"- {b}" for b in s.bullets)
             for s in self.presentation
         )
-        return {
+        documents = {
             "executive-summary.md": summary,
             "presentation.md": slides,
-            "speaker-notes.md": "# Guion\n\n" + self.speaker_notes,
         }
+        if self.speaker_notes.strip():
+            documents["speaker-notes.md"] = "# Guion\n\n" + self.speaker_notes
+        return documents

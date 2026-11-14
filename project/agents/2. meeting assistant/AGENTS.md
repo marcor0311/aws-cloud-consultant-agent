@@ -14,7 +14,9 @@ Every template follows the same naming rule:
 accent-free, hyphen-separated repository name. Reserve numbers in PostgreSQL.
 
 Use `templates/architecture.md` as the sole issue-body contract. Publish the exact
-approved input files, including the presentation in HTML and PDF. Reconcile remote repository, commit and issue state
+approved input files, including the presentation in HTML and PDF and approved speaker-notes.md.
+New deliveries require six files and their revision manifest; persisted four/five-file records remain unchanged.
+Reconcile remote repository, commit and issue state
 before retries; never force an existing branch or overwrite human changes.
 
 Run offline tests in `backend/tests/project_opening/`. PostgreSQL tests require

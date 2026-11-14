@@ -84,7 +84,8 @@ class OpenAIPreparer:
             "requiere cita literal de transcript. Las citas de referencias usan su path exacto "
             "como source_id. Distingue inferencias y recomendaciones de lo dicho por el cliente. "
             "Entrega resumen, necesidades, requisitos, presupuesto, plazos, riesgos, pendientes, "
-            "comparación de proyectos, propuesta de presentación y guion. Nunca marques aprobado."
+            "comparación de proyectos y propuesta de presentación. Devuelve speaker_notes "
+            "vacío: el guion se genera después de aprobar la presentación. Nunca marques aprobado."
         )
         for _ in range(6):
             try:

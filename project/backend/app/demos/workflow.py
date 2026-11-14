@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+import hashlib
 import json
 import os
 import socket
@@ -340,9 +341,35 @@ async def simulate_stuart(runtime):
         comentario="Stuart y el agente reorganizan el planteamiento antes de presentar a dirección.",
     )
     revision = changed["state"]["revision"]
+    # Only this offline journey uses placeholder documents; never real approved inputs.
+    inputs = runtime.settings.mock_dir / "mock-presentation" / case_id / f"v{revision}"
+    inputs.mkdir(parents=True, exist_ok=True)
+    placeholders = {
+        "resumen.pdf": changed["state"]["draft"],
+        "ficha.pdf": json.dumps(changed["state"]["package"], ensure_ascii=False),
+        "presentacion.html": json.dumps(
+            changed["state"]["package"]["presentation"], ensure_ascii=False
+        ),
+        "presentacion.pdf": json.dumps(
+            changed["state"]["package"]["presentation"], ensure_ascii=False
+        ),
+        "transcripcion.md": changed["state"]["transcript"],
+    }
+    files = []
+    for name, text in placeholders.items():
+        data = ("MOCK: documento de prueba offline\n" + text).encode()
+        (inputs / name).write_bytes(data)
+        files.append({"name": name, "sha256": hashlib.sha256(data).hexdigest()})
+    await call(
+        "registrar_archivos_presentacion",
+        expediente_id=case_id,
+        revision=revision,
+        archivos=files,
+        directorio=str(inputs),
+    )
     await call("comenzar_revision", expediente_id=case_id, revision=revision)
     runtime.mock_clock.advance(15)
-    await call(
+    script = await call(
         "revisar_preparacion",
         expediente_id=case_id,
         decision="approve",
@@ -353,6 +380,34 @@ async def simulate_stuart(runtime):
             "actor": "Stuart (mock)",
             "step": "Aprobar revisión exacta",
             "revision": revision,
+        }
+    )
+    revision = script["state"]["revision"]
+    await call("comenzar_revision", expediente_id=case_id, revision=revision)
+    runtime.mock_clock.advance(30)
+    await call(
+        "revisar_preparacion",
+        expediente_id=case_id,
+        decision="approve",
+        revision=revision,
+    )
+    trace.append(
+        {
+            "actor": "Stuart (mock)",
+            "step": "Aprobar guion de la presentación",
+            "revision": revision,
+        }
+    )
+    exported = await call(
+        "exportar_paquete_aprobado",
+        expediente_id=case_id,
+        revision=revision,
+    )
+    trace.append(
+        {
+            "actor": "Agente de preparación (mock)",
+            "step": "Exportar paquete aprobado",
+            "result": exported,
         }
     )
     runtime.mock_clock.advance(120)

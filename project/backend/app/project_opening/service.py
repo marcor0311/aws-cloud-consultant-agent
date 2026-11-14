@@ -19,8 +19,19 @@ class OpeningService:
         self.validate_board = validate_board
 
     def register(self, value):
-        request = OpeningRequest.model_validate(value)
-        self.validate_files(request.files)
+        request = OpeningRequest.model_validate(value, context={"stored_legacy": True})
+        if len(request.files) < 6:
+            try:
+                existing = self.repository.get(request.case_id)
+            except ValueError:
+                raise ValueError(
+                    "Las nuevas aperturas requieren seis archivos, incluido el guion aprobado."
+                ) from None
+            if existing["request_sha256"] != request.fingerprint():
+                raise ValueError(
+                    "La apertura anterior tiene otra decisión; conciliar sin reemplazarla."
+                )
+        self.validate_files(request.files, request.case_id)
         source = self.repository.preparation_delivery(
             request.case_id, [f.model_dump() for f in request.files]
         )
@@ -47,7 +58,8 @@ class OpeningService:
                     if key in record
                 },
                 context={"stored_legacy": True},
-            ).files
+            ).files,
+            case_id,
         )
         certificate = self.validate_board(case_id)
         return {
@@ -75,7 +87,8 @@ class OpeningService:
                         if key in record
                     },
                     context={"stored_legacy": True},
-                ).files
+                ).files,
+                case_id,
             )
             certificate = self.validate_board(case_id)
             thread = f"opening:{case_id}:board:{certificate['digest']}"
