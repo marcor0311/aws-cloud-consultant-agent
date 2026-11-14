@@ -188,10 +188,10 @@ async def test_mcp_subprocess_starts_from_the_agent_root(monkeypatch):
                 "Vuelva a intentarlo.",
                 "transferir_a_asesor",
                 {"confirmacion_usuario": True},
-                answer="No puedo volver a intentar la transferencia. Puede contactar a Stuart.",
+                answer="No puedo volver a intentar la transferencia. Puede contactar a asistencia arroba noname punto com.",
             )
             refer.assert_awaited_once()
-            await turn("Contactaré a Stuart. Hasta luego.", "end_call")
+            await turn("Contactaré a asistencia. Hasta luego.", "end_call")
             await asyncio.wait_for(closed.wait(), timeout=5)
 
         # Disabled during authorization after OTP: still no Calendar access, and
@@ -249,11 +249,30 @@ async def test_mcp_subprocess_starts_from_the_agent_root(monkeypatch):
             job.delete_room.assert_not_awaited()
             job.add_shutdown_callback.assert_not_called()
 
+        # Missing destination is reported immediately, before offering a transfer.
+        monkeypatch.delenv("CALENDAR_ADVISOR_TRANSFER_E164")
+        async with phone_session() as (session, turn, refer, closed, _job):
+            await turn(
+                "Sí, el código está correcto.",
+                "iniciar_verificacion_cliente",
+                {"codigo_cliente": "IOAA-0012"},
+            )
+            messages = said(session)
+            assert OFFER not in messages
+            assert any(
+                "El asesor no está disponible en este momento" in t for t in messages
+            )
+            assert any("asistencia arroba noname punto com" in t for t in messages)
+            refer.assert_not_awaited()
+            await turn("Contactaré a asistencia, adiós.", "end_call")
+            await asyncio.wait_for(closed.wait(), timeout=5)
+            refer.assert_not_awaited()
+
         assert all(
             path.endswith(("/start", "/verify", "/authorize", "/close"))
             for path, _ in requests
         )
-        assert sum(path.endswith("/start") for path, _ in requests) == 4
+        assert sum(path.endswith("/start") for path, _ in requests) == 5
     finally:
         backend.shutdown()
         backend.server_close()

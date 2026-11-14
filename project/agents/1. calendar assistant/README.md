@@ -83,8 +83,8 @@ Si el backend devuelve `not_registered` o `not_enabled`, incluso al revalidar un
 operación de agenda, Alisa pasa a una fase sin herramientas de calendario y ofrece
 comunicar con un asesor de negocio. Solo una aceptación explícita en un mensaje
 posterior a la oferta permite intentar la transferencia. Si rechaza, termina la
-gestión y explica cómo contactar a Stuart. La autorización OTP no se sustituye
-por la transferencia ni por la aceptación de la oferta.
+gestión y explica cómo contactar a `asistencia@noname.com`. La autorización OTP
+no se sustituye por la transferencia ni por la aceptación de la oferta.
 
 ### Transferencia de la llamada activa
 
@@ -92,14 +92,16 @@ Configura `CALENDAR_ADVISOR_TRANSFER_E164` únicamente en el `secrets.env` priva
 o en el entorno del proceso, con `+` seguido del número internacional E.164. No se
 carga el destino desde `project/.env`, no se acepta como argumento del modelo y
 no se incluye en prompts, respuestas ni logs. El ejemplo versionado permanece vacío.
-Si falta o es inválido, Alisa explica la alternativa de contacto sin enviar REFER.
+Si falta o es inválido, Alisa no ofrece transferir: informa de inmediato que el
+asesor no está disponible en este momento e indica que puede contactar a
+`asistencia@noname.com`. No envía REFER ni accede al calendario.
 
 `CALENDAR_ADVISOR_TRANSFER_TIMEOUT_SECONDS` fija la espera de respuesta (entero de
 1 a 120, predeterminado 10 segundos); puede ir en la configuración no sensible.
 El request lleva `ringing_timeout` y un timeout HTTP cinco segundos mayor, con un
 límite local adicional. Alisa espera el resultado y, ante falta de respuesta,
 rechazo o error de transporte, retoma la conversación y orienta a contactar a
-Stuart en el correo habitual. No reintenta automáticamente: un timeout de red
+`asistencia@noname.com`. No reintenta automáticamente: un timeout de red
 puede dejar incierto el resultado remoto. Solo la respuesta de LiveKit con estado
 exitoso confirma la transferencia; entonces se cierra la sesión del agente sin
 eliminar la sala ni colgar al destinatario.
@@ -151,7 +153,8 @@ uv run --locked ruff check src tests demos
 
 La suite conserva una conexión real al servidor MCP con invocación de herramienta,
 extendida al SDK y backend HTTP local simulado para la derivación: rechazo de la
-oferta, aceptación, timeout, rechazo del proveedor y transferencia completada.
+oferta, aceptación, timeout, rechazo del proveedor, transferencia completada y
+asesor sin configurar con orientación a asistencia.
 Los mensajes son guionados: verifican herramientas y efectos, no comprensión del lenguaje.
 El recorrido de agenda y cierre con recibo queda en el E2E bajo demanda.
 Las pruebas locales utilizan datos, transcripts y proveedores ficticios. Los

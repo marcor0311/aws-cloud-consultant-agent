@@ -13,6 +13,7 @@ from livekit.agents import (
 )
 from livekit.agents.llm import ToolFlag
 
+from src.config import advisor_transfer_settings
 from src.integrations.sip_transfer import transfer_active_call
 
 OFFER = (
@@ -20,9 +21,11 @@ OFFER = (
     "¿Quiere que intente comunicarle con un asesor en esta misma llamada?"
 )
 NEXT_STEP = (
-    "Puede contactar a Stuart en stuart arroba futura punto com para completar "
+    "Puede contactar a asistencia arroba noname punto com para completar "
     "su registro con un asesor de negocio. Por ahora no puedo gestionar citas."
 )
+
+UNAVAILABLE = "El asesor no está disponible en este momento. " + NEXT_STEP
 
 
 class AdvisorAssistant(Agent):
@@ -35,8 +38,10 @@ class AdvisorAssistant(Agent):
                 "con calidez y brevedad, sin mencionar herramientas ni estados internos. "
                 "El backend exige atención de un asesor. No reveles datos del cliente "
                 "ni solicites códigos, OTP, correo o datos nuevos. No puedes gestionar "
-                "citas ni volver a verificar en esta llamada. Ya ofreces comunicar con "
-                "un asesor: interpreta la respuesta de la persona. Solo una aceptación "
+                "citas ni volver a verificar en esta llamada. Si no hay un asesor disponible, "
+                "orienta a contactar a asistencia arroba noname punto com; no ofrezcas "
+                "transferir ni reveles detalles de configuración. Si has ofrecido "
+                "comunicar con un asesor, interpreta la respuesta. Solo una aceptación "
                 "explícita autoriza transferir_a_asesor con confirmacion_usuario=true. "
                 "Una pregunta, silencio, agradecimiento o respuesta ambigua no es "
                 "aceptación: aclara sin transferir. Si rechaza, llama la herramienta "
@@ -57,6 +62,16 @@ class AdvisorAssistant(Agent):
 
     async def on_enter(self):
         self.session.on("conversation_item_added", self._observe_user)
+        # Check local configuration before offering a transfer that cannot be made.
+        try:
+            advisor_transfer_settings()
+        except ValueError:
+            self._resolved = True
+            await self.update_tools(
+                [tool for tool in self.tools if tool.id == "end_call"]
+            )
+            await self.session.say(UNAVAILABLE, allow_interruptions=False)
+            return
         # This phase starts with fresh context and never carries client codes or OTPs.
         speech = self.session.say(OFFER, allow_interruptions=False)
         await speech
@@ -112,7 +127,7 @@ class AdvisorAssistant(Agent):
         explanation = {
             "no_answer": "El asesor no contestó a tiempo. Sigo aquí con usted. ",
             "rejected": "No se pudo completar la transferencia. Sigo aquí con usted. ",
-            "unavailable": "No puedo transferir esta llamada en este momento. ",
+            "unavailable": "El asesor no está disponible en este momento. ",
             "failed": "No pude confirmar la conexión con el asesor. Sigo aquí con usted. ",
         }[outcome]
         await self.session.say(explanation + NEXT_STEP, allow_interruptions=False)
