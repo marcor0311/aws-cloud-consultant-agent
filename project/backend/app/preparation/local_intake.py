@@ -1,7 +1,9 @@
 """Register known local inputs without inventing a Calendar booking or past work."""
 
 
-def start_local_preparation(runtime, case_id, transcript, *, provenance):
+def start_local_preparation(
+    runtime, case_id, transcript, *, provenance, meeting_notes=""
+):
     service, store = runtime.service, runtime.store
     owner = store.get(f"owner:{case_id}")
     if owner and owner["manager_id"] != service.manager_id:
@@ -52,4 +54,5 @@ def start_local_preparation(runtime, case_id, transcript, *, provenance):
         "local-transcript:" + transcript.fingerprint(),
         transcript.as_text(),
         "reservas pagos contenido conectividad sistemas locales duplicados",
+        meeting_notes=meeting_notes,
     )

@@ -1,5 +1,8 @@
 """Browser caption ingestion uses actual HTTP, SQL, queue and LangGraph; no cloud."""
 
+import asyncio
+import hashlib
+import json
 from unittest.mock import Mock
 
 import pytest
@@ -7,7 +10,10 @@ from fastapi.testclient import TestClient
 
 from app.api.dependencies import get_runtime
 from app.bootstrap import create_runtime
+from app.cli import workflow as workflow_cli
 from app.main import app
+from app.mcp_server import create_server
+from app.preparation.models import ExecutivePackage
 from app.workflow.runtime import timestamp
 from app.workflow.settings import WorkflowSettings
 from app.workflow.transcripts import receive_capture
@@ -81,7 +87,7 @@ def ready(tmp_path):
 
 
 def test_authenticated_api_queues_then_worker_preserves_speakers_after_restart(
-    ready, monkeypatch
+    ready, monkeypatch, tmp_path, capsys
 ):
     runtime, case, google, drafter = ready
     monkeypatch.setenv("WORKFLOW_TRANSCRIPT_TOKEN", KEY)
@@ -113,6 +119,122 @@ def test_authenticated_api_queues_then_worker_preserves_speakers_after_restart(
             assert receive_capture(other, capture())["status"] == "duplicate"
             drafter.assert_not_called()
             google.transcript.assert_not_called()
+            # The existing CLI/service journey without notes still uses its original identity.
+            text = saved["text"]
+            transcript_path = tmp_path / "transcript.txt"
+            transcript_path.write_text(text, encoding="utf-8")
+            drafter.side_effect = None
+            drafter.return_value = ExecutivePackage.model_validate(
+                {
+                    "summary": "Preparación offline de ventas.",
+                    "needs": [
+                        {
+                            "text": "Aplicación para ventas.",
+                            "status": "confirmed",
+                            "citations": [
+                                {
+                                    "source_id": "transcript",
+                                    "quote": "Una aplicación para ventas.",
+                                }
+                            ],
+                        }
+                    ],
+                    "requirements": [],
+                    "risks": [],
+                    "budget": {
+                        "text": "Por confirmar.",
+                        "status": "unknown",
+                        "citations": [],
+                    },
+                    "timeline": {
+                        "text": "Por confirmar.",
+                        "status": "unknown",
+                        "citations": [],
+                    },
+                    "open_questions": ["Confirmar presupuesto y plazo."],
+                    "related_projects": [],
+                    "presentation": [
+                        {"title": "Ventas", "bullets": ["Aplicación para ventas."]}
+                    ],
+                    "speaker_notes": "",
+                }
+            )
+            monkeypatch.setenv("WORKFLOW_ENABLED", "1")
+            monkeypatch.setattr(
+                workflow_cli,
+                "create_runtime",
+                lambda *_args, **_kwargs: create_runtime(
+                    runtime.settings,
+                    google=google,
+                    drafter=drafter,
+                    clock=runtime.store.clock,
+                ),
+            )
+            workflow_cli.main(
+                [
+                    "preparation-start",
+                    "--case",
+                    case,
+                    "--event",
+                    "legacy-event",
+                    "--transcript",
+                    str(transcript_path),
+                    "--query",
+                    "ventas",
+                ]
+            )
+            queued = json.loads(capsys.readouterr().out)
+            assert queued["status"] == "pending"
+            drafter.assert_not_called()
+            assert other.run_once()
+            assert other.store.job(queued["task_id"])["status"] == "done"
+            assert drafter.call_args.args[0]["meeting_notes"] == ""
+            prepared = other.service.get(case)["state"]
+            assert (
+                prepared["input_hash"]
+                == hashlib.sha256(json.dumps([text, "ventas"]).encode()).hexdigest()
+            )
+            asyncio.run(
+                create_server(other.service).call_tool(
+                    "iniciar_preparacion",
+                    {
+                        "expediente_id": case,
+                        "evento_id": "legacy-event",
+                        "transcripcion": text,
+                        "consulta": "ventas",
+                    },
+                )
+            )
+            assert other.service.continue_preparation(case)["state"] == prepared
+            assert drafter.call_count == 1
+            notes_path = tmp_path / "meeting-notes.txt"
+            notes_path.write_text(
+                "Revisar el presupuesto con Stuart.", encoding="utf-8"
+            )
+            workflow_cli.main(
+                [
+                    "preparation-start",
+                    "--case",
+                    case,
+                    "--event",
+                    "legacy-event",
+                    "--transcript",
+                    str(transcript_path),
+                    "--query",
+                    "ventas",
+                    "--meeting-notes",
+                    str(notes_path),
+                ]
+            )
+            changed = json.loads(capsys.readouterr().out)
+            assert changed["task_id"] != queued["task_id"]
+            job = other.store.job(changed["task_id"])
+            assert (
+                job["payload"]["arguments"]["meeting_notes"] == notes_path.read_text()
+            )
+            with pytest.raises(ValueError, match="otra entrada"):
+                other._preparation_command(job["payload"])
+            assert other.service.get(case)["state"] == prepared
         finally:
             other.close()
     finally:

@@ -1,5 +1,6 @@
 """Approved bytes, real graph/checkpoint restart and remote idempotency, offline."""
 
+import asyncio
 import base64
 import hashlib
 import json
@@ -10,10 +11,12 @@ import httpx
 import pytest
 
 from app.cli.agent2_live import resolve_case
+from app.integrations.ai.preparer import OpenAIPreparer
 from app.integrations.langgraph import LangGraphExecution
 from app.integrations.opening_documents import OpeningDocuments
 from app.integrations.opening_preview import simulate_board_approval
 from app.integrations.project_github import ProjectGitHub
+from app.mcp_server import create_server
 from app.persistence.board_votes import BoardRepository
 from app.persistence.checkpoints import open_checkpointer
 from app.persistence.project_opening import ProjectOpeningRepository
@@ -36,6 +39,11 @@ TEMPLATE = ROOT / "project/agents/2. meeting assistant/templates/architecture.md
 
 
 FIXTURE = ROOT / "project/backend/fixtures/nike-lindora-stuart/opening.json"
+
+MEETING_NOTES = (
+    "El presupuesto sigue pendiente de confirmar.\n"
+    "Stuart propone revisar los costos operativos cada mes."
+)
 
 
 class GitHub:
@@ -193,6 +201,54 @@ def seed_preparation(store, saver, request, directory):
         (fixture / "transcript.json").read_text()
     )
     content = MeetingInsumos.model_validate_json((fixture / "content.json").read_text())
+    package = content.executive_package(transcript).model_dump()
+    package["budget"] = {
+        "text": "Presupuesto por conciliar: la transcripción indica un importe y las notas no lo confirman.",
+        "status": "unknown",
+        "citations": [
+            *package["budget"]["citations"],
+            {"source_id": "meeting_notes", "quote": MEETING_NOTES.splitlines()[0]},
+        ],
+    }
+    package["risks"].append(
+        {
+            "text": "Revisión mensual de costos propuesta en las notas, sin acuerdo confirmado.",
+            "status": "inferred",
+            "citations": [
+                {"source_id": "meeting_notes", "quote": MEETING_NOTES.splitlines()[1]}
+            ],
+        }
+    )
+    package["summary"] += " El presupuesto difiere entre fuentes y requiere revisión."
+    package["open_questions"].append("Conciliar el presupuesto con Stuart.")
+
+    def respond(request):
+        body = json.loads(request.content)
+        inputs = json.loads(body["input"][0]["content"])
+        assert inputs["transcript"] == transcript.as_text()
+        assert inputs["meeting_notes"] == MEETING_NOTES
+        assert "status unknown" in body["instructions"]
+        return httpx.Response(
+            200,
+            json={
+                "status": "completed",
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [
+                            {"type": "output_text", "text": json.dumps(package)}
+                        ],
+                    }
+                ],
+            },
+        )
+
+    provider = OpenAIPreparer(
+        "offline-key",
+        "offline-model",
+        client=httpx.Client(transport=httpx.MockTransport(respond)),
+        allow_inference=True,
+    )
     process = ProcessService(
         LangGraphExecution(build_process_graph(saver)), store, request["approved_by"]
     )
@@ -200,7 +256,7 @@ def seed_preparation(store, saver, request, directory):
         LangGraphExecution(
             build_graph(
                 saver,
-                drafter=lambda state: content.executive_package(transcript),
+                drafter=provider,
                 store=store,
             )
         ),
@@ -212,10 +268,72 @@ def seed_preparation(store, saver, request, directory):
     )
     runtime = SimpleNamespace(service=service, store=store, process=process)
     result = start_local_preparation(
-        runtime, request["case_id"], transcript, provenance="offline_test"
+        runtime,
+        request["case_id"],
+        transcript,
+        provenance="offline_test",
+        meeting_notes=MEETING_NOTES,
     )
+    provider.client.close()
     revision = result["state"]["revision"]
     case_id = request["case_id"]
+    assert result["state"]["meeting_notes"] == MEETING_NOTES
+    assert result["state"]["transcript"] == transcript.as_text()
+    assert result["state"]["package"]["budget"]["status"] == "unknown"
+    assert {
+        c["source_id"] for c in result["state"]["package"]["budget"]["citations"]
+    } == {"transcript", "meeting_notes"}
+    documents = store.get(f"artifact:{case_id}:{revision}")["documents"]
+    assert documents["meeting-notes.md"] == MEETING_NOTES
+    assert "Fuente `meeting_notes`" in documents["executive-summary.md"]
+    state = result["state"]
+    server = create_server(service)
+    arguments = {
+        "expediente_id": case_id,
+        "evento_id": state["event_id"],
+        "transcripcion": state["transcript"],
+        "consulta": state["query"],
+        "notas_reunion": MEETING_NOTES,
+    }
+    asyncio.run(server.call_tool("iniciar_preparacion", arguments))
+    assert service.get(case_id)["state"] == state
+    with pytest.raises(ValueError, match="otra entrada"):
+        service.start(
+            case_id,
+            state["event_id"],
+            state["transcript"],
+            state["query"],
+            meeting_notes=MEETING_NOTES + "\nNotas corregidas.",
+        )
+    assert service.get(case_id)["state"] == state
+    with pytest.raises(ValueError, match="cita de la reunión"):
+        service.update_package(
+            case_id,
+            revision,
+            {
+                "budget": {
+                    **package["budget"],
+                    "status": "confirmed",
+                    "citations": [package["budget"]["citations"][-1]],
+                }
+            },
+        )
+    with pytest.raises(ValueError, match="fuente identificada"):
+        service.update_package(
+            case_id,
+            revision,
+            {
+                "budget": {
+                    **package["budget"],
+                    "citations": [
+                        {
+                            "source_id": "transcript",
+                            "quote": MEETING_NOTES.splitlines()[0],
+                        }
+                    ],
+                }
+            },
+        )
     if result["state"]["status"] == "ready_for_stage_2":
         return request
     assert result["state"]["package"]["speaker_notes"] == ""
@@ -303,6 +421,11 @@ def seed_preparation(store, saver, request, directory):
         case_id, revision, "approve", "Guion revisado y aprobado."
     )
     assert delivered["state"]["status"] == "ready_for_stage_2"
+    assert delivered["state"]["package"]["budget"] == package["budget"]
+    assert (
+        store.get(f"artifact:{case_id}:{revision}")["documents"]["meeting-notes.md"]
+        == MEETING_NOTES
+    )
     assert process.get(case_id)["state"]["stage"] == 2
     documents = OpeningDocuments(
         Path(directory).parent / "export-default", TEMPLATE, store
@@ -403,6 +526,15 @@ def test_preparation_to_agent2_documents_issue_and_handoffs_persist(tmp_path, so
     restarted = WorkflowStore(database)
     with open_checkpointer(checkpoint) as saver:
         service = make_service(restarted, saver, github, default_directory)
+        preparation = PreparationService(
+            LangGraphExecution(build_graph(saver, store=restarted)),
+            restarted,
+            source["approved_by"],
+            notifications=False,
+        )
+        state = preparation.continue_preparation(source["case_id"])["state"]
+        assert state["meeting_notes"] == MEETING_NOTES
+        assert state["package"]["budget"]["status"] == "unknown"
         assert service.register(source)["project_number"] == 1
         result = service.run(source["case_id"])
         assert result["status"] == "delivered"

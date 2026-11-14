@@ -1,5 +1,66 @@
 # Generación local de insumos de reunión
 
+## Preparación con notas de reunión
+
+El Engagement Manager puede aportar la transcripción y las notas como textos
+independientes. Las notas son opcionales y distintas de `speaker_notes`, el guion
+que se genera después de aprobar la presentación. La consulta de antecedentes
+continúa siendo un campo separado.
+
+Desde MCP, `iniciar_preparacion` acepta:
+
+```json
+{
+  "expediente_id": "expediente-existente",
+  "evento_id": "reunion-terminada",
+  "transcripcion": "Cliente: necesitamos ventas en línea; el presupuesto se confirmará.",
+  "notas_reunion": "Stuart propone revisar los costos operativos cada mes.",
+  "consulta": "ventas comercio electrónico"
+}
+```
+
+Desde CLI, los dos archivos son texto UTF-8. El comando encola la preparación
+para el worker; no ejecuta inferencia en la terminal:
+
+```sh
+cd project/backend
+.venv/bin/python -m app.cli.workflow preparation-start \
+  --case expediente-existente --event reunion-terminada \
+  --transcript /ruta/transcripcion.txt \
+  --meeting-notes /ruta/notas-reunion.md \
+  --query 'ventas comercio electrónico'
+```
+
+Se requiere `WORKFLOW_ENABLED=1`, un expediente del responsable configurado y el
+worker habitual (`make workflow`). La inferencia conserva su activación explícita
+por ejecución. En el servicio, el argumento opcional se llama `meeting_notes`.
+Omitir `notas_reunion` o `--meeting-notes` conserva las llamadas existentes.
+
+`consultar_preparacion` devuelve ambas fuentes en el estado persistido; la pausa
+`draft_with_chatgpt`, cuando no se inyecta proveedor, también las entrega por
+separado. Las citas usan `source_id: "transcript"` o
+`source_id: "meeting_notes"`, con una cita literal que debe aparecer en esa fuente.
+Una nota por sí sola no permite marcar un hallazgo `confirmed`: esa condición
+sigue requiriendo evidencia de la transcripción. Los antecedentes conservan su
+ruta como identificador de fuente y su carácter de referencia histórica ficticia.
+
+Si las fuentes discrepan, el borrador debe conservar ambas citas, marcar el
+hallazgo `unknown` y explicar la discrepancia en el resumen y las preguntas
+pendientes para revisión. Las instrucciones de redacción se aplican tanto al
+proveedor como a la preparación desde el chat; la validación comprueba citas y
+procedencia, y el Engagement Manager revisa su interpretación antes de aprobar.
+
+Las notas se guardan en el checkpoint y como `meeting-notes.md` en los artefactos
+SQL de cada revisión. Se conservan al editar el paquete o generar el guion.
+Cambiar, añadir o retirar notas de una entrada iniciada exige conciliación: se
+rechaza reutilizar el checkpoint con otra entrada. Sin notas se conserva la huella
+histórica. Reanudar usa las fuentes persistidas, incluidas las notas.
+
+La presentación y el guion mantienen sus aprobaciones separadas. La exportación
+aprobada y la entrega al agente 2 conservan el contrato de seis archivos y su
+manifiesto; las notas de entrada permanecen consultables en el expediente y sus
+artefactos, sin añadir un séptimo archivo al manifiesto.
+
 ## Transcripción de Stuart: Nike Lindora
 
 `insumos temporales de agente 1/` está directamente en la raíz y contiene
