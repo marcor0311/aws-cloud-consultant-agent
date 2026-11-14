@@ -49,8 +49,8 @@ mcp = MCPServer("Stuart Calendar")
 _access = AccessClient()
 
 
-def _require_access(operation: str, email: str = "") -> None:
-    _access.require(operation, email)
+def _require_access(operation: str, email: str = "") -> dict | None:
+    return _access.require(operation, email)
 
 
 @mcp.tool()
@@ -189,7 +189,8 @@ def consultar_horarios(
         evento_a_reagendar: ID devuelto por buscar_reuniones, solo para reagendar.
         correo_confirmado: Opcional. Omitir para usar el correo aprobado de la sesión verificada.
     """
-    _require_access("availability", correo_confirmado)
+    if denied := _require_access("availability", correo_confirmado):
+        return denied
     correo_confirmado = correo_confirmado or _access.email
     now = datetime.now(TIME_ZONE).replace(second=0, microsecond=0)
     horizon_end = now + BOOKING_HORIZON
@@ -349,7 +350,8 @@ def agendar_reunion(
         tema: Resumen breve del proyecto o motivo de la reunión, si se conoce.
     """
     operation_started = datetime.now(TIME_ZONE).isoformat()
-    _require_access("book", correo_confirmado)
+    if denied := _require_access("book", correo_confirmado):
+        return denied
     correo_confirmado = correo_confirmado or _access.email
     email = _normalize_email(correo_confirmado)
     if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
@@ -557,7 +559,8 @@ def buscar_reuniones(
     Devuelve hasta diez citas en el próximo año. Si hay varias, pregunta cuál
     quiere modificar antes de reagendar o cancelar. fecha_original acota a un día.
     """
-    _require_access("search", correo_confirmado)
+    if denied := _require_access("search", correo_confirmado):
+        return denied
     correo_confirmado = correo_confirmado or _access.email
     now = datetime.now(TIME_ZONE)
     start, end = now, now + timedelta(days=365)
@@ -608,7 +611,8 @@ def reagendar_reunion(
     disponibilidad, jornada y duración. No crea una segunda invitación.
     """
     operation_started = datetime.now(TIME_ZONE).isoformat()
-    _require_access("reschedule", correo_confirmado)
+    if denied := _require_access("reschedule", correo_confirmado):
+        return denied
     correo_confirmado = correo_confirmado or _access.email
     email = _require_confirmed_email(correo_confirmado)
     if not confirmacion_usuario:
@@ -695,7 +699,8 @@ def cancelar_reunion(
     la coincidencia del invitado y la cita antes de notificar la cancelación.
     """
     operation_started = datetime.now(TIME_ZONE).isoformat()
-    _require_access("cancel", correo_confirmado)
+    if denied := _require_access("cancel", correo_confirmado):
+        return denied
     correo_confirmado = correo_confirmado or _access.email
     email = _require_confirmed_email(correo_confirmado)
     if not confirmacion_usuario:

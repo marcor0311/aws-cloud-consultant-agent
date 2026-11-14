@@ -35,9 +35,10 @@ def advance(seconds):
 
 
 class ScriptedLLM(llm.LLM):
-    def __init__(self):
+    def __init__(self, *, clock_tick=None):
         super().__init__()
         self.responses = deque()
+        self.clock_tick = clock_tick if clock_tick is not None else lambda: advance(1)
 
     def chat(
         self,
@@ -68,7 +69,7 @@ class ScriptedLLM(llm.LLM):
                     ]
                 )
             )
-        if tool != "end_call":
+        if text is not None and tool != "end_call":
             self.responses.append(llm.ChoiceDelta(content=text))
 
 
@@ -78,7 +79,7 @@ class ScriptedStream(llm.LLMStream):
             raise RuntimeError(
                 "El SDK pidió una respuesta no prevista por el modelo mock."
             )
-        advance(1)
+        self._llm.clock_tick()
         self._event_ch.send_nowait(
             llm.ChatChunk(id="mock", delta=self._llm.responses.popleft())
         )
