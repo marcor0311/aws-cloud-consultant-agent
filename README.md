@@ -80,6 +80,13 @@ las API de Google Calendar y Gmail.
   <img src="https://skillicons.dev/icons?i=aws,terraform" alt="AWS y Terraform" height="56">
 </p>
 
+Para la etapa de ingeniería se recomienda [AWS Emulator](https://github.com/aws/aws-emulator)
+con la [skill oficial `aws-emulator`](https://docs.aws.amazon.com/emulator/latest/userguide/getting-started-agent.html)
+como entorno oficial de pruebas locales de Terraform y en GitHub Actions.
+Su integración está definida en el [contrato de implementación](issues.md#5-cloud-infrastructure-engineer--implementación)
+y está pendiente de desarrollo. Los resultados del emulador no garantizan
+compatibilidad completa ni validan los controles de seguridad de AWS real.
+
 **Control de versiones y CI**
 
 <p>
