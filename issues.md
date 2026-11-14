@@ -216,7 +216,7 @@ flowchart TB
         baselines -->|Módulos con versión aprobada| implementar
         agente --> implementar["Implementar Terraform<br/>con módulos versionados"]
         implementar --> validar["Pruebas, seguridad y políticas como código"]
-        validar --> local["Pruebas locales con AWS Emulator<br/>Documentación y evidencias"]
+        validar --> local["Despliegue local<br/>Documentación y evidencias"]
         local --> pr["El agente abre el PR de implementación"]
         pr --> arquitecto["Arquitecto revisa y aprueba"]
         arquitecto --> main["Integrar en main protegido"]
