@@ -16,8 +16,31 @@ no llama a modelos externos. Los archivos auxiliares se
 producen en un directorio temporal que se elimina; se publican los cuatro documentos y la transcripción completa.
 
 Requiere `WORKFLOW_DATABASE_URL` configurada en el `secrets.env` externo. Cada revisión
-vincula los cinco archivos mediante sus hashes; un reintento valida los archivos
+vincula primero los cinco archivos de presentación mediante sus hashes; un reintento valida los archivos
 existentes sin regenerarlos. Ver [trazabilidad y conciliación](handoffs.md).
+
+La aprobación de presentación genera un guion local por diapositiva, basado en
+la misma lista y orden de diapositivas que el exportador HTML/PDF. Se guarda como
+`speaker-notes.md` en una nueva revisión, todavía pendiente de aprobación del
+gerente. No consume inferencia. Se puede mejorar desde el chat mediante
+`actualizar_insumos` con `speaker_notes`; la aprobación final usa el número de
+esa nueva revisión. Tras aprobarlo, `exportar_paquete_aprobado` copia los cinco
+archivos originales y el guion exacto aprobado a `approved/<case_id>/v<revision>/`
+y registra el manifiesto de seis archivos. No altera el paquete de otra revisión.
+El agente 2 publica los seis archivos y `manifest.json` para Arquitectura.
+
+La generación inicial registra los cinco archivos antes de la aprobación de
+presentación. Desde MCP se puede hacer con `registrar_archivos_presentacion`.
+Una vez aprobado también el guion, la exportación está disponible desde la CLI:
+
+```sh
+cd project/backend
+.venv/bin/python -m app.cli.preparation_documents export --request fixtures/nike-lindora-stuart/opening.json
+```
+
+El fixture histórico de cinco archivos solo describe los insumos de presentación.
+La CLI de apertura toma el sexto archivo del manifiesto aprobado; nunca lo inventa
+ni acepta otra versión del guion. Los expedientes ya persistidos no se actualizan automáticamente.
 
 ```sh
 PYTHONPATH=project/backend project/backend/.venv/bin/python scripts/generate-stuart-insumos.py

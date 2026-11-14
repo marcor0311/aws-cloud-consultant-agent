@@ -76,7 +76,7 @@ def create_opening_runtime(
         )
         saver = resources.enter_context(open_checkpointer(checkpoint_url))
         repository = ProjectOpeningRepository(store)
-        documents = OpeningDocuments(source_dir, issue_template)
+        documents = OpeningDocuments(source_dir, issue_template, store)
         slack = SlackBoardPoll(os.getenv("SLACK_BOT_TOKEN", ""))
         resources.callback(slack.client.close)
         board = BoardService(

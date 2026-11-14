@@ -45,17 +45,19 @@ make agent2-logout    # Revoca la sesión renovable y elimina credenciales local
 La decisión de encuadre de Nike está en
 `backend/fixtures/nike-lindora-stuart/opening.json`: prioridad inicial 1,
 presupuesto de USD 180.000 con sus cinco partidas, arquitecto `HiddenShadow77UC`
-y hashes de cinco archivos en `insumos temporales de agente 1/`.
+y hashes de cinco archivos de presentación en `insumos temporales de agente 1/`.
+Ese fixture histórico no autoriza una apertura nueva incompleta: la CLI incorpora
+el guion desde el manifiesto de seis archivos de la revisión aprobada.
 Se conserva su identificación como escenario ficticio.
 
 ## Flujo y entrega
 
 `registrar_apertura` comprueba la entrega aprobada de preparación, su revisión y
-el manifiesto de cinco archivos, registra su recepción y reserva el número.
+el manifiesto de seis archivos, incluido `speaker-notes.md` aprobado, registra su recepción y reserva el número.
 Una decisión aislada ya no puede saltarse esa entrega. La apertura exige
 además la unanimidad de la junta, registrada mediante votos firmados de Slack. `ejecutar_apertura`
 crea desde `marcor0311/aws-cloud-consulting-project-template`, conserva carpetas
-numeradas, publica los cinco insumos en `docs/01-discovery/` junto con README
+numeradas, publica los seis insumos y `manifest.json` en `docs/01-discovery/` junto con README
 y la plantilla de issue, en la rama `docs/initial-structure`. Abre un PR hacia la rama principal y verifica
 su merge antes de crear el issue de Arquitectura. El cuerpo del issue
 siempre se obtiene de `templates/architecture.md`; los enlaces de evidencia
@@ -116,7 +118,7 @@ El nodo del modelo usa OAuth y Responses con la definición de herramienta recib
 por MCP. Su llamada validada se envía por un cliente MCP STDIO al servidor privado
 Meeting Assistant; este ejecuta el grafo de apertura y el adaptador REST de GitHub.
 Es un intercambio MCP real con el servidor del proyecto, no el servidor oficial
-GitHub MCP. El resultado incluye repo desde template, los cinco insumos, acta y
+GitHub MCP. El resultado incluye repo desde template, los insumos aprobados, acta y
 issue asignado a David.
 
 Se guardan `response_id`, modelo, `usage`, nombre y argumentos de herramienta,
@@ -198,6 +200,12 @@ El paquete actual incluye `presentacion.html` y `presentacion.pdf` (una diaposit
 
 La raíz privada se configura mediante `CLOUD_CONSULTANT_SECRETS_DIR`. Ver [ejemplos y migración](../../../config/local-secrets.example/README.md).
 
-Las aperturas y entregas nuevas exigen los cinco archivos. La compatibilidad con
-cuatro archivos se limita a expedientes y manifiestos ya persistidos: no permite
-registrar una apertura nueva incompleta.
+Las aperturas y entregas nuevas exigen seis archivos: los cinco originales y el
+guion aprobado (`speaker-notes.md`). Preparación vincula primero los archivos de
+presentación y, tras aprobar también el guion, exporta a
+`approved/<case_id>/v<revision>/` mediante `exportar_paquete_aprobado` o la CLI
+`app.cli.preparation_documents export`. Se conservan los bytes, los hashes y la
+revisión; el issue enlaza el manifiesto del commit publicado. Los reintentos no
+regeneran ni sobrescriben el guion. La compatibilidad con cuatro o cinco archivos
+se limita a expedientes y manifiestos ya persistidos: no permite registrar una
+apertura nueva incompleta.

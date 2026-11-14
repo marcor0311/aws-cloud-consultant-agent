@@ -11,14 +11,17 @@ from urllib.parse import parse_qs, urlparse
 
 import httpx
 
-from app.bootstrap import create_opening_runtime
+from app.bootstrap import create_document_preparation_runtime, create_opening_runtime
 from app.cli.preparation_documents import reconcile_approved_preparation
 from app.core.config import PROJECT_DIR, load_environment, private_path
 from app.integrations.ai.oauth import DemoError
 from app.integrations.ai.plan_session import PlanSession
 from app.integrations.errors import ProviderError
+from app.integrations.opening_documents import OpeningDocuments
 from app.integrations.opening_preview import PreviewGitHub, simulate_board_approval
 from app.persistence.locking import Busy
+from app.preparation.deliveries import SCRIPT_NAME, files_digest
+from app.preparation.insumos import MeetingInsumos, MeetingTranscript
 from app.project_opening.mcp import create_server
 
 ROOT = PROJECT_DIR.parent
@@ -30,6 +33,83 @@ def session_directory():
 
 
 SOURCE = ROOT / "insumos temporales de agente 1"
+
+
+def request_with_delivery(store, request):
+    """Resolve a five-file presentation fixture to its exact approved six-file delivery."""
+    if len(request["files"]) == 6 or store.get("opening:" + request["case_id"]):
+        return request
+    status = store.get("status:" + request["case_id"]) or {}
+    manifest = store.get(
+        f"artifact-files:{request['case_id']}:{status.get('revision')}"
+    )
+    if (
+        not manifest
+        or len(manifest["files"]) != 6
+        or status.get("status") != "ready_for_stage_2"
+    ):
+        raise ValueError(
+            "Falta exportar el paquete de seis archivos aprobado, incluido el guion."
+        )
+    if files_digest(request["files"]) != files_digest(
+        [file for file in manifest["files"] if file["name"] != SCRIPT_NAME]
+    ):
+        raise ValueError(
+            "Los archivos de la decisión no corresponden al paquete exportado."
+        )
+    return {**request, "files": manifest["files"]}
+
+
+def approve_preview_script(database_url, request):
+    """Only the isolated preview simulates this additional manager decision."""
+    if (
+        not request["is_fictitious"]
+        or not request["case_id"].startswith("preview-")
+        or database_url != os.getenv("MEETING_ASSISTANT_PREVIEW_DATABASE_URL", "")
+        or database_url == os.getenv("WORKFLOW_DATABASE_URL", "")
+    ):
+        raise ValueError(
+            "La aprobación simulada del guion requiere el preview aislado."
+        )
+    fixture = PROJECT_DIR / "backend/fixtures/nike-lindora-stuart"
+    runtime = create_document_preparation_runtime(
+        database_url,
+        MeetingTranscript.model_validate_json(
+            (fixture / "transcript.json").read_text()
+        ),
+        MeetingInsumos.model_validate_json((fixture / "content.json").read_text()),
+        manager_id=request["approved_by"],
+    )
+    try:
+        state = runtime.service.get(request["case_id"])["state"]
+        if state["status"] == "ready_for_stage_2":
+            if state.get("presentation_approval"):
+                OpeningDocuments(
+                    SOURCE, AGENT / "templates/architecture.md", runtime.store
+                ).export_preparation(request["case_id"], state["revision"])
+            return
+        if state.get("review_subject") != "speaker_notes":
+            raise ValueError(
+                "El preview todavía requiere la aprobación de presentación."
+            )
+        runtime.store.event(
+            f"preview-script-approval:{request['case_id']}:{state['revision']}",
+            request["case_id"],
+            "preparation.simulated_script_approval",
+            {"is_simulated": True, "revision": state["revision"]},
+        )
+        runtime.service.begin_review(request["case_id"], state["revision"])
+        runtime.service.review(
+            request["case_id"],
+            state["revision"],
+            "approve",
+            "SIMULACIÓN: aprobación del guion en preview aislado.",
+        )
+        OpeningDocuments(
+            SOURCE, AGENT / "templates/architecture.md", runtime.store
+        ).export_preparation(request["case_id"], state["revision"])
+    finally:
+        runtime.close()
 
 
 def login(connection, port):
@@ -146,6 +226,7 @@ def main():
             PROJECT_DIR / "generated/meeting-assistant" / request["case_id"]
         )
         reconcile_approved_preparation(database_url, request)
+        approve_preview_script(database_url, request)
     runtime = create_opening_runtime(
         database_url,
         SOURCE,
@@ -191,6 +272,7 @@ def main():
             ).run(transport="stdio")
             return
         if args.command == "preview":
+            request = request_with_delivery(runtime.store, request)
             service.register(request)
             ballot = simulate_board_approval(runtime.board, request["case_id"])
             result = service.run(request["case_id"])
@@ -201,6 +283,7 @@ def main():
                 "external_github_calls": 0,
                 "real_inference_calls": 0,
                 "external_slack_calls": 0,
+                "script_review": {"is_simulated": True},
                 "board_vote": {
                     "is_simulated": True,
                     "approved": len(ballot["votes"]),
@@ -217,7 +300,11 @@ def main():
             print(json.dumps(report, ensure_ascii=False, indent=2))
             return
         if args.command == "register":
-            result = service.register(json.loads(args.request.read_text()))
+            result = service.register(
+                request_with_delivery(
+                    runtime.store, json.loads(args.request.read_text())
+                )
+            )
         elif args.command == "queue":
             result = service.queue()
         elif args.command == "next":

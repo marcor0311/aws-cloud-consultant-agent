@@ -27,6 +27,8 @@ class PreparationState(TypedDict, total=False):
     status: str
     handoff: dict
     package: dict
+    review_subject: str
+    presentation_approval: dict
     calendar_event_id: str
 
 

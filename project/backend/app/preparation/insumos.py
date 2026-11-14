@@ -310,10 +310,21 @@ class MeetingInsumos(InputModel):
             open_questions=[point.text for point in self.questions],
             related_projects=[],
             presentation=[
-                Slide(title=topic.title, bullets=[p.text for p in topic.points])
-                for topic in self.topics
+                Slide(
+                    title=slide.title,
+                    bullets=[
+                        text
+                        for text in [
+                            slide.intro,
+                            *(f"{block.label}: {block.text}" for block in slide.blocks),
+                            slide.note,
+                        ]
+                        if text.strip()
+                    ],
+                )
+                for slide in self.presentation
             ],
-            speaker_notes="\n".join(point.text for point in self.decisions),
+            speaker_notes="",
         )
         return package.validate_sources({"transcript": transcript.as_text()}, set())
 

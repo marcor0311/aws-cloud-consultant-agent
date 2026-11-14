@@ -6,10 +6,13 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
 from app.bootstrap import create_runtime
-from app.core.config import load_environment
+from app.core.config import PROJECT_DIR, load_environment
 from app.integrations.errors import ProviderError
+from app.integrations.opening_documents import OpeningDocuments
 from app.persistence.workflow import Busy
+from app.preparation.deliveries import PreparationDeliveries
 from app.preparation.references import read_reference, search_references
+from app.project_opening.models import ApprovedFile
 from app.workflow.settings import WorkflowSettings
 
 
@@ -20,7 +23,13 @@ def create_server(service, runtime=None):
             "Para trabajar con Stuart, invoca primero agente_preparacion sin proyecto: "
             "muestra los proyectos y pregunta cuál quiere trabajar. Los borradores ya "
             "los prepara el agente antes de que Stuart llegue. Al elegir proyecto, "
-            "presenta el resumen, ideas de presentación y guion, y ofrece mejorarlos. "
+            "presenta el resumen y la presentación, y ofrece mejorarlos. "
+            "La primera aprobación genera el guion desde las diapositivas aprobadas. "
+            "Antes de esa aprobación, vincula los cinco archivos exportados con registrar_archivos_presentacion. "
+            "Después muestra el guion y solicita su aprobación expresa en la nueva revisión. "
+            "Tras aprobar el guion, invoca exportar_paquete_aprobado para entregar seis archivos y su manifiesto. "
+            "Para editar solo el guion usa actualizar_insumos con speaker_notes; "
+            "tras solicitar ajustes al guion, usa guardar_guion_revisado. "
             "Guarda comentarios o cambios explícitos mediante las herramientas. "
             "Solo aprobar la revisión exacta tras una decisión expresa de Stuart; "
             "leer documentos o recibir Slack no constituye aprobación."
@@ -30,8 +39,47 @@ def create_server(service, runtime=None):
     def call(method, *args, **kwargs):
         try:
             return method(*args, **kwargs)
+        except OSError:
+            raise ToolError("No se pudo leer o exportar el archivo local.") from None
         except (ValueError, ProviderError, Busy) as error:
             raise ToolError(str(error)) from error
+
+    @server.tool()
+    def registrar_archivos_presentacion(
+        expediente_id: str,
+        revision: int,
+        archivos: list[dict[str, str]],
+        directorio: str = "",
+    ) -> dict:
+        """Vincula los cinco archivos locales antes de aprobar su presentación, sin aprobarlos."""
+        call(service._owned, expediente_id)
+        files = [ApprovedFile.model_validate(file) for file in archivos]
+        documents = OpeningDocuments(
+            directorio or PROJECT_DIR.parent / "insumos temporales de agente 1",
+            PROJECT_DIR / "agents/2. meeting assistant/templates/architecture.md",
+            service.store,
+        )
+        call(documents.validate, files)
+        return call(
+            PreparationDeliveries(service.store).stage,
+            expediente_id,
+            revision,
+            archivos,
+            source_directory=str(documents.source_dir),
+        )
+
+    @server.tool()
+    def exportar_paquete_aprobado(
+        expediente_id: str, revision: int, directorio: str = ""
+    ) -> dict:
+        """Exporta seis archivos aprobados por versión y registra sus hashes; no publica en GitHub."""
+        call(service._owned, expediente_id)
+        documents = OpeningDocuments(
+            directorio or PROJECT_DIR.parent / "insumos temporales de agente 1",
+            PROJECT_DIR / "agents/2. meeting assistant/templates/architecture.md",
+            service.store,
+        )
+        return call(documents.export_preparation, expediente_id, revision)
 
     @server.tool()
     def iniciar_preparacion(
@@ -56,16 +104,25 @@ def create_server(service, runtime=None):
 
     @server.tool()
     def guardar_borrador(expediente_id: str, borrador: str) -> dict:
-        """Guarda el borrador elaborado en ChatGPT y pausa para revisión humana."""
+        """Guarda JSON ExecutivePackage (schema en la pausa), con speaker_notes vacío."""
         if not borrador.strip():
             raise ToolError("El borrador no puede estar vacío.")
         return call(service.resume, expediente_id, "draft_with_chatgpt", borrador)
 
     @server.tool()
+    def guardar_guion_revisado(expediente_id: str, revision: int, guion: str) -> dict:
+        """Tras ajustes solicitados al guion: guarda una nueva revisión, sin aprobarla."""
+        if not guion.strip():
+            raise ToolError("El guion no puede estar vacío.")
+        return call(
+            service.resume, expediente_id, "revise_speaker_notes", guion, revision
+        )
+
+    @server.tool()
     def revisar_preparacion(
         expediente_id: str, decision: str, comentarios: str = "", revision: int = 0
     ) -> dict:
-        """Solo tras decisión expresa del manager: approve o revise con comentarios."""
+        """Aprueba/revisa el subject pendiente: presentación primero, guion después."""
         if decision not in {"approve", "revise"}:
             raise ToolError("Usar approve o revise.")
         if decision == "revise" and not comentarios.strip():
@@ -81,12 +138,7 @@ def create_server(service, runtime=None):
                     feedback=comentarios,
                 )
             return call(service.review, expediente_id, revision, decision, comentarios)
-        return call(
-            service.resume,
-            expediente_id,
-            "manager_review",
-            {"decision": decision, "feedback": comentarios},
-        )
+        return call(service.review, expediente_id, revision, decision, comentarios)
 
     @server.tool()
     def buscar_referencias(consulta: str) -> list[dict]:

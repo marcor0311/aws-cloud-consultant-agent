@@ -130,7 +130,7 @@ e `interrupt()`. `preparation/graph.py` construye el flujo posterior a la reuni�
 
 | Etapa | Condición de avance |
 | --- | --- |
-| 1. Engagement Manager | Reunión verificada → transcripción utilizable → preparación → aprobación exacta |
+| 1. Engagement Manager | Reunión verificada → preparación → aprobación de presentación → guion → aprobación exacta del guion |
 | 2. Dirección | Aprobación expresa; el rechazo termina el proceso |
 | 3. Arquitectura | Entregable versionado y aprobación expresa |
 | 4. FinOps | Aprobación → ingeniería; solicitud de cambios → arquitectura |
@@ -141,6 +141,22 @@ El proceso usa `process:<case_id>` y preparación usa `preparation:<case_id>`.
 Son dos grafos con estados independientes enlazados por eventos; no se convierten
 en un nuevo grafo anidado durante esta reorganización. Agent Server y
 `langgraph.json` no forman parte de este modo de ejecución.
+
+La preparación distingue `review_subject=presentation` y `speaker_notes`.
+La primera aprobación ejecuta el nodo `generate_speaker_notes`: compone un borrador
+local con apertura, cada diapositiva y cierre; no invoca modelos ni servicios.
+Guarda una revisión nueva e inmutable, vinculada mediante SHA-256 a la presentación
+aprobada, y vuelve a pausar para revisión del guion. Solo la aprobación expresa de
+esa revisión crea la entrega a dirección. Los reintentos reutilizan el artefacto
+persistido. Editar la presentación o el resumen elimina el guion de la nueva
+revisión y exige aprobar otra vez; editar solo `speaker_notes` conserva la
+aprobación de presentación y requiere aprobar el guion editado.
+
+Una solicitud de ajustes al guion pausa en `revise_speaker_notes`; el cliente MCP
+guarda el texto corregido con `guardar_guion_revisado` antes de solicitar aprobación.
+Las preparaciones nuevas sin proveedor reciben JSON `ExecutivePackage` por
+`guardar_borrador`, con el schema en la pausa y `speaker_notes` vacío.
+Los checkpoints ya entregados no se migran ni se aprueban retrospectivamente.
 
 Cada evento identifica etapa, iteración y versión. Se valida al encolar y al
 aplicar. Una devolución incrementa la iteración e invalida aprobaciones antiguas.
@@ -211,8 +227,23 @@ y también se presenta en el issue como contexto técnico. El identificador de
 checkpoint es `opening:<case_id>:board:<certificado>` y el saver usa la misma base PostgreSQL.
 
 La entrada exige la entrega aprobada de preparación y un manifiesto persistido
-con los hashes de los cinco archivos. El registro del agente 2 acepta esa entrega
+con los hashes de seis archivos, incluido `speaker-notes.md` aprobado. El registro del agente 2 acepta esa entrega
 y cada ejecución revalida su revisión. No crea retrospectivamente reuniones.
+
+Antes de aprobar la presentación, `registrar_archivos_presentacion` vincula sus
+cinco archivos exportados a la revisión; la aprobación incorpora su hash conjunto.
+Si falta ese registro, la aprobación se rechaza y permanece pendiente, sin generar
+guion ni registrar una decisión aprobatoria.
+Tras aprobar el guion, `exportar_paquete_aprobado` copia esos cinco archivos y el
+guion exacto de SQL a `approved/<case_id>/v<revision>/`, bajo el directorio de
+insumos. Registra el manifiesto de seis archivos y nunca sobrescribe otra revisión.
+La ubicación absoluta de origen se conserva desde el registro inicial, solo en SQL, para que otros runtimes puedan
+localizar una exportación hecha fuera del directorio predeterminado. No se publica
+esa ruta. Los reintentos reutilizan la ubicación ya registrada y también verifican
+el contenido del manifiesto local antes de publicar.
+El agente 2 consulta esa carpeta desde el manifiesto y publica los seis archivos
+y `manifest.json` en `docs/01-discovery/`. Los registros persistidos de cuatro o
+cinco archivos siguen leyendo su directorio original, sin cambios retrospectivos.
 El grafo exige unanimidad de junta, genera el repositorio desde template, carga el paquete en `docs/initial-structure`, abre y fusiona un PR hacia la rama
 principal, verifica el merge, asigna el issue y registra la entrega. Un merge
 bloqueado conserva el PR y pausa el proceso antes del issue. Los nuevos expedientes
