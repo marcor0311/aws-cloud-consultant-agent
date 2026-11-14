@@ -216,7 +216,7 @@ flowchart TB
         baselines -->|Módulos con versión aprobada| implementar
         agente --> implementar["Implementar Terraform<br/>con módulos versionados"]
         implementar --> validar["Pruebas, seguridad y políticas como código"]
-        validar --> local["Despliegue local<br/>Documentación y evidencias"]
+        validar --> local["Pruebas locales con AWS Emulator<br/>Documentación y evidencias"]
         local --> pr["El agente abre el PR de implementación"]
         pr --> arquitecto["Arquitecto revisa y aprueba"]
         arquitecto --> main["Integrar en main protegido"]
@@ -230,10 +230,11 @@ flowchart TB
     style lienzo fill:#ffffff,stroke:#ffffff,stroke-width:128px;
 ```
 
-**Stack recomendado:** Codex, Terraform, LangGraph y PostgreSQL.
+**Stack recomendado:** Codex, Terraform, AWS Emulator, GitHub Actions, LangGraph y PostgreSQL.
 
 **Herramientas recomendadas:**
 
+- [AWS Emulator](https://github.com/aws/aws-emulator) y su [skill oficial `aws-emulator`](https://docs.aws.amazon.com/emulator/latest/userguide/getting-started-agent.html): entorno oficial de pruebas locales de Terraform.
 - [Agent Toolkit for AWS](https://docs.aws.amazon.com/agent-toolkit/latest/userguide/what-is-agent-toolkit.html)
 - [AWS DevOps Agent](https://docs.aws.amazon.com/devopsagent/latest/userguide/working-with-devops-agent-accessing-devops-agent-index.html)
 - [AWS Security Agent](https://docs.aws.amazon.com/securityagent/latest/userguide/what-is.html)
@@ -247,10 +248,13 @@ flowchart TB
 **Funcionalidades:**
 
 - [ ] Implementar la infraestructura con Codex en el repo del proyecto, a partir del diseño aprobado.
-- [ ] Consultar baselines por GitHub MCP y reutilizar módulos aprobados.
-- [ ] Probar la solución, validar seguridad y guardar evidencias del despliegue local.
-- [ ] El agente de Codex abre el PR de implementación al terminar las pruebas, con documentación, evidencias y referencias a los insumos de FinOps, y solicita la revisión y aprobación del arquitecto.
+- [ ] Consultar baselines por GitHub MCP y reutilizar módulos aprobados y versionados. Antes de implementar, Codex revisa con `aws-emulator` la compatibilidad de servicios AWS y módulos Terraform, y la confirma con pruebas reales en el emulador.
+- [ ] Automatizar `terraform fmt`, `validate`, `plan`, `apply` y `destroy`, pruebas de integración, análisis de seguridad y políticas como código. Ejecutar las pruebas de integración con AWS Emulator localmente y en GitHub Actions, sin credenciales reales ni costos de infraestructura AWS; asegurar la limpieza incluso ante fallos.
+- [ ] Mantener un catálogo versionado de servicios y recursos Terraform probados, con versiones, éxitos, errores y limitaciones. Guardar evidencias, resultados, Lead Time y Process Time mediante LangGraph/PostgreSQL.
+- [ ] El agente de Codex abre el PR de implementación al terminar las pruebas, con documentación, evidencias y referencias a los insumos de FinOps, y solicita la revisión y aprobación obligatoria del Cloud Solutions Architect.
 - [ ] Notificar al Engagement Manager cuando el PR esté aprobado.
+
+> Distinguir errores de Terraform de limitaciones del emulador. Las pruebas exitosas no garantizan compatibilidad completa con AWS real ni validan sus controles de seguridad; los análisis de seguridad y políticas se ejecutan por separado.
 
 ## 6. Engagement Manager — Informe ejecutivo
 
