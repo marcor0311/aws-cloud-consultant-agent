@@ -143,6 +143,15 @@ en un nuevo grafo anidado durante esta reorganización. Agent Server y
 `langgraph.json` no forman parte de este modo de ejecución.
 
 La preparación distingue `review_subject=presentation` y `speaker_notes`.
+Su entrada separa `transcript`, `meeting_notes` opcional y `query` de antecedentes.
+Las notas se conservan en checkpoints y artefactos de revisión, participan en la
+huella de entrada y se citan con su propio identificador `meeting_notes`.
+Sin notas se conserva la identidad histórica de los checkpoints. Los borradores
+deben exponer discrepancias entre fuentes como no confirmadas para revisión;
+una nota sola no confirma un acuerdo de reunión. El guion `speaker_notes` sigue
+siendo un entregable posterior, diferente de esas notas de entrada. Ver
+[entradas MCP/CLI y evidencia](insumos.md#preparación-con-notas-de-reunión).
+
 La primera aprobación ejecuta el nodo `generate_speaker_notes`: compone un borrador
 local con apertura, cada diapositiva y cierre; no invoca modelos ni servicios.
 Guarda una revisión nueva e inmutable, vinculada mediante SHA-256 a la presentación

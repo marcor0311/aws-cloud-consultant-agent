@@ -15,6 +15,7 @@ class PreparationState(TypedDict, total=False):
     event_id: str
     input_hash: str
     transcript: str
+    meeting_notes: str
     query: str
     references: list[dict]
     draft: str
@@ -32,5 +33,23 @@ class PreparationState(TypedDict, total=False):
     calendar_event_id: str
 
 
-def input_hash(transcript: str, query: str) -> str:
-    return hashlib.sha256(json.dumps([transcript, query]).encode()).hexdigest()
+def input_hash(transcript: str, query: str, meeting_notes: str = "") -> str:
+    # Preserve the identity of checkpoints created before notes were supported.
+    inputs = [transcript, query]
+    if meeting_notes:
+        inputs.append(meeting_notes)
+    return hashlib.sha256(json.dumps(inputs).encode()).hexdigest()
+
+
+def meeting_sources(state: PreparationState) -> dict[str, str]:
+    return {
+        "transcript": state["transcript"],
+        "meeting_notes": state.get("meeting_notes", ""),
+    }
+
+
+def meeting_documents(state: PreparationState) -> dict[str, str]:
+    documents = {"meeting-transcript.md": state["transcript"]}
+    if state.get("meeting_notes"):
+        documents["meeting-notes.md"] = state["meeting_notes"]
+    return documents

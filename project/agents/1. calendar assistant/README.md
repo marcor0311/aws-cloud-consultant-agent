@@ -87,8 +87,10 @@ confirmación explícita de la persona. El servidor comprueba que el evento siga
 vigente y que no haya cambiado. La despedida termina con `end_call` y espera
 la reproducción del mensaje antes de cerrar.
 
-La preparación ejecutiva del primer issue es una responsabilidad pendiente de
-otro agente; Calendar Assistant se limita al agendamiento.
+La preparación ejecutiva del primer issue tiene un runtime separado en
+`backend/app/preparation/`. Recibe transcripción, notas de reunión opcionales y
+consulta de antecedentes desde MCP o CLI; ver [entradas y revisión](../../../docs/insumos.md#preparación-con-notas-de-reunión).
+Calendar Assistant conserva su responsabilidad de agendamiento.
 
 En una llamada real, la cita se conserva como una sola referencia local. Después
 del cierre del audio se entrega al backend mediante un recibo firmado; el worker

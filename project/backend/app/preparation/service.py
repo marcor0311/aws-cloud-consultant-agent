@@ -9,7 +9,12 @@ from threading import RLock
 from app.preparation.deliveries import PreparationDeliveries
 from app.preparation.models import ExecutivePackage
 from app.preparation.speaker_notes import presentation_digest
-from app.preparation.state import input_hash, utc_now
+from app.preparation.state import (
+    input_hash,
+    meeting_documents,
+    meeting_sources,
+    utc_now,
+)
 from app.workflow.ports import WorkflowExecution
 
 
@@ -174,7 +179,7 @@ class PreparationService:
             if snapshot.state.get("status") == "awaiting_meeting":
                 self.graph.resume(self.thread_id(case_id), {"cancelled": True})
 
-    def start(self, case_id, event_id, transcript, query):
+    def start(self, case_id, event_id, transcript, query, meeting_notes=""):
         if not event_id.strip() or not transcript.strip() or not query.strip():
             raise ValueError("Indicar evento, transcripción y consulta de referencias.")
         with (
@@ -193,7 +198,7 @@ class PreparationService:
                     {"case_id": case_id, "manager_id": self.manager_id},
                 )
                 self.store.phase(case_id, "preparation", self.manager_id)
-            fingerprint = input_hash(transcript, query)
+            fingerprint = input_hash(transcript, query, meeting_notes)
             if previous:
                 if previous.get("status") == "awaiting_meeting":
                     self._receive_transcript(case_id, transcript)
@@ -202,6 +207,7 @@ class PreparationService:
                         {
                             "event_id": event_id,
                             "transcript": transcript,
+                            "meeting_notes": meeting_notes,
                             "query": query,
                             "input_hash": fingerprint,
                             "accepted_at": datetime.fromtimestamp(
@@ -234,6 +240,7 @@ class PreparationService:
                     "event_id": event_id,
                     "input_hash": fingerprint,
                     "transcript": transcript,
+                    "meeting_notes": meeting_notes,
                     "query": query,
                     "accepted_at": datetime.fromtimestamp(
                         self.store.clock(), timezone.utc
@@ -359,7 +366,11 @@ class PreparationService:
         if state.get("status") in {"awaiting_meeting", "meeting_cancelled"}:
             return self.get(case_id)
         return self.start(
-            case_id, state["event_id"], state["transcript"], state["query"]
+            case_id,
+            state["event_id"],
+            state["transcript"],
+            state["query"],
+            state.get("meeting_notes", ""),
         )
 
     def begin_review(self, case_id, revision):
@@ -417,7 +428,7 @@ class PreparationService:
                 )
             if script_only and not str(changes["speaker_notes"]).strip():
                 raise ValueError("El guion no puede estar vacío.")
-            sources = {"transcript": state["transcript"]}
+            sources = meeting_sources(state)
             sources.update(
                 {d["path"]: d["content"] for d in self.store.list("reference")}
             )
@@ -437,7 +448,7 @@ class PreparationService:
                 raise ValueError("La presentación requiere nueva aprobación.")
             new_revision = revision + 1
             documents = {
-                "meeting-transcript.md": state["transcript"],
+                **meeting_documents(state),
                 **package.artifacts(),
             }
             self.store.put(

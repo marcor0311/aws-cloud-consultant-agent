@@ -7,6 +7,11 @@ from app.preparation.state import PreparationState
 
 
 class DraftGenerator(Protocol):
+    """Return a source-validated package using transcript and optional meeting_notes.
+
+    Preserve their separate citation IDs and leave disagreements for manager review.
+    """
+
     def __call__(self, state: PreparationState) -> ExecutivePackage: ...
 
 

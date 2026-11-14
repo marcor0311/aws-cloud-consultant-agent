@@ -83,9 +83,13 @@ def create_server(service, runtime=None):
 
     @server.tool()
     def iniciar_preparacion(
-        expediente_id: str, evento_id: str, transcripcion: str, consulta: str
+        expediente_id: str,
+        evento_id: str,
+        transcripcion: str,
+        consulta: str,
+        notas_reunion: str = "",
     ) -> dict:
-        """Inicia el flujo local con texto aportado por el operador; no consulta Meet."""
+        """Inicia con transcripción y notas opcionales separadas del operador; no consulta Meet."""
         if runtime:
             return call(
                 runtime.submit_preparation,
@@ -94,12 +98,20 @@ def create_server(service, runtime=None):
                 event_id=evento_id,
                 transcript=transcripcion,
                 query=consulta,
+                meeting_notes=notas_reunion,
             )
-        return call(service.start, expediente_id, evento_id, transcripcion, consulta)
+        return call(
+            service.start,
+            expediente_id,
+            evento_id,
+            transcripcion,
+            consulta,
+            meeting_notes=notas_reunion,
+        )
 
     @server.tool()
     def consultar_preparacion(expediente_id: str) -> dict:
-        """Lee la transcripción, las referencias y la tarea pendiente del expediente."""
+        """Lee transcripción, notas de reunión, referencias y tarea pendiente del expediente."""
         return call(service.get, expediente_id)
 
     @server.tool()
