@@ -29,7 +29,13 @@ PHASE_NAMES = {
 
 
 def render_pdf(
-    request: DemoRequest, handoff: EngineeringHandoff, metrics: dict
+    request: DemoRequest,
+    handoff: EngineeringHandoff,
+    metrics: dict,
+    *,
+    version: int = 1,
+    revision_text: str | None = None,
+    approval: dict | None = None,
 ) -> bytes:
     font_dir = Path(reportlab.__file__).parent / "fonts"
     for name, filename in (("Delivery", "Vera.ttf"), ("DeliveryBold", "VeraBd.ttf")):
@@ -96,7 +102,7 @@ def render_pdf(
         leftMargin=18 * mm,
         topMargin=27 * mm,
         bottomMargin=20 * mm,
-        title=f"Borrador ejecutivo - {request.project_name}",
+        title=f"Informe ejecutivo v{version} - {request.project_name}",
         author="PSWE-07 / flujo local",
     )
     width = A4[0] - 36 * mm
@@ -107,7 +113,7 @@ def render_pdf(
             f"Proyecto {request.project_id} | Entrega {request.delivery_id}", small
         ),
         paragraph(
-            f"Fecha de corte: {handoff.created_at.isoformat()} | Versión del informe: 1",
+            f"Fecha de corte: {handoff.created_at.isoformat()} | Versión del informe: {version}",
             small,
         ),
     ]
@@ -115,7 +121,12 @@ def render_pdf(
         [
             [
                 paragraph(
-                    "BORRADOR DE DEMOSTRACIÓN. Arquitectura y costos simulados. Sin despliegue AWS, sin PR técnico ni aprobación del arquitecto. No acredita cierre del proyecto.",
+                    (
+                        "APROBADO PARA DEMOSTRACIÓN. "
+                        if approval
+                        else "BORRADOR DE DEMOSTRACIÓN. "
+                    )
+                    + "Arquitectura y costos simulados. Sin despliegue AWS, PR técnico del proyecto ni aprobación del arquitecto.",
                     small,
                 )
             ]
@@ -141,7 +152,7 @@ def render_pdf(
             paragraph("1. Resultado y alcance", heading),
             paragraph(handoff.summary),
             paragraph(
-                "Se preparó una composición Terraform S3 con referencia fija al catálogo. Las verificaciones de esta entrega cubren la coherencia de los insumos y la generación de archivos; no acreditan seguridad ni funcionamiento de infraestructura desplegada."
+                "Se preparó una composición Terraform S3 con referencia fija al catálogo. La tabla identifica las verificaciones registradas y su alcance en el emulador."
             ),
         ]
     )
@@ -198,9 +209,12 @@ def render_pdf(
             "Estado: implementación preparada; revisión técnica pendiente; sin PR ni integración. La aprobación simulada de los insumos no es una aprobación real del arquitecto."
         )
     )
+    if revision_text:
+        story.append(paragraph("Actualización del Engagement Manager", heading))
+        story.append(paragraph(revision_text))
     story.append(paragraph("4. Tiempos observados por fase", heading))
     timing_rows = [
-        ["Fase / origen", "Lead Time", "PT / esfuerzo", "Espera", "Esfuerzo H / A"]
+        ["Fase / origen", "Lead Time", "PT", "Espera", "Retrabajo", "Esfuerzo H / A"]
     ]
     for row in metrics["phases"]:
 
@@ -214,6 +228,7 @@ def render_pdf(
                 seconds(row["lead_time_seconds"]),
                 seconds(row["process_time_seconds"]),
                 seconds(row["wait_seconds"]),
+                seconds(row["rework_effort_seconds"]),
                 seconds(row["human_effort_seconds"])
                 + " / "
                 + seconds(row["agent_effort_seconds"]),
@@ -222,12 +237,19 @@ def render_pdf(
     story.append(
         table(
             timing_rows,
-            [width * 0.27, width * 0.16, width * 0.16, width * 0.16, width * 0.25],
+            [
+                width * 0.23,
+                width * 0.15,
+                width * 0.13,
+                width * 0.13,
+                width * 0.14,
+                width * 0.20,
+            ],
         )
     )
     story.append(
         paragraph(
-            "PT = esfuerzo activo acumulado humano y agente; H / A muestra su desglose. Con paralelismo, PT puede superar el tiempo transcurrido. La duración activa sin solapamiento y el retrabajo se desglosan en la API. La espera se obtiene de intervalos explícitos, no restando PT al Lead Time.",
+            "PT = esfuerzo activo acumulado humano y agente. H / A muestra su desglose. Con paralelismo, PT puede superar el tiempo transcurrido. La espera se obtiene de intervalos explícitos.",
             small,
         )
     )
@@ -268,12 +290,15 @@ def render_pdf(
                 small,
             )
         )
-    story.append(
-        paragraph(
-            "Aprobación del Engagement Manager: pendiente. Este avance permite revisar el borrador; ajustes versionados, aprobación formal, MCP y cierre son incrementos posteriores.",
-            small,
+    if approval:
+        story.append(paragraph("Aprobación del Engagement Manager", heading))
+        story.append(paragraph(f"{approval['operator']} | {approval['at']}", small))
+        story.append(paragraph(approval["detail"], small))
+        story.append(
+            paragraph(f"SHA-256 de la revisión aprobada: {approval['sha256']}", small)
         )
-    )
+    else:
+        story.append(paragraph("Aprobación del Engagement Manager: pendiente.", small))
 
     def page(canvas, document):
         canvas.saveState()
@@ -285,12 +310,12 @@ def render_pdf(
         canvas.drawString(18 * mm, A4[1] - 14 * mm, "CONSULTORÍA AWS / PSWE-07")
         canvas.setFont("Delivery", 7)
         canvas.drawRightString(
-            A4[0] - 18 * mm, A4[1] - 14 * mm, "ENTREGA 1 / DEMO LOCAL"
+            A4[0] - 18 * mm, A4[1] - 14 * mm, f"INFORME V{version} / DEMO LOCAL"
         )
         canvas.drawString(
             18 * mm,
             12 * mm,
-            "BORRADOR - datos simulados identificados - sin aprobación",
+            "APROBADO / DEMO" if approval else "BORRADOR / DEMO",
         )
         canvas.drawRightString(A4[0] - 18 * mm, 12 * mm, f"Página {document.page}")
         canvas.restoreState()

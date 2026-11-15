@@ -203,8 +203,18 @@ class ReportDraft(Contract):
     schema_version: Literal["1.0"] = "1.0"
     report_id: UUID
     handoff_id: UUID
-    version: Literal[1] = 1
-    status: Literal["draft"] = "draft"
+    version: int = Field(default=1, ge=1)
+    status: Literal["draft", "changes_requested", "approved", "closed"] = "draft"
     artifact: ArtifactRef
     metrics: dict
     pending_items: list[str]
+    revision_text: Text | None = None
+    approved_document: ArtifactRef | None = None
+
+
+class ReportDecision(Contract):
+    decision_id: UUID
+    version: int = Field(ge=1)
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    action: Literal["request_changes", "revise", "approve", "record_presentation"]
+    detail: Text
