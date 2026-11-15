@@ -23,12 +23,13 @@ OVERRIDE = """provider "aws" {
   skip_metadata_api_check     = true
 }
 
-resource "aws_kms_key" "test" {
-  description = "Ephemeral PSWE-07 integration key"
-}
-
 module "documents" {
   kms_key_arn = aws_kms_key.test.arn
+}
+"""
+
+KEY_RESOURCE = """resource "aws_kms_key" "test" {
+  description = "Ephemeral PSWE-07 integration key"
 }
 """
 
@@ -126,6 +127,7 @@ def run(request, image, output):
         for name, content in terraform_files(request).items():
             (work / name).write_bytes(content)
         (work / "emulator_override.tf").write_text(OVERRIDE, encoding="utf-8")
+        (work / "emulator_kms.tf").write_text(KEY_RESOURCE, encoding="utf-8")
         (work / "terraform.tfvars").write_bytes(
             (work / "terraform.tfvars.example").read_bytes()
         )
