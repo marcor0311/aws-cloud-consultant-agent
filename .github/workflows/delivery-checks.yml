@@ -33,4 +33,9 @@ jobs:
       - run: python -m pip install -r requirements-dev.txt
       - run: python -m ruff check app tests
       - run: python -m ruff format --check app tests
-      - run: python -m pytest tests/test_delivery.py -q
+      - run: python -m pytest tests/test_delivery.py -q --basetemp "${{ runner.temp }}/delivery-test"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: informe-ejecutivo-demostracion
+          path: ${{ runner.temp }}/delivery-test/**/informe-ejecutivo-demostracion.pdf
+          if-no-files-found: error

@@ -1,5 +1,6 @@
 """Business contract, timing mathematics and a real PostgreSQL-backed API."""
 
+import asyncio
 import copy
 import json
 import os
@@ -18,6 +19,7 @@ from pydantic import ValidationError
 from pypdf import PdfReader
 
 from app.api.delivery import configured_repository, repository, review_router, router
+from app.delivery.mcp import create_server
 from app.delivery.metrics import calculate_metrics
 from app.delivery.models import DemoRequest, PhaseTiming
 from app.delivery.workflow import DeliveryWorkflow
@@ -212,7 +214,9 @@ def test_business_block_does_not_produce_report(client, repo, payload, case):
         )
 
 
-def test_report_revision_approval_and_close(client, payload, monkeypatch):
+def test_report_revision_approval_and_close(
+    client, repo, payload, monkeypatch, tmp_path
+):
     monkeypatch.setenv("DELIVERY_ENGAGEMENT_MANAGER", "Operador de demostración")
     result = client.post("/api/delivery/runs", json=payload).json()
     run_url = f"/api/delivery/runs/{result['delivery_id']}"
@@ -268,6 +272,21 @@ def test_report_revision_approval_and_close(client, payload, monkeypatch):
         "approve",
         "record_presentation",
     ]
+
+    async def verify_mcp_download():
+        server = create_server(repo, "Operador de demostración")
+        result = await server.call_tool(
+            "consultar_informe", {"entrega_id": payload["delivery_id"]}
+        )
+        report = result.structured_content
+        assert report["status"] == "closed"
+        resources = list(await server.read_resource(report["pdf_uri"]))
+        assert len(resources) == 1
+        assert resources[0].mime_type == "application/pdf"
+        assert resources[0].content == download.content
+
+    asyncio.run(verify_mcp_download())
+    (tmp_path / "informe-ejecutivo-demostracion.pdf").write_bytes(download.content)
 
 
 def test_missing_input_is_422(client, payload):
