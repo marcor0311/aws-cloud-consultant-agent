@@ -152,7 +152,9 @@ class Check(Contract):
 class EmulatorCheck(Contract):
     name: Text
     status: Literal["passed", "failed", "not_run"]
-    category: Literal["terraform", "security", "emulator", "integration", "policy", "cleanup"]
+    category: Literal[
+        "terraform", "security", "emulator", "integration", "policy", "cleanup"
+    ]
 
 
 class EmulatorEvidence(Contract):
