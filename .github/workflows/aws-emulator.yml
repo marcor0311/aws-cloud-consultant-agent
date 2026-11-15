@@ -1,0 +1,47 @@
+name: Integración Terraform con AWS Emulator
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/aws-emulator.yml'
+      - 'project/agents/5. terraform agent/Dockerfile'
+      - 'project/backend/app/delivery/**'
+      - 'project/backend/fixtures/delivery-1.json'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  emulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: project/backend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.14.8'
+          terraform_wrapper: false
+      - name: Preparar dependencias
+        run: |
+          python -m pip install -r requirements.txt
+          curl --fail --silent --show-error --location \
+            https://github.com/aquasecurity/trivy/releases/download/v0.76.1/trivy_0.76.1_Linux-64bit.tar.gz \
+            --output "$RUNNER_TEMP/trivy.tar.gz"
+          tar -xzf "$RUNNER_TEMP/trivy.tar.gz" -C "$RUNNER_TEMP" trivy
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: Construir emulador
+        run: docker build -t pswe07-aws-emulator '../agents/5. terraform agent'
+      - name: Ejecutar ciclo Terraform
+        run: python -m app.delivery.emulator
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: terraform-aws-emulator-evidence
+          path: project/generated/emulator/evidence.json
+          if-no-files-found: ignore

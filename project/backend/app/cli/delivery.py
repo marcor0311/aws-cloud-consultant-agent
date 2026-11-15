@@ -5,7 +5,7 @@ import json
 import os
 from pathlib import Path
 
-from app.delivery.models import DemoRequest
+from app.delivery.models import DemoRequest, EmulatorEvidence
 from app.delivery.workflow import DeliveryWorkflow
 from app.persistence.delivery import PostgresRepository
 
@@ -16,6 +16,7 @@ def main():
     )
     parser.add_argument("command", choices=["init-db", "run"])
     parser.add_argument("--input", type=Path, default=Path("fixtures/delivery-1.json"))
+    parser.add_argument("--evidence", type=Path, help="Evidencia JSON de AWS Emulator")
     parser.add_argument(
         "--output", type=Path, default=Path("../generated/delivery-demo")
     )
@@ -29,7 +30,12 @@ def main():
         print("Esquema de entrega inicializado.")
         return
     request = DemoRequest.model_validate_json(args.input.read_text(encoding="utf-8"))
-    result = DeliveryWorkflow(repository).run(request)
+    evidence = (
+        EmulatorEvidence.model_validate_json(args.evidence.read_bytes())
+        if args.evidence
+        else None
+    )
+    result = DeliveryWorkflow(repository).run(request, evidence)
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / "delivery.json").write_text(
         json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8"

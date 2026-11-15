@@ -149,6 +149,35 @@ class Check(Contract):
     detail: str
 
 
+class EmulatorCheck(Contract):
+    name: Text
+    status: Literal["passed", "failed", "not_run"]
+    category: Literal["terraform", "security", "emulator", "integration", "policy", "cleanup"]
+
+
+class EmulatorEvidence(Contract):
+    schema_version: Literal["1.0"]
+    scope: Literal["aws-emulator-s3-demo"]
+    baseline_commit: str = Field(pattern=r"^[0-9a-f]{40}$")
+    bucket_name: Text
+    region: Text
+    started_at: AwareDatetime
+    ended_at: AwareDatetime
+    versions: dict
+    resources: list[Text] = Field(max_length=100)
+    checks: list[EmulatorCheck] = Field(min_length=1, max_length=20)
+    run_url: Text | None = None
+
+    def matches(self, request: DemoRequest) -> bool:
+        architecture = request.architecture
+        return (
+            self.baseline_commit == architecture.baseline.commit
+            and self.region == architecture.region
+            and self.bucket_name == architecture.bucket_name
+            and self.started_at <= self.ended_at
+        )
+
+
 class EngineeringHandoff(Contract):
     schema_version: Literal["1.0"] = "1.0"
     handoff_id: UUID
