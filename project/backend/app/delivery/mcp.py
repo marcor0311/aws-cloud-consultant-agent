@@ -1,10 +1,13 @@
 """Private STDIO tools and PDF resource for the Engagement Manager."""
 
+import json
 import os
 from uuid import UUID
 
+from fastapi.encoders import jsonable_encoder
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
+from mcp.types import CallToolResult, TextContent
 
 from app.delivery.models import DemoRequest, ReportDecision
 from app.delivery.review import ReportReview, configured_manager
@@ -35,20 +38,28 @@ def create_server(repository: PostgresRepository, operator: str):
         if report := result["report"]:
             artifact = report.get("approved_document") or report["artifact"]
             result["pdf_uri"] = pdf_uri(result["delivery_id"], artifact["artifact_id"])
-        return result
+        data = jsonable_encoder(result)
+        return CallToolResult(
+            structured_content=data,
+            content=[
+                TextContent(type="text", text=json.dumps(data, ensure_ascii=False))
+            ],
+        )
 
     @server.tool()
-    def generar_informe(entrada: DemoRequest) -> dict:
+    def generar_informe(entrada: DemoRequest) -> CallToolResult:
         """Genera un informe de demostración desde los insumos de arquitectura y FinOps."""
         return call(DeliveryWorkflow(repository).run, entrada)
 
     @server.tool()
-    def consultar_informe(entrega_id: UUID) -> dict:
+    def consultar_informe(entrega_id: UUID) -> CallToolResult:
         """Consulta el informe vigente, tiempos, historial y URI de descarga."""
         return call(service.get, entrega_id)
 
     @server.tool()
-    def registrar_decision_informe(entrega_id: UUID, decision: ReportDecision) -> dict:
+    def registrar_decision_informe(
+        entrega_id: UUID, decision: ReportDecision
+    ) -> CallToolResult:
         """Solicita ajustes, guarda revisión, aprueba o registra una presentación confirmada."""
         return call(service.decide, entrega_id, decision, operator)
 
