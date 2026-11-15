@@ -41,8 +41,10 @@ def main():
         json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8"
     )
     refs = list(result["handoff"]["artifacts"]) if result["handoff"] else []
-    if result["report"]:
-        refs.append(result["report"]["artifact"])
+    if report := result["report"]:
+        refs.append(report["artifact"])
+        if report.get("approved_document"):
+            refs.append(report["approved_document"])
     for ref in refs:
         artifact = repository.artifact(request.delivery_id, ref["artifact_id"])
         (args.output / artifact["filename"]).write_bytes(bytes(artifact["content"]))
@@ -56,7 +58,7 @@ def main():
             ensure_ascii=False,
         )
     )
-    if result["status"] != "draft_ready":
+    if result["status"] not in ("draft_ready", "approved", "closed"):
         raise SystemExit(1)
 
 

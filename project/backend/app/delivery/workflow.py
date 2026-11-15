@@ -156,17 +156,21 @@ class DeliveryWorkflow:
                             "Obtener revisión del baseline y confirmar KMS y demás dependencias. Responsable: Arquitectura.",
                             "Ejecutar Terraform, seguridad, políticas y el despliegue local acordado. Responsable: Ingeniería.",
                             "Publicar el PR técnico y obtener revisión e integración autorizadas. Responsable: Ingeniería / Arquitectura.",
-                            "Conectar MCP y completar ajustes, aprobación del informe y cierre. Responsable: Engagement Manager / backend.",
+                            "Completar revisión y presentación del informe. Responsable: Engagement Manager.",
                         ],
                     )
                     if evidence:
                         origin = evidence.run_url or "corrida local"
+                        handoff.inputs["emulator_evidence"] = {
+                            "source": origin,
+                            "versions": evidence.versions,
+                        }
                         handoff.checks[2:] = [
                             Check(
                                 name=check.name,
                                 status=check.status,
                                 provenance="real",
-                                detail=f"{check.category} | evidencia importada de {origin}",
+                                detail=check.category,
                             )
                             for check in evidence.checks
                         ]
