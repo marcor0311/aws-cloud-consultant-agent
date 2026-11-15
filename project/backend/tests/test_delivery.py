@@ -21,7 +21,7 @@ from pypdf import PdfReader
 from app.api.delivery import configured_repository, repository, review_router, router
 from app.delivery.mcp import create_server
 from app.delivery.metrics import calculate_metrics
-from app.delivery.models import DemoRequest, PhaseTiming
+from app.delivery.models import DemoRequest, EmulatorEvidence, PhaseTiming
 from app.delivery.workflow import DeliveryWorkflow
 from app.persistence.delivery import DeliveryBusy, PostgresRepository
 
@@ -218,7 +218,17 @@ def test_report_revision_approval_and_close(
     client, repo, payload, monkeypatch, tmp_path
 ):
     monkeypatch.setenv("DELIVERY_ENGAGEMENT_MANAGER", "Operador de demostración")
-    result = client.post("/api/delivery/runs", json=payload).json()
+    if evidence_path := os.getenv("DELIVERY_TEST_EMULATOR_EVIDENCE"):
+        evidence = EmulatorEvidence.model_validate_json(
+            Path(evidence_path).read_bytes()
+        )
+        assert evidence.run_url
+        assert all(check.status == "passed" for check in evidence.checks)
+        result = DeliveryWorkflow(repo).run(
+            DemoRequest.model_validate(payload), evidence
+        )
+    else:
+        result = client.post("/api/delivery/runs", json=payload).json()
     run_url = f"/api/delivery/runs/{result['delivery_id']}"
     first = result["report"]
 
@@ -261,6 +271,9 @@ def test_report_revision_approval_and_close(
     assert "APROBADO" in text
     assert "Conclusión revisada para dirección" in text
     assert second["artifact"]["sha256"] in text
+    if evidence_path:
+        assert evidence.run_url in text
+        assert "terraform destroy" in text
     closed = submit(
         decision(second, "record_presentation", "Acta de demostración")
     ).json()

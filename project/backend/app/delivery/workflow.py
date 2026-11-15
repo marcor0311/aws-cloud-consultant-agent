@@ -161,12 +161,16 @@ class DeliveryWorkflow:
                     )
                     if evidence:
                         origin = evidence.run_url or "corrida local"
+                        handoff.inputs["emulator_evidence"] = {
+                            "source": origin,
+                            "versions": evidence.versions,
+                        }
                         handoff.checks[2:] = [
                             Check(
                                 name=check.name,
                                 status=check.status,
                                 provenance="real",
-                                detail=f"{check.category} | evidencia importada de {origin}",
+                                detail=check.category,
                             )
                             for check in evidence.checks
                         ]

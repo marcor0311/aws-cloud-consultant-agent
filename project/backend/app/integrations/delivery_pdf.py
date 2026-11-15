@@ -11,7 +11,14 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import (
+    KeepTogether,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
 
 from app.delivery.models import DemoRequest, EngineeringHandoff
 
@@ -47,7 +54,7 @@ def render_pdf(
         fontName="Delivery",
         fontSize=9,
         leading=14,
-        spaceAfter=7,
+        spaceAfter=6,
         textColor=NAVY,
         splitLongWords=True,
     )
@@ -57,8 +64,8 @@ def render_pdf(
         fontName="DeliveryBold",
         fontSize=12,
         leading=17,
-        spaceBefore=14,
-        spaceAfter=8,
+        spaceBefore=11,
+        spaceAfter=6,
         keepWithNext=True,
     )
     small = ParagraphStyle("DeliverySmall", parent=body, fontSize=7.5, leading=11)
@@ -85,8 +92,8 @@ def render_pdf(
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
             ("LEFTPADDING", (0, 0), (-1, -1), 8),
             ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-            ("TOPPADDING", (0, 0), (-1, -1), 7),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
             ("LINEBELOW", (0, 0), (-1, -1), 0.4, colors.HexColor("#D9E3EA")),
         ]
         if header:
@@ -183,7 +190,7 @@ def render_pdf(
                 ],
                 [width * 0.46, width * 0.24, width * 0.30],
             ),
-            paragraph("Supuestos: " + "; ".join(costs.assumptions)),
+            paragraph("Supuestos: " + " ".join(costs.assumptions)),
             paragraph("Calculadora: " + costs.calculator_reference, small),
             paragraph("Excel: " + costs.spreadsheet_reference, small),
         ]
@@ -194,11 +201,23 @@ def render_pdf(
         "failed": "Fallida",
         "not_run": "No ejecutada",
     }
+    category_names = {
+        "terraform": "Terraform",
+        "security": "Análisis estático",
+        "emulator": "Conexión al emulador",
+        "integration": "Integración con AWS Emulator",
+        "policy": "Política como código",
+        "cleanup": "Limpieza del entorno",
+    }
     story.append(
         table(
             [["Comprobación", "Resultado", "Detalle"]]
             + [
-                [check.name, status_names[check.status], check.detail]
+                [
+                    check.name,
+                    status_names[check.status],
+                    category_names.get(check.detail, check.detail),
+                ]
                 for check in handoff.checks
             ],
             [width * 0.26, width * 0.20, width * 0.54],
@@ -283,6 +302,16 @@ def render_pdf(
         ),
     ):
         story.append(paragraph(f"{label}: {value}", small))
+    if evidence := handoff.inputs.get("emulator_evidence"):
+        story.append(paragraph(f"Evidencia AWS Emulator: {evidence['source']}", small))
+        versions = evidence["versions"]
+        if versions.get("aws_emulator") and versions.get("terraform_version"):
+            story.append(
+                paragraph(
+                    f"{versions['aws_emulator']} | Terraform {versions['terraform_version']}",
+                    small,
+                )
+            )
     for artifact in handoff.artifacts:
         story.append(
             paragraph(
@@ -291,11 +320,17 @@ def render_pdf(
             )
         )
     if approval:
-        story.append(paragraph("Aprobación del Engagement Manager", heading))
-        story.append(paragraph(f"{approval['operator']} | {approval['at']}", small))
-        story.append(paragraph(approval["detail"], small))
         story.append(
-            paragraph(f"SHA-256 de la revisión aprobada: {approval['sha256']}", small)
+            KeepTogether(
+                [
+                    paragraph("Aprobación del Engagement Manager", heading),
+                    paragraph(f"{approval['operator']} | {approval['at']}", small),
+                    paragraph(approval["detail"], small),
+                    paragraph(
+                        f"SHA-256 de la revisión aprobada: {approval['sha256']}", small
+                    ),
+                ]
+            )
         )
     else:
         story.append(paragraph("Aprobación del Engagement Manager: pendiente.", small))

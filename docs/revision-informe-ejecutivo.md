@@ -6,6 +6,10 @@ la [guía de AWS Emulator](validacion-aws-emulator.md). El informe identifica la
 procedencia simulada de arquitectura y FinOps y los resultados de pruebas
 importados, si existen. Un cierre del ejemplo se registra en la entrega local.
 
+En GitHub Actions, el workflow **Integración Terraform con AWS Emulator**
+también ejecuta el recorrido del informe con el JSON de la misma corrida.
+El PDF generado se publica como `informe-ejecutivo-demostracion`.
+
 ## Configurar
 
 Desde `project/backend`, con las dependencias y PostgreSQL local configurados
