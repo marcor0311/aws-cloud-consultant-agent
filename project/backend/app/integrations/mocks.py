@@ -170,8 +170,8 @@ class MockSlack:
 
 
 class MockPreparer:
-    def __init__(self, references, store, clock):
-        self.references, self.store, self.clock = references, store, clock
+    def __init__(self, store, clock):
+        self.store, self.clock = store, clock
         self.by_hash = {
             hashlib.sha256(p["transcript"].encode()).hexdigest(): p
             for p in load_projects()
@@ -185,17 +185,9 @@ class MockPreparer:
             raise ValueError(
                 "El modelo mock admite las transcripciones ficticias de la demo."
             )
-        matches = self.references.search(project["search_query"])
-        selected = [r for r in matches if r["project_id"] == project["reference_id"]]
-        if not selected:
-            raise ValueError("El antecedente esperado no apareció en la búsqueda SQL.")
-        reference = self.references.read_reference(project["reference_id"])
-        document = next(
-            d for d in reference["documents"] if d["path"].endswith("project-brief.md")
-        )
         sources = {
             "transcript": state["transcript"],
-            **{d["path"]: d["content"] for d in reference["documents"]},
+            "meeting_notes": state.get("meeting_notes", ""),
         }
 
         def finding(item):
@@ -219,18 +211,6 @@ class MockPreparer:
                 }
             ],
             "open_questions": project["questions"],
-            "related_projects": [
-                {
-                    "project_id": project["reference_id"],
-                    "reason": "Antecedente académico ficticio para comparar patrones, no resultados comprobados.",
-                    "citations": [
-                        {
-                            "source_id": document["path"],
-                            "quote": project["reference_quote"],
-                        }
-                    ],
-                }
-            ],
             "presentation": [
                 {"title": f"Idea {n}", "bullets": [idea]}
                 for n, idea in enumerate(project["ideas"], 1)
@@ -249,12 +229,8 @@ class MockPreparer:
             "mock.preparation.completed",
             {
                 "provider": "scripted_mock",
-                "searched": project["search_query"],
-                "read_reference": project["reference_id"],
                 "is_simulated": True,
             },
         )
         self.clock.advance(5)
-        return ExecutivePackage.model_validate(payload).validate_sources(
-            sources, {project["reference_id"]}
-        )
+        return ExecutivePackage.model_validate(payload).validate_sources(sources)

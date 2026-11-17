@@ -1,15 +1,27 @@
 """Select the transactional email adapter from backend configuration."""
 
+import logging
 import os
 
+from app.integrations.errors import describe_failure
 from app.notifications.gmail import GmailMailer, GmailSettings
 from app.notifications.smtp import SMTPMailer, SMTPSettings
+
+logger = logging.getLogger(__name__)
 
 
 class EnvironmentMailer:
     """Load the selected provider only after checking the client registry."""
 
     def send_code(self, email: str, name: str, code: str, minutes: int):
+        try:
+            return self._send_code(email, name, code, minutes)
+        except Exception as error:
+            # Keep diagnosis in operator logs, never expose OTPs or recipients.
+            logger.warning("OTP email delivery failed: %s", describe_failure(error))
+            raise
+
+    def _send_code(self, email: str, name: str, code: str, minutes: int):
         provider = os.getenv("CALENDAR_MAIL_PROVIDER", "smtp").strip().lower()
         if provider == "gmail":
             GmailMailer(GmailSettings.from_environment()).send_code(

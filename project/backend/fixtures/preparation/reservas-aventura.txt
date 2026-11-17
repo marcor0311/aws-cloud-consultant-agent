@@ -16,7 +16,7 @@ No participa ningún agente en la reunión.
 [14:25] Diego: Dirección aprobó un máximo de doce mil dólares para evaluar el piloto. No tenemos fecha de salida acordada y esa cifra no es una estimación de operación mensual.
 [18:00] Stuart: ¿Qué evidencia esperarían del piloto?
 [18:20] Diego: Queremos demostrar una reserva sin sobreventa y la validación de un pase en la entrada. Tenemos que definir todavía las pruebas de concurrencia y la política ante pases duplicados.
-[22:00] Stuart: Voy a contrastarlo con el antecedente académico de operaciones de skipass. Lo usaremos como referencia ficticia, no como una solución ya validada para ustedes.
+[22:00] Stuart: Revisaremos los requisitos de reservas y acceso con base en esta reunión.
 [25:00] Diego: Me sirve. Mantengamos separado lo confirmado de las opciones que necesitamos explorar.
 [29:00] Stuart: Prepararé el resumen, ideas para la presentación y un guion inicial. Lo revisaremos antes de entregarlo a dirección.
 [30:00] Fin de la reunión ficticia.

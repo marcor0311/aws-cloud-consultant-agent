@@ -1,5 +1,8 @@
 """Project queue and decision records in the existing workflow database."""
 
+import hashlib
+import json
+
 from app.preparation.deliveries import files_digest
 from app.project_opening.models import project_identity, slug
 
@@ -110,6 +113,18 @@ class ProjectOpeningRepository:
                 "commit": None,
                 "issue": None,
             }
+            approval = {
+                "kind": "direction_decision",
+                "id": request.case_id,
+                "actor": request.approved_by,
+                "reference": request.approval_reference,
+                "approved_at": record["approved_at"],
+                "request_sha256": request.fingerprint(),
+            }
+            approval["digest"] = hashlib.sha256(
+                json.dumps(approval, sort_keys=True).encode()
+            ).hexdigest()
+            record["approval_certificate"] = approval
             with self.store.engine.begin() as db:
                 self.store.put_in(db, counter_key, "opening-number", {"last": number})
                 self.store.put_in(
@@ -126,6 +141,19 @@ class ProjectOpeningRepository:
             return record
 
     def accept_board(self, case_id, certificate):
+        if certificate.get("kind") == "direction_decision":
+            stored = self.get(case_id).get("approval_certificate") or {}
+            if stored.get("digest") != certificate.get("digest"):
+                raise ValueError(
+                    "La aprobación de dirección no coincide con el expediente."
+                )
+            self.store.event(
+                "opening-direction-accepted:" + case_id,
+                case_id,
+                "opening.direction_approval_accepted",
+                {"digest": certificate["digest"], "actor": certificate["actor"]},
+            )
+            return
         handoff_id = "board:" + certificate["id"] + ":decision"
         handoff = self.store.handoff(handoff_id)
         if not handoff or handoff["artifact_sha256"] != certificate["digest"]:

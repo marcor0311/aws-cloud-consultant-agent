@@ -1,5 +1,6 @@
 """Validate approvals and execute a recoverable opening without deciding business policy."""
 
+from app.preparation.processing import CORPORATE_FILENAMES
 from app.project_opening.models import OpeningRequest
 from app.project_opening.ports import OpeningRepository
 from app.workflow.ports import WorkflowExecution
@@ -20,7 +21,9 @@ class OpeningService:
 
     def register(self, value):
         request = OpeningRequest.model_validate(value, context={"stored_legacy": True})
-        if len(request.files) < 6:
+        if len(request.files) not in {3, 6} and {f.name for f in request.files} != set(
+            CORPORATE_FILENAMES
+        ):
             try:
                 existing = self.repository.get(request.case_id)
             except ValueError:

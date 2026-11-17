@@ -8,6 +8,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, model_validator
 
+from app.preparation.processing import CORPORATE_FILENAMES
+
 PREFIX = "AWS Cloud Consulting Project"
 TEMPLATE = "marcor0311/aws-cloud-consulting-project-template"
 
@@ -85,11 +87,27 @@ class OpeningRequest(Input):
     approved_by: str = Field(min_length=1, max_length=160)
     approval_reference: str = Field(min_length=1, max_length=1000)
     comments: str = Field(default="", max_length=12000)
-    files: list[ApprovedFile] = Field(min_length=4, max_length=6)
+    files: list[ApprovedFile] = Field(min_length=3, max_length=6)
     is_fictitious: bool = False
 
     @model_validator(mode="after")
     def unique_files(self, info: ValidationInfo):
+        if len(self.files) == 5 and {f.name for f in self.files} == set(
+            CORPORATE_FILENAMES
+        ):
+            slug(self.company)
+            return self
+        if len(self.files) == 3:
+            if {f.name for f in self.files} != {
+                "resumen-ejecutivo.pdf",
+                "presentacion.pdf",
+                "transcripcion.pdf",
+            }:
+                raise ValueError(
+                    "Se requieren resumen ejecutivo, presentación y transcripción PDF."
+                )
+            slug(self.company)
+            return self
         if len(self.files) != 6 and not (info.context or {}).get("stored_legacy"):
             raise ValueError(
                 "Las nuevas aperturas requieren seis archivos, incluido speaker-notes.md aprobado."

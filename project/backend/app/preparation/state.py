@@ -17,20 +17,19 @@ class PreparationState(TypedDict, total=False):
     transcript: str
     meeting_notes: str
     query: str
-    references: list[dict]
     draft: str
     revision: int
     feedback: str
     decision: str
     accepted_at: str
     handed_off_at: str
-    search_seconds: float
     status: str
     handoff: dict
     package: dict
     review_subject: str
     presentation_approval: dict
     calendar_event_id: str
+    deliverable_contract: str
 
 
 def input_hash(transcript: str, query: str, meeting_notes: str = "") -> str:

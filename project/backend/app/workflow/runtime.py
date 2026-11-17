@@ -7,9 +7,11 @@ import logging
 import re
 import uuid
 from datetime import datetime
+from pathlib import Path
 
-from app.integrations.errors import ConfigurationError, ProviderError
+from app.integrations.errors import ConfigurationError, ProviderError, describe_failure
 from app.persistence.locking import Busy
+from app.preparation.processing import DOCUMENT_CONTRACTS
 from app.project_opening.decisions import BoardDecisionBlocked
 
 logger = logging.getLogger(__name__)
@@ -34,7 +36,6 @@ class WorkflowRuntime:
         google,
         notifier,
         drafter,
-        references,
         worker_lock,
         resources,
         mock_clock=None,
@@ -44,12 +45,65 @@ class WorkflowRuntime:
         self.process, self.service = process, service
         self.board_rejections = board_rejections
         self.google, self.notifier, self.drafter = google, notifier, drafter
-        self.search, self.read_reference = references.search, references.read_reference
         self.worker_lock, self.stack = worker_lock, resources
         self.mock_clock, self.client_lookup = mock_clock, client_lookup
 
     def close(self):
         self.stack.close()
+
+    def queue_transcript_preparation(self, case_id):
+        self.service._owned(case_id)
+        transcript = self.store.get(f"transcript:{case_id}")
+        if not transcript or not transcript.get("text", "").strip():
+            return None
+        snapshot = self.service.graph.inspect(self.service.thread_id(case_id))
+        existing_input = bool(snapshot.state.get("input_hash"))
+        awaiting_automatic_draft = (
+            snapshot.state.get("status") == "awaiting_draft"
+            and self.drafter is not None
+            and (
+                snapshot.runnable
+                or any(
+                    p.get("action") == "draft_with_chatgpt" for p in snapshot.pending
+                )
+            )
+        )
+        if existing_input and not awaiting_automatic_draft:
+            return None
+        for task in self.store.pending_jobs():
+            if task["kind"] != "preparation_command":
+                continue
+            payload = self.store.job(task["id"])["payload"]
+            if payload["case_id"] == case_id:
+                return {
+                    "status": task["status"],
+                    "task_id": task["id"],
+                    "case_id": case_id,
+                }
+        if existing_input:
+            return self.submit_preparation(case_id, "continue")
+        # Preserve imported/manual transcript identity; the database record itself
+        # supplies a stable fallback for captures and Google conference transcripts.
+        return self.submit_preparation(
+            case_id,
+            "start",
+            event_id=transcript.get("event_id")
+            or transcript.get("conference_record")
+            or (
+                "capture:" + transcript["capture_id"]
+                if transcript.get("capture_id")
+                else ""
+            )
+            or "transcript:" + case_id,
+            transcript=transcript["text"],
+            query=transcript["text"],
+            meeting_notes="",
+        )
+
+    def recover_transcript_preparations(self):
+        """Worker-only recovery for transcripts received before generation was configured."""
+        for project in self.owned_cases():
+            self.queue_transcript_preparation(project["case_id"])
 
     def submit_preparation(self, case_id, operation, **payload):
         """Queue operations that may call a model; HTTP/MCP never generate inline."""
@@ -82,7 +136,13 @@ class WorkflowRuntime:
     def _preparation_command(self, payload):
         operation, args = payload["operation"], payload["arguments"]
         if operation == "start":
-            self.service.start(payload["case_id"], **args)
+            result = self.service.start(payload["case_id"], **args)
+            if self.drafter is not None and any(
+                p.get("action") == "draft_with_chatgpt" for p in result["pending"]
+            ):
+                self.service.continue_preparation(
+                    payload["case_id"], automatic_drafting=True
+                )
         elif operation == "review":
             state = self.service.get(payload["case_id"])["state"]
             if state.get("revision", 0) > args["revision"]:
@@ -92,11 +152,15 @@ class WorkflowRuntime:
                 state.get("status") == "awaiting_draft"
                 and state.get("feedback") == args["feedback"]
             ):
-                self.service.continue_preparation(payload["case_id"])
+                self.service.continue_preparation(
+                    payload["case_id"], automatic_drafting=self.drafter is not None
+                )
             else:
                 self.service.review(payload["case_id"], **args)
         elif operation == "continue":
-            self.service.continue_preparation(payload["case_id"])
+            self.service.continue_preparation(
+                payload["case_id"], automatic_drafting=self.drafter is not None
+            )
         else:
             raise ValueError("Operación de preparación inválida.")
 
@@ -375,9 +439,7 @@ class WorkflowRuntime:
             f"transcript.available:{conference['name']}",
             "transcript.available",
         )
-        self.service.start(
-            case_id, conference["name"], transcript["text"], transcript["text"]
-        )
+        self.queue_transcript_preparation(case_id)
         self.store.event(
             f"processed:{job_id}",
             case_id,
@@ -388,12 +450,12 @@ class WorkflowRuntime:
             },
         )
 
-    def run_once(self):
+    def run_once(self, task_id=None):
         with self.worker_lock.hold():
-            return self._run_once()
+            return self._run_once(task_id)
 
-    def _run_once(self):
-        job = self.store.claim()
+    def _run_once(self, task_id=None):
+        job = self.store.claim(task_id)
         if not job:
             return False
         try:
@@ -449,6 +511,12 @@ class WorkflowRuntime:
             )
         except ConfigurationError as error:
             self.store.finish_job(job["id"], status="failed", error=str(error))
+            logger.warning(
+                "Workflow job requires configuration (id=%s, tipo=%s, estado=failed): %s",
+                job["id"],
+                job["kind"],
+                describe_failure(error),
+            )
         except ProviderError as error:
             status = (
                 "uncertain"
@@ -461,6 +529,14 @@ class WorkflowRuntime:
                 delay=max(error.retry_after, min(300, 2 ** job["attempts"])),
                 error=str(error),
             )
+            logger.warning(
+                "Workflow provider job failed (id=%s, tipo=%s, intento=%s, estado=%s): %s",
+                job["id"],
+                job["kind"],
+                job["attempts"],
+                status,
+                describe_failure(error),
+            )
         except Busy:
             self.store.finish_job(
                 job["id"], status="pending", delay=5, error="case_busy"
@@ -470,7 +546,12 @@ class WorkflowRuntime:
             self.store.finish_job(
                 job["id"], status="failed", error=type(error).__name__
             )
-            logger.warning("Workflow job failed: %s", type(error).__name__)
+            logger.warning(
+                "Workflow job failed (id=%s, tipo=%s): %s",
+                job["id"],
+                job["kind"],
+                describe_failure(error),
+            )
         return True
 
     def poll_google(self):
@@ -489,6 +570,7 @@ class WorkflowRuntime:
 
     def maintenance(self):
         self.deliver_post_calls()
+        self.recover_transcript_preparations()
         if self.settings.calendar_webhook_url:
             from app.workflow.calendar_sync import CalendarSync
 
@@ -532,8 +614,11 @@ class WorkflowRuntime:
                 try:
                     self.ensure_subscription(subscription["space"])
                     self.reconcile_conferences(subscription["space"])
-                except ProviderError:
-                    logger.warning("Workspace subscription needs retry")
+                except ProviderError as error:
+                    logger.warning(
+                        "Workspace subscription needs configuration/retry: %s",
+                        describe_failure(error),
+                    )
 
     def deliver_post_calls(self):
         if not self.settings.post_call_dir or not self.client_lookup:
@@ -629,16 +714,108 @@ class WorkflowRuntime:
         if len(selected) != 1:
             raise ValueError("Elegir uno de los proyectos de la lista.")
         project = selected[0]
+        tasks = []
+        for task in self.store.pending_jobs():
+            if task["kind"] != "preparation_command":
+                continue
+            job = self.store.job(task["id"])
+            if job["payload"]["case_id"] == project["case_id"]:
+                tasks.append(task)
+        failed = [t for t in tasks if t["status"] == "failed"]
+        running = [t for t in tasks if t["status"] == "running"]
+        interrupted = any(
+            self.store.job(t["id"])["lease_until"] <= self.store.clock()
+            for t in running
+        )
+        work = (
+            "blocked"
+            if failed or interrupted
+            else "processing"
+            if running
+            else "queued"
+            if tasks
+            else "idle"
+        )
+        if work == "idle":
+            snapshot = self.service.graph.inspect(
+                self.service.thread_id(project["case_id"])
+            )
+            if any(p.get("action") == "draft_with_chatgpt" for p in snapshot.pending):
+                work = "paused"
+        messages = {
+            "blocked": "La preparación está detenida; revisá el motivo de la tarea antes de reintentar.",
+            "processing": "Estoy generando los documentos; todavía no están terminados.",
+            "queued": "La preparación está en cola para el worker; los documentos aún no están listos.",
+            "idle": "Todavía no hay una tarea de generación activa para este proyecto.",
+            "paused": "La transcripción está guardada, pero la preparación quedó pausada esperando un borrador. El worker debe retomarla con el proveedor configurado.",
+        }
+        if self.settings.mode == "live":
+            state = self.service.graph.inspect(
+                self.service.thread_id(project["case_id"])
+            ).state
+            revision = state.get("revision", 0)
+            published = self.store.get(
+                f"processed-files:{project['case_id']}:{revision}"
+            )
+            if published and not tasks:
+                try:
+                    intact = all(
+                        not Path(f["path"]).is_symlink()
+                        and hashlib.sha256(Path(f["path"]).read_bytes()).hexdigest()
+                        == f["sha256"]
+                        for f in published["documents"]
+                    )
+                except OSError:
+                    intact = False
+                if not intact:
+                    published = None
+            if (
+                not published
+                and not tasks
+                and state.get("deliverable_contract") in DOCUMENT_CONTRACTS
+                and state.get("status") in {"awaiting_review", "ready_for_stage_2"}
+            ):
+                work = "blocked"
+                messages[work] = (
+                    "La exportación de esta revisión está incompleta o cambió; requiere recuperación."
+                )
+            return {
+                "status": work
+                if tasks or work in {"paused", "blocked"}
+                else state.get("status", work),
+                "case_id": project["case_id"],
+                "revision": revision,
+                "documents": [
+                    {key: f[key] for key in ("name", "path", "media_type")}
+                    for f in published["documents"]
+                ]
+                if published and not tasks
+                else [],
+                "directory": published["directory"]
+                if published and not tasks
+                else None,
+                **({"tasks": tasks, "message": messages[work]} if tasks else {}),
+                **(
+                    {"message": messages[work]}
+                    if work == "blocked" and not tasks
+                    else {}
+                ),
+            }
         if project.get("status") not in {"awaiting_review", "ready_for_stage_2"}:
             return {
-                "status": project.get("status"),
+                "status": work,
                 "project": project,
-                "message": "Los insumos todavía no están listos; la preparación continúa de forma autónoma.",
+                "tasks": tasks,
+                "message": messages[work],
             }
         state = self.service.get(project["case_id"])["state"]
         artifact = self.store.get(f"artifact:{project['case_id']}:{state['revision']}")
         return {
-            "status": state["status"],
+            "status": work if tasks else state["status"],
+            "message": messages[work]
+            if tasks
+            else "Ya tengo los documentos. Podés revisarlos y te ayudo a ajustar lo que necesités.",
+            "tasks": tasks,
             "mode": self.settings.mode,
             "project": project,
             "revision": state["revision"],
@@ -652,6 +829,14 @@ class WorkflowRuntime:
 
     def artifact(self, case_id, name, revision):
         self.service._owned(case_id)
+        files = self.store.get(f"processed-files:{case_id}:{revision}")
+        if files:
+            matches = [f for f in files["documents"] if f["name"] == name]
+            if not matches:
+                raise ValueError(
+                    "Elegir uno de los documentos generados de esa revisión."
+                )
+            return matches[0]
         artifact = self.store.get(f"artifact:{case_id}:{revision}")
         if not artifact or name not in artifact["documents"]:
             raise ValueError("Insumo inexistente para esa revisión.")

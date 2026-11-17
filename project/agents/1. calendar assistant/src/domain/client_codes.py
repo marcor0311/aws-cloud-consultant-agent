@@ -59,7 +59,9 @@ def normalize_client_code(value: str) -> str:
         for c in unicodedata.normalize("NFD", value.lower())
         if not unicodedata.combining(c)
     )
-    value = value.replace("x-ray", "xray")
+    value = re.sub(r"\bx[\s-]+ray\b", "xray", value)
+    # A spoken separator carries no code character, just like a written hyphen.
+    value = re.sub(r"\bguion\b", " ", value)
     compact = re.sub(r"[\s,.-]", "", value).upper()
     if re.fullmatch(r"[A-Z]{4}[0-9]{4}", compact, flags=re.ASCII):
         return f"{compact[:4]}-{compact[4:]}"

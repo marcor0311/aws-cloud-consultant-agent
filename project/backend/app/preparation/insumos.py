@@ -63,7 +63,7 @@ class InputModel(BaseModel):
 class Segment(InputModel):
     id: str
     speaker: str
-    at: AwareDatetime
+    at: AwareDatetime | None = None
     text: str = Field(min_length=1)
 
 
@@ -73,22 +73,28 @@ class MeetingTranscript(InputModel):
     project_name: str
     client: str
     is_mock: bool
-    started_at: AwareDatetime
-    ended_at: AwareDatetime
+    started_at: AwareDatetime | None = None
+    ended_at: AwareDatetime | None = None
     participants: list[str]
     segments: list[Segment] = Field(min_length=1)
 
     @model_validator(mode="after")
     def valid_meeting(self):
-        if self.ended_at <= self.started_at:
+        if (self.started_at is None) != (self.ended_at is None):
+            raise ValueError("Indicar ambos tiempos de reunión o ninguno.")
+        if self.started_at and self.ended_at <= self.started_at:
             raise ValueError("El fin debe ser posterior al inicio.")
         previous = self.started_at
         seen = set()
         for segment in self.segments:
-            if segment.id in seen or not previous <= segment.at <= self.ended_at:
+            if segment.id in seen or (
+                segment.at is not None
+                and self.started_at is not None
+                and not previous <= segment.at <= self.ended_at
+            ):
                 raise ValueError("IDs o tiempos de transcripción inválidos.")
             seen.add(segment.id)
-            previous = segment.at
+            previous = segment.at or previous
         return self
 
     def fingerprint(self):
@@ -99,7 +105,8 @@ class MeetingTranscript(InputModel):
 
     def as_text(self):
         return "\n".join(
-            f"[{s.id} | {s.at.strftime('%H:%M:%S')}] {s.speaker}: {s.text}"
+            f"[{s.id}{' | ' + s.at.strftime('%H:%M:%S') if s.at else ''}] "
+            f"{s.speaker + ': ' if s.speaker else ''}{s.text}"
             for s in self.segments
         )
 
@@ -112,12 +119,13 @@ class MeetingTranscript(InputModel):
         return (
             f"# {self.title}\n\n{label}\n\n"
             f"Cliente del escenario: {self.client}\n\n"
-            f"Inicio: {self.started_at.isoformat()}\n\n"
-            f"Fin: {self.ended_at.isoformat()}\n\n"
+            f"Inicio: {self.started_at.isoformat() if self.started_at else 'No consta'}\n\n"
+            f"Fin: {self.ended_at.isoformat() if self.ended_at else 'No consta'}\n\n"
             + "\n".join(f"- {person}" for person in self.participants)
             + "\n\n## Conversación\n\n"
             + "\n\n".join(
-                f"### {s.id} - {s.at.strftime('%H:%M:%S')} - {s.speaker}\n\n{s.text}"
+                f"### {s.id}{' - ' + s.at.strftime('%H:%M:%S') if s.at else ''}"
+                f"{' - ' + s.speaker if s.speaker else ''}\n\n{s.text}"
                 for s in self.segments
             )
             + "\n"
@@ -225,7 +233,7 @@ class MeetingInsumos(InputModel):
     scope_in: list[Point]
     scope_out: list[Point]
     journey: list[str]
-    metrics: list[Metric] = Field(min_length=1, max_length=3)
+    metrics: list[Metric] = Field(max_length=3)
     decisions: list[Point]
     actions: list[Action]
     risks: list[Point]
@@ -308,7 +316,6 @@ class MeetingInsumos(InputModel):
             timeline=finding(self.timeline),
             risks=[finding(point) for point in self.risks],
             open_questions=[point.text for point in self.questions],
-            related_projects=[],
             presentation=[
                 Slide(
                     title=slide.title,
@@ -326,7 +333,7 @@ class MeetingInsumos(InputModel):
             ],
             speaker_notes="",
         )
-        return package.validate_sources({"transcript": transcript.as_text()}, set())
+        return package.validate_sources({"transcript": transcript.as_text()})
 
 
 def meeting_date(value: datetime):

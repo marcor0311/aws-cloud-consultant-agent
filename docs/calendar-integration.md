@@ -45,6 +45,31 @@ No hay que crear una API distinta ni configurar Pub/Sub para este webhook.
 El proveedor de IA, Slack y Meet no son necesarios para registrar y seguir citas.
 La inferencia de voz sigue requiriendo autorización explícita por ejecución.
 
+Si el worker informa `google_oauth_refresh_rejected` con `invalid_grant`, Google
+rechazó renovar la autorización. Ese código no distingue por sí solo entre
+caducidad, revocación u otro motivo de autorización inválida; no indica una cuota
+de ChatGPT. El log muestra la operación, la causa reconocida y la acción sugerida,
+sin imprimir respuestas OAuth ni credenciales. Los fallos de red y los rechazos
+temporales del servidor se identifican como reintentables.
+
+Para esta configuración, detener el worker, ejecutar `make calendar-auth`,
+completar el consentimiento en el navegador y volver a iniciar
+`WORKFLOW_ENABLED=1 make workflow`. Verificar que `GOOGLE_OAUTH_TOKEN_FILE` y
+`WORKFLOW_GOOGLE_TOKEN_FILE` apunten al mismo archivo de Calendar. El reinicio
+recarga la credencial y encola una sincronización de Calendar si el webhook está
+configurado; no vuelve a ejecutar automáticamente todas las tareas fallidas.
+Si se usa un token separado de Meet/PubSub, su autorización corresponde a
+`make workflow-auth`: ese comando no reemplaza un archivo existente, por lo que
+primero hay que conservarlo como respaldo privado fuera de Git y liberar su ruta.
+No sustituir el token de Calendar por uno con otros scopes.
+
+Google documenta las posibles causas de caducidad o revocación en
+[Refresh token expiration](https://developers.google.com/identity/protocols/oauth2#expiration),
+incluido el vencimiento a siete días para aplicaciones externas en estado Testing
+que solicitan permisos adicionales a los básicos de identidad. Revisar ese estado
+si la autorización vuelve a fallar aproximadamente cada semana; el código
+`invalid_grant` no confirma que esa sea la causa.
+
 Abrir dos terminales desde la raíz:
 
 ```sh

@@ -10,12 +10,13 @@ from functools import partial
 from pathlib import Path
 
 import httpx
-from google.auth.exceptions import GoogleAuthError
+from google.auth.exceptions import GoogleAuthError, RefreshError, TransportError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 
 from app.core.config import private_path
 from app.core.validation import normalize_email
+from app.integrations.errors import ConfigurationError, ProviderError
 from app.notifications.message import build_code_message
 
 GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
@@ -82,9 +83,46 @@ class GmailMailer:
             if not credentials.valid or not credentials.has_scopes([GMAIL_SEND_SCOPE]):
                 raise ValueError("La autorización no es válida.")
             return credentials
+        except RefreshError as error:
+            payload = next((arg for arg in error.args if isinstance(arg, dict)), {})
+            code = payload.get("error")
+            reasons = {
+                "invalid_grant": "Google rechazó la autorización de renovación "
+                "(invalid_grant); puede haber vencido o sido revocada.",
+                "invalid_client": "Google rechazó el cliente OAuth (invalid_client). "
+                "Revisá las credenciales del cliente con el que se emitió el token.",
+                "invalid_scope": "Google rechazó los permisos de envío (invalid_scope).",
+                "unauthorized_client": "El cliente OAuth no está autorizado "
+                "para renovar el acceso (unauthorized_client).",
+                "temporarily_unavailable": "El servidor OAuth de Google no está "
+                "disponible temporalmente (temporarily_unavailable).",
+                "server_error": "El servidor OAuth de Google falló (server_error).",
+            }
+            code = code if isinstance(code, str) else ""
+            reason = reasons.get(code, "Google rechazó renovar el acceso a Gmail.")
+            if error.retryable or code in {"temporarily_unavailable", "server_error"}:
+                raise ProviderError(
+                    "gmail_oauth_refresh_unavailable",
+                    detail=f"Gmail OAuth: {reason} Intentá más tarde; no se envió el OTP.",
+                ) from None
+            raise ConfigurationError(
+                "gmail_oauth_refresh_rejected",
+                detail=f"Gmail OAuth: {reason} Ejecutá make gmail-auth desde la raíz "
+                "y completá el consentimiento. Gmail tiene su propio token; "
+                "autorizar Calendar no renueva esta credencial. No se envió el OTP.",
+            ) from None
+        except TransportError:
+            raise ProviderError(
+                "gmail_oauth_transport_error",
+                detail="Gmail OAuth: no se pudo contactar el servidor para renovar "
+                "el acceso. Revisá la conexión, DNS o proxy. No se envió el OTP.",
+            ) from None
         except (OSError, ValueError, TypeError, GoogleAuthError):
-            raise RuntimeError(
-                "Gmail no está autorizado. Ejecuta python -m app.cli.authorize_gmail desde project/."
+            raise ConfigurationError(
+                "gmail_credentials_unavailable",
+                detail="Gmail: no se pudo cargar, validar o guardar la autorización. "
+                "Revisá CALENDAR_GMAIL_TOKEN_FILE y sus permisos; para autorizar "
+                "el envío ejecutá make gmail-auth desde la raíz del repositorio.",
             ) from None
 
     def send_code(self, email: str, name: str, code: str, minutes: int) -> None:

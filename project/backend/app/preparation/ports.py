@@ -3,6 +3,7 @@
 from typing import Protocol
 
 from app.preparation.models import ExecutivePackage
+from app.preparation.processing import ProcessedMeeting
 from app.preparation.state import PreparationState
 
 
@@ -12,8 +13,6 @@ class DraftGenerator(Protocol):
     Preserve their separate citation IDs and leave disagreements for manager review.
     """
 
-    def __call__(self, state: PreparationState) -> ExecutivePackage: ...
-
-
-class ReferenceSearch(Protocol):
-    def __call__(self, query: str) -> list[dict]: ...
+    def __call__(
+        self, state: PreparationState
+    ) -> ExecutivePackage | ProcessedMeeting: ...

@@ -16,7 +16,7 @@ No participa ningún agente en la reunión.
 [10:35] Ana: Todavía no tenemos presupuesto aprobado ni una fecha comprometida. Primero necesitamos entender alternativas, costos y el alcance de un MVP.
 [13:20] Stuart: ¿Qué prioridad tendría ese MVP?
 [13:45] Ana: Lo prioritario es que una persona pueda encontrar un producto y completar una compra, y que nosotros podamos ver el pedido. Una aplicación móvil nativa y recomendaciones personalizadas quedan fuera de la primera etapa.
-[17:00] Stuart: Podemos comparar alternativas y revisar antecedentes de comercio electrónico como orientación. Las referencias del catálogo académico son ficticias y no prueban rendimiento real.
+[17:00] Stuart: Revisaremos el alcance y los requisitos de esta tienda con base en lo conversado.
 [19:30] Ana: Perfecto. Queremos conocer riesgos, decisiones pendientes y qué debemos validar antes de comprometernos con una arquitectura.
 [22:00] Stuart: ¿Con qué criterio dirían que el piloto funciona?
 [22:20] Ana: Queremos demostrar una compra de principio a fin y gestionar ese pedido desde el panel. Los objetivos de disponibilidad y recuperación todavía tenemos que acordarlos.

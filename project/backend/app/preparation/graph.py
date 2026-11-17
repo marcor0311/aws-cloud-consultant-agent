@@ -3,22 +3,26 @@
 from langgraph.graph import END, START, StateGraph
 
 from app.preparation.nodes import PreparationNodes
-from app.preparation.references import search_references
+from app.preparation.processing import DOCUMENT_CONTRACTS
 from app.preparation.state import PreparationState
 
 
 def after_review(state):
+    if state.get("deliverable_contract") in DOCUMENT_CONTRACTS:
+        return "revise" if state["decision"] == "revise" else "documents"
     subject = state.get("review_subject", "presentation")
     if state["decision"] == "revise":
         return "revise_speaker_notes" if subject == "speaker_notes" else "revise"
     return subject
 
 
-def build_graph(checkpointer, search=search_references, drafter=None, store=None):
-    nodes = PreparationNodes(search, drafter, store)
+def build_graph(checkpointer, drafter=None, store=None, package_model=None):
+    nodes = PreparationNodes(drafter, store, package_model)
     graph = StateGraph(PreparationState)
     graph.add_node("wait_for_meeting", nodes.wait_for_meeting)
-    graph.add_node("retrieve", nodes.retrieve)
+    # Preserve the step identifier for existing durable checkpoints. This step
+    # only prepares the current input; it no longer retrieves other projects.
+    graph.add_node("retrieve", nodes.prepare_input)
     graph.add_node("draft", nodes.draft)
     graph.add_node("review", nodes.review)
     graph.add_node("generate_speaker_notes", nodes.generate_speaker_notes)
@@ -44,6 +48,7 @@ def build_graph(checkpointer, search=search_references, drafter=None, store=None
         "review",
         after_review,
         {
+            "documents": "handoff",
             "presentation": "generate_speaker_notes",
             "speaker_notes": "handoff",
             "revise": "draft",

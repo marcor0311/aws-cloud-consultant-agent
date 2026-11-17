@@ -242,7 +242,7 @@ class PlanConnection:
                 "necesidades confirmadas con citas textuales cortas, preguntas "
                 "pendientes, ideas para una presentación y guion inicial. "
                 "Separá hechos e hipótesis. No inventés presupuesto, fechas ni "
-                "antecedentes. El resultado queda pendiente de revisión de Stuart."
+                "acuerdos. No compares con otros proyectos. El resultado queda pendiente de revisión de Stuart."
             ),
             "input": [{"role": "user", "content": transcript}],
         }
