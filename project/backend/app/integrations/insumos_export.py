@@ -7,6 +7,7 @@ import os
 import re
 import tempfile
 from html import escape
+from math import ceil
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -143,6 +144,8 @@ def points(values, sheet, *, compact=False):
 
 
 def metric_strip(content, sheet, *, compact=False):
+    if not content.metrics:
+        return Spacer(1, 8)
     cells = []
     for metric in content.metrics:
         cells.append(
@@ -267,7 +270,7 @@ def source_note(refs, sheet):
     return paragraph(
         "Base documental: "
         + ", ".join(sorted(set(refs)))
-        + ". Referencias a la transcripción en fuentes/.",
+        + ". Referencias a la transcripción de origen.",
         sheet["Small"],
     )
 
@@ -336,22 +339,47 @@ def render_summary(path, transcript, content):
     s = styles()
     detailed = sum(len(p.text) for t in content.topics for p in t.points) > 2400
     topic_split = 4 if detailed else 5
-    started = transcript.started_at.astimezone(ZoneInfo("America/Costa_Rica"))
-    ended = transcript.ended_at.astimezone(ZoneInfo("America/Costa_Rica"))
+    started = (
+        transcript.started_at.astimezone(ZoneInfo("America/Costa_Rica"))
+        if transcript.started_at
+        else None
+    )
+    ended = (
+        transcript.ended_at.astimezone(ZoneInfo("America/Costa_Rica"))
+        if transcript.ended_at
+        else None
+    )
     story = [
         paragraph("RESUMEN DE REUNIÓN / ENCUADRE EJECUTIVO", s["Kicker"]),
         paragraph(transcript.project_name, s["Cover"]),
         paragraph(
-            f"{meeting_date(started)} / {started:%H:%M}-{ended:%H:%M} / Costa Rica"
-            + (" / Horario simulado" if transcript.is_mock else ""),
+            (
+                f"{meeting_date(started)} / {started:%H:%M}-{ended:%H:%M} / Costa Rica"
+                + (" / Horario simulado" if transcript.is_mock else "")
+                if started
+                else "Transcripción sintética / No acredita una reunión real"
+                if transcript.is_mock
+                else "Fuente: transcripción de Stuart / Fecha y horario no consignados"
+            ),
             s["Small"],
         ),
         Spacer(1, 9),
         facts_strip(content, s),
         section("Objeto y resultado de la reunión", s),
-        paragraph(content.summary.split("\n\n")[0], s["Body"]),
-        section("Participantes", s),
-        paragraph("\n".join(transcript.participants), s["Small"]),
+        paragraph(
+            content.summary.split("\n\n")[0]
+            if content.proposal
+            else " ".join(p.text for p in content.objectives),
+            s["Body"],
+        ),
+        *(
+            [
+                section("Participantes", s),
+                paragraph("\n".join(transcript.participants), s["Small"]),
+            ]
+            if transcript.participants
+            else []
+        ),
         section("Acuerdos del encargo", s),
         *[
             paragraph(f"{i:02d}   {point.text}", s["Item"])
@@ -374,6 +402,27 @@ def render_summary(path, transcript, content):
         paragraph("BASE FUNCIONAL Y TÉCNICA", s["Kicker"]),
         paragraph("Cómo se desarrollará\nel proyecto", s["Title"]),
     ]
+    if not content.proposal:
+        # A transcript-only package has no consultant proposal or fixed number
+        # of subjects. Let the corporate flow paginate instead of leaving an
+        # orphan continuation before each hard page break of the sample case.
+        s["Item"] = ParagraphStyle("TranscriptItem", parent=s["Item"], spaceAfter=5)
+        for topic in content.topics:
+            story.extend(topic_block(topic, s))
+        if content.risks:
+            story += [
+                section("Puntos de control", s),
+                *[paragraph(p.text, s["Item"]) for p in content.risks],
+            ]
+        story += [
+            section("Calendario solicitado", s),
+            paragraph(content.timeline.text, s["Item"]),
+            section("Base económica y revisión", s),
+            paragraph(content.budget.text, s["Item"]),
+            source_note(content.summary_sources, s),
+        ]
+        document(path, transcript, "Resumen de reunión", story)
+        return
     # The record covers each subject once. Consulting development is in the brief.
     for topic in content.topics[:topic_split]:
         story.extend(topic_block(topic, s))
@@ -419,10 +468,8 @@ def render_summary(path, transcript, content):
             paragraph("COORDINACIÓN E INVERSIÓN", s["Kicker"]),
             paragraph("Compromisos, calendario\ny condiciones económicas", s["Title"]),
         ]
-    story += [
-        section("Compromisos de seguimiento", s),
-        actions_table(content, s),
-    ]
+    if content.actions:
+        story += [section("Compromisos de seguimiento", s), actions_table(content, s)]
     if not detailed:
         story += [
             section(
@@ -433,11 +480,10 @@ def render_summary(path, transcript, content):
             ),
             *[paragraph(p.text, s["Item"]) for p in content.risks],
         ]
-    else:
-        story += [
-            section("Calendario solicitado", s),
-            paragraph(content.timeline.text, s["Item"]),
-        ]
+    story += [
+        section("Calendario solicitado", s),
+        paragraph(content.timeline.text, s["Item"]),
+    ]
     story += [
         section("Base económica y revisión", s),
         paragraph(content.budget.text, s["Item"]),
@@ -460,7 +506,21 @@ def render_brief(path, transcript, content):
         paragraph("FICHA DEL PROYECTO / SÍNTESIS EJECUTIVA", s["Kicker"]),
         paragraph(transcript.project_name, s["Cover"]),
         paragraph(
-            f"{transcript.client} / {meeting_date(transcript.started_at)}", s["Small"]
+            " / ".join(
+                filter(
+                    None,
+                    [
+                        transcript.client,
+                        meeting_date(transcript.started_at)
+                        if transcript.started_at
+                        else "",
+                        "Transcripción sintética / No acredita una reunión real"
+                        if transcript.is_mock and not transcript.started_at
+                        else "",
+                    ],
+                )
+            ),
+            s["Small"],
         ),
         paragraph(executive.purpose, s["Small"]) if executive else Spacer(1, 8),
         facts_strip(content, s),
@@ -513,7 +573,7 @@ def render_brief(path, transcript, content):
     else:
         story += [
             section("El encargo", s),
-            paragraph(content.summary, s["Body"]),
+            *points(content.objectives, s),
             section("Alcance", s),
             *points(content.scope_in, s, compact=True),
         ]
@@ -549,21 +609,27 @@ def render_brief(path, transcript, content):
             advisory_rows(proposal.acceptance, s),
         ]
     else:
+        if content.success:
+            story += [
+                section("Criterios de aceptación", s),
+                *points(content.success, s),
+            ]
+        if content.actions:
+            story += [section("Coordinación", s), actions_table(content, s)]
+        if content.risks:
+            story += [section("Riesgos consignados", s), *points(content.risks, s)]
+        story += [section("Plazos", s), paragraph(content.timeline.text, s["Item"])]
+    if content.metrics:
         story += [
-            section("Criterios de aceptación", s),
-            *points(content.success, s),
-            section("Coordinación", s),
-            actions_table(content, s),
-        ]
-    story += [
-        section("Demanda de referencia", s),
-        paragraph(
-            " / ".join(
-                f"{number(m.value)} {m.unit or m.context}" for m in content.metrics[:2]
+            section("Demanda de referencia", s),
+            paragraph(
+                " / ".join(
+                    f"{number(m.value)} {m.unit or m.context}"
+                    for m in content.metrics[:2]
+                ),
+                s["Item"],
             ),
-            s["Item"],
-        ),
-    ]
+        ]
     for m in content.metrics[2:]:
         story += [
             paragraph(f"{number(m.value)} {m.unit or ''}: {m.context}", s["Small"])
@@ -598,6 +664,29 @@ def render_brief(path, transcript, content):
         )
     ]
     document(path, transcript, "Ficha del proyecto", story)
+
+
+def render_transcript(path, transcript, text):
+    """Keep the entire source text, using the corporate document chrome and font."""
+    s = styles()
+    story = [paragraph("TRANSCRIPCIÓN ÍNTEGRA", s["Kicker"])]
+    # Do not apply editorial substitutions to the source, even to headings.
+    paragraphs = [
+        Paragraph(escape(block).replace("\n", "<br/>"), s["Body"])
+        for block in re.split(r"\n\s*\n", text)
+        if block.strip()
+    ]
+    heights = [p.wrap(CONTENT_WIDTH, HEIGHT)[1] + p.getSpaceAfter() for p in paragraphs]
+    total = sum(heights) + 30
+    page_count = max(1, ceil(total / (HEIGHT - 128)))
+    target, used, page = total / page_count, 30, 1
+    for paragraph_, height in zip(paragraphs, heights):
+        if used + height > target and page < page_count:
+            story.append(PageBreak())
+            page, used = page + 1, 0
+        story.append(paragraph_)
+        used += height
+    document(path, transcript, "Transcripción", story)
 
 
 def render_html(path, transcript, content):
@@ -643,7 +732,13 @@ def render_html(path, transcript, content):
             body = (
                 '<div class="three-cols reveal">'
                 + "".join(
-                    f'<article><span class="index">{i:02d}</span><h3>{e(heading_text(block.label))}</h3><p>{e(block.text)}</p></article>'
+                    f'<article><span class="index">{i:02d}</span>'
+                    + (
+                        f"<h3>{e(heading_text(block.label))}</h3>"
+                        if block.label
+                        else ""
+                    )
+                    + f"<p>{lines(block.text)}</p></article>"
                     for i, block in enumerate(blocks, 1)
                 )
                 + "</div>"
@@ -674,7 +769,7 @@ def render_html(path, transcript, content):
             body = (
                 '<div class="quality-grid reveal">'
                 + "".join(
-                    f'<div class="quality-row"><b>{e(block.label)}</b><p>{e(block.text)}</p></div>'
+                    f'<div class="quality-row"><b>{e(block.label)}</b><p>{lines(block.text)}</p></div>'
                     for block in blocks
                 )
                 + "</div>"
@@ -740,6 +835,16 @@ def render_presentation_pdf(html_path, pdf_path):
     with sync_playwright() as pw:
         options = {"headless": True}
         executable = os.getenv("INSUMOS_BROWSER")
+        if not executable and not Path(pw.chromium.executable_path).exists():
+            # Reuse the installed local Chromium also used by verify-insumos;
+            # do not download a browser or require network access during export.
+            candidates = list(
+                (Path.home() / "Library/Caches/ms-playwright").glob(
+                    "chromium-*/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+                )
+            )
+            if candidates:
+                executable = str(max(candidates))
         if executable:
             options["executable_path"] = executable
         browser = pw.chromium.launch(**options)
@@ -771,6 +876,8 @@ def export_insumos(
     output: Path,
     *,
     status="awaiting_review",
+    transcript_text=None,
+    include_sources=True,
 ):
     """Validate first, then publish complete files; no credentials or network access."""
     content.validate_transcript(transcript)
@@ -782,17 +889,25 @@ def export_insumos(
         render_brief(staging / FILENAMES[1], transcript, content)
         render_html(staging / FILENAMES[2], transcript, content)
         render_presentation_pdf(staging / FILENAMES[2], staging / FILENAMES[3])
+        names = FILENAMES
+        if transcript_text is not None:
+            render_transcript(
+                staging / "transcripcion.pdf", transcript, transcript_text
+            )
+            names = (*FILENAMES, "transcripcion.pdf")
         manifest = {
             "mock": transcript.is_mock,
             "source_sha256": transcript.fingerprint(),
             "preparation_status": status,
             "files": {
                 name: hashlib.sha256((staging / name).read_bytes()).hexdigest()
-                for name in FILENAMES
+                for name in names
             },
         }
-        for name in FILENAMES:
+        for name in names:
             (staging / name).replace(output / name)
+        if not include_sources:
+            return manifest
         sources = output / "fuentes"
         sources.mkdir(exist_ok=True)
         (

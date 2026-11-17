@@ -63,6 +63,22 @@ registrada, dentro de una hora antes/después de su horario. No busca por títul
 Hay que usar una cita registrada por nuestro flujo y realizar la prueba cerca
 de su horario; una reunión creada a mano sin expediente no iniciará preparación.
 
+`make workflow` mantiene encendido el worker del proceso real cuando
+`WORKFLOW_MODE=live`: consume las tareas recibidas y espera si no hay ninguna.
+No genera una demostración ni avanza manualmente una etapa. Puede iniciarse antes
+de la llamada con el agente para agendar la cita. Después, la reunión en Meet y
+su captura aportan el trabajo que el worker procesa; las aprobaciones mantienen
+sus pausas. Los comandos `make demo` y `make demo-full` corresponden al recorrido
+ficticio separado.
+
+Si aparecen avisos `capture_requires_one_registered_meeting`, ya hay capturas
+recibidas que no encuentran una única cita compatible. El aviso explica si faltan
+registros, código de Meet, operador, estado, horario o si hay varias coincidencias.
+Consultar `make meetings` para revisar las citas de la base configurada. La captura
+permanece guardada; los reintentos no crean una cita a partir de ella y se agotan
+tras veinte intentos. Una captura de una prueba de recepción no tiene por qué
+corresponder a la siguiente cita real.
+
 El endpoint autenticado `POST /api/workflow/events/transcript` solo valida y encola.
 El worker conserva el transcript en `workflow_records`, registra su disponibilidad
 y avanza el proceso a `preparing`. Si el proveedor de preparación aún no está

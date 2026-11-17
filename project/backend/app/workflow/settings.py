@@ -18,6 +18,7 @@ class WorkflowSettings:
     openai_key: str = ""
     openai_model: str = ""
     inference_enabled: bool = False
+    preparation_provider: str = "chatgpt"
     slack_token: str = ""
     slack_user_id: str = ""
     google_token_file: Path | None = None
@@ -33,12 +34,16 @@ class WorkflowSettings:
     calendar_webhook_url: str = ""
     post_call_dir: Path | None = None
     transcript_token: str = ""
+    documents_dir: Path | None = None
 
     @classmethod
     def from_environment(cls):
         mode = os.getenv("WORKFLOW_MODE", "mock")
         if mode not in {"mock", "live"}:
             raise ValueError("WORKFLOW_MODE debe ser mock o live.")
+        provider = os.getenv("WORKFLOW_PREPARATION_PROVIDER", "chatgpt")
+        if provider not in {"chatgpt", "api"}:
+            raise ValueError("WORKFLOW_PREPARATION_PROVIDER debe ser chatgpt o api.")
         mock_dir = None
         if mode == "mock":
             configured = os.getenv("WORKFLOW_MOCK_DIR", "")
@@ -81,6 +86,7 @@ class WorkflowSettings:
             openai_key=os.getenv("OPENAI_API_KEY", ""),
             openai_model=os.getenv("WORKFLOW_OPENAI_MODEL", ""),
             inference_enabled=os.getenv("WORKFLOW_INFERENCE_ENABLED", "0") == "1",
+            preparation_provider=provider,
             slack_token=os.getenv("SLACK_BOT_TOKEN", ""),
             slack_user_id=os.getenv("SLACK_EM_USER_ID", ""),
             google_token_file=private_path(token_path) if token_path else None,
@@ -102,6 +108,9 @@ class WorkflowSettings:
             calendar_webhook_url=os.getenv("WORKFLOW_CALENDAR_WEBHOOK_URL", ""),
             post_call_dir=project_path("data/post-call") if mode == "live" else None,
             transcript_token=os.getenv("WORKFLOW_TRANSCRIPT_TOKEN", ""),
+            documents_dir=project_path(
+                os.getenv("WORKFLOW_DOCUMENTS_DIR", str(project_path("..") / "insumos"))
+            ),
         )
 
     def availability(self):
@@ -124,8 +133,11 @@ class WorkflowSettings:
             "external_connections": self.mode != "mock",
             "enabled": self.enabled,
             "model": bool(
-                self.openai_key and self.openai_model and self.inference_enabled
+                self.openai_model
+                and self.inference_enabled
+                and (self.preparation_provider == "chatgpt" or self.openai_key)
             ),
+            "preparation_provider": self.preparation_provider,
             "inference_enabled": self.inference_enabled,
             "slack": bool(self.slack_token and self.slack_user_id),
             "google": bool(self.google_token_file and self.google_token_file.is_file()),

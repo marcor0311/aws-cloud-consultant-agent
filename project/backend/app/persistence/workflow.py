@@ -1,7 +1,6 @@
 """Durable business events, jobs, artifacts and measured work, on SQLite or Postgres."""
 
 import hashlib
-import json
 import time
 import uuid
 from contextlib import contextmanager
@@ -206,14 +205,13 @@ class WorkflowStore:
                 )
 
     def project_list(self, manager_id):
+        query = select(projects)
+        if manager_id is not None:
+            query = query.where(projects.c.manager_id == manager_id)
         with self.engine.connect() as db:
             return [
                 dict(row)
-                for row in db.execute(
-                    select(projects)
-                    .where(projects.c.manager_id == manager_id)
-                    .order_by(projects.c.opened_at)
-                ).mappings()
+                for row in db.execute(query.order_by(projects.c.opened_at)).mappings()
             ]
 
     def create_handoff(
@@ -436,7 +434,7 @@ class WorkflowStore:
         except IntegrityError:
             return False
 
-    def claim(self):
+    def claim(self, task_id=None):
         now = self.clock()
         with self.engine.begin() as db:
             # A crashed Slack send is ambiguous. Never blindly replay it.
@@ -454,6 +452,8 @@ class WorkflowStore:
                 & (jobs.c.lease_until <= now)
                 & (jobs.c.kind != "slack")
             )
+            if task_id is not None:
+                eligible = eligible & (jobs.c.id == task_id)
             candidates = (
                 db.execute(
                     select(jobs).where(eligible).order_by(jobs.c.available_at).limit(10)
@@ -830,23 +830,3 @@ class WorkflowStore:
                 if e["kind"] in {"approval.requested", "approval.decided"}
             ],
         }
-
-    def import_references(self, root):
-        manifest = json.loads((root / "provenance.json").read_text())
-        for file in manifest["files"]:
-            path = root.parent / file["path"]
-            content = path.read_text(encoding="utf-8")
-            digest = hashlib.sha256(content.encode()).hexdigest()
-            if digest != file["sha256"]:
-                raise ValueError("Una referencia cambió sin actualizar su procedencia.")
-            self.put(
-                f"reference:{file['path']}",
-                "reference",
-                {
-                    "path": file["path"],
-                    "content": content,
-                    "sha256": digest,
-                    "source_commit": manifest["commit"],
-                    "is_fictitious": True,
-                },
-            )

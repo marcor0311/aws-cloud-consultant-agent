@@ -1,11 +1,81 @@
-# Generación local de insumos de reunión
+# Procesador documental corporativo
+
+El worker procesa la transcripción completa de Stuart como fuente del proyecto y
+publica exactamente cinco archivos en `insumos/<case_id>/`, en la raíz:
+
+- `resumen-reunion.pdf`: objetivo, problema, alcance, necesidades, requisitos,
+  integraciones, restricciones, presupuesto, plazos, riesgos y decisiones.
+- `ficha-proyecto.pdf`: síntesis ejecutiva del encargo, límites, inversión y plazos.
+- `presentacion.html`: presentación corporativa autónoma, con fuentes locales.
+- `presentacion.pdf`: las mismas diapositivas, impresas desde el HTML con Chromium.
+- `transcripcion.pdf`: texto íntegro, en orden, sin resumir ni sustituir palabras.
+
+Se reutiliza el generador corporativo `integrations/insumos_export.py`, la plantilla
+`insumos_assets/presentation.html` y Lato. La referencia visual vigente está en
+`insumos temporales de agente 1/` y `docs/design/`; no es un exportador retirado.
+`ProcessedMeeting.corporate_insumos` adapta el contenido a `MeetingTranscript` y
+`MeetingInsumos`. No rellena métricas, fechas, participantes, recomendaciones ni
+compromisos ausentes. Las diapositivas extensas se distribuyen en continuaciones
+con las composiciones existentes, conservando todos sus puntos.
+`processed_documents.py` solo publica y registra los archivos del generador
+corporativo; ya no contiene maquetación alternativa.
+
+El procesador no añade descubrimiento, preguntas, entrevistas, recomendaciones,
+comparaciones ni guion. Conserva lo no acordado con ese significado. La fuente
+sintética se identifica como material ficticio y no acredita una reunión real.
+Las notas anteriores permanecen guardadas; el proveedor actual usa la transcripción
+y las instrucciones explícitas de revisión. El renderizado es local, sin inferencia.
+
+`insumos/` está excluida de Git. Cada carpeta contiene únicamente los cinco archivos;
+los hashes y datos de control se guardan en SQL. `prepare` solo consulta y devuelve
+estado, identificador, revisión, nombres, rutas absolutas y carpeta. No inicia ni
+duplica trabajos, y no devuelve por defecto el checkpoint o el paquete interno.
+El MCP funciona desde terminal por STDIO y por HTTP privado sin ChatGPT abierto.
+El worker debe estar ejecutándose para procesar nuevas transcripciones.
+
+```sh
+make prepare CASE=<case_id>
+open "insumos/<case_id>/resumen-reunion.pdf"
+open "insumos/<case_id>/ficha-proyecto.pdf"
+open "insumos/<case_id>/presentacion.html"
+open "insumos/<case_id>/presentacion.pdf"
+open "insumos/<case_id>/transcripcion.pdf"
+```
+
+La publicación termina antes de notificar `awaiting_review`. Antes de aprobar se
+verifican de nuevo los hashes de los archivos; la aprobación expresa acepta los
+cinco como conjunto sin guion ni otra revisión. Los mismos bytes aprobados quedan
+en SQL para la entrega al agente 2, junto con su manifiesto y la revisión.
+Los contratos anteriores de tres archivos y los de cuatro/cinco/seis archivos con
+transcripción Markdown y eventual guion conservan sus manifiestos y aprobaciones.
+No se migran automáticamente expedientes ya aprobados.
+
+Para reexportar una revisión pendiente usando el contenido ya guardado, sin modelo:
+
+```sh
+cd project/backend
+WORKFLOW_INFERENCE_ENABLED=0 .venv/bin/python -m app.cli.workflow preparation-render \
+  --case <case_id> --revision <revision-pendiente>
+```
+
+Crea una revisión nueva para revisión humana, conserva la fuente y los registros
+anteriores y usa el mismo publicador del worker. Cada nueva llamada real al modelo
+requiere autorización expresa por ejecución; reexportar no la realiza.
+
+## Compatibilidad con la preparación anterior
+
+Las secciones siguientes documentan también el flujo previo de citas, notas y guion.
+Ese flujo se conserva para expedientes existentes; no define los entregables del
+procesador actual ni convierte el generador corporativo en un sistema retirado.
 
 ## Preparación con notas de reunión
 
 El Engagement Manager puede aportar la transcripción y las notas como textos
 independientes. Las notas son opcionales y distintas de `speaker_notes`, el guion
-que se genera después de aprobar la presentación. La consulta de antecedentes
-continúa siendo un campo separado.
+que se genera después de aprobar la presentación. La generación usa únicamente
+esas dos fuentes: no busca, cita ni compara proyectos anteriores. El campo
+`consulta`/`--query` se conserva por compatibilidad con la identidad de las entradas
+persistidas; no ejecuta una búsqueda ni aporta fuentes adicionales al modelo.
 
 Desde MCP, `iniciar_preparacion` acepta:
 
@@ -41,8 +111,8 @@ Omitir `notas_reunion` o `--meeting-notes` conserva las llamadas existentes.
 separado. Las citas usan `source_id: "transcript"` o
 `source_id: "meeting_notes"`, con una cita literal que debe aparecer en esa fuente.
 Una nota por sí sola no permite marcar un hallazgo `confirmed`: esa condición
-sigue requiriendo evidencia de la transcripción. Los antecedentes conservan su
-ruta como identificador de fuente y su carácter de referencia histórica ficticia.
+sigue requiriendo evidencia de la transcripción. No se admiten citas del catálogo
+de proyectos ni se incluyen secciones de antecedentes o comparaciones.
 
 Si las fuentes discrepan, el borrador debe conservar ambas citas, marcar el
 hallazgo `unknown` y explicar la discrepancia en el resumen y las preguntas

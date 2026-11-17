@@ -35,7 +35,7 @@ def prepare_mock(directory=FIXTURE):
         os.environ, {"LANGSMITH_TRACING": "false", "LANGCHAIN_TRACING_V2": "false"}
     ):
         graph = LangGraphExecution(
-            build_graph(InMemorySaver(), lambda _query: [], scripted_drafter)
+            build_graph(InMemorySaver(), drafter=scripted_drafter)
         )
         service = PreparationService(graph)
         result = service.start(

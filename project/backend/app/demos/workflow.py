@@ -427,10 +427,11 @@ async def simulate_stuart(runtime):
 
 def export_run(runtime, collaboration):
     directory = runtime.settings.mock_dir
+    projects = {project["case_id"]: project for project in runtime.owned_cases()}
     for artifact in runtime.store.list("artifact"):
-        project = next(
-            p for p in runtime.owned_cases() if p["case_id"] == artifact["case_id"]
-        )
+        project = projects.get(artifact["case_id"])
+        if project is None:
+            continue
         folder = (
             directory / "artifacts" / project["project_id"] / f"v{artifact['revision']}"
         )
@@ -438,13 +439,20 @@ def export_run(runtime, collaboration):
         for name, content in artifact["documents"].items():
             (folder / name).write_text(content)
     with runtime.store.engine.connect() as db:
-        schema = (
-            db.exec_driver_sql(
-                "SELECT sql FROM sqlite_master WHERE type='table' AND name LIKE 'workflow_%'"
+        if runtime.store.engine.dialect.name == "sqlite":
+            schema = (
+                db.exec_driver_sql(
+                    "SELECT sql FROM sqlite_master WHERE type='table' AND name LIKE 'workflow_%'"
+                )
+                .scalars()
+                .all()
             )
-            .scalars()
-            .all()
-        )
+        else:
+            schema = [
+                f"PostgreSQL table: {name}"
+                for name in runtime.store.engine.dialect.get_table_names(db)
+                if name.startswith("workflow_")
+            ]
     (directory / "schema.sql").write_text(";\n\n".join(schema) + ";\n")
     report = {
         "mode": "mock",
@@ -463,12 +471,19 @@ def export_run(runtime, collaboration):
     return report
 
 
-def run_demo(directory, *, collaborate=False, activate=False):
+def run_demo(
+    directory,
+    *,
+    collaborate=False,
+    activate=False,
+    database_url=None,
+    checkpoint_url=None,
+):
     directory = Path(directory).resolve()
     directory.mkdir(parents=True, exist_ok=False, mode=0o700)
     settings = WorkflowSettings(
-        database_url=f"sqlite:///{directory / 'workflow.sqlite3'}",
-        checkpoint_url=str(directory / "checkpoints.sqlite3"),
+        database_url=database_url or f"sqlite:///{directory / 'workflow.sqlite3'}",
+        checkpoint_url=checkpoint_url or str(directory / "checkpoints.sqlite3"),
         enabled=True,
         manager_id="stuart",
         mode="mock",

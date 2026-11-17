@@ -37,9 +37,24 @@ async def test_mcp_subprocess_starts_from_the_agent_root():
         result = await session.call_tool(
             "preparar_confirmacion_cliente",
             {
-                "codigo_transcrito": "India Oscar Alfa Alfa cero cero uno dos",
+                "codigo_transcrito": "Charlie Uniform Uniform Hotel 0 0 1 2",
             },
         )
         assert not result.is_error
         payload = json.loads(result.content[0].text)
-        assert payload["codigo_normalizado"] == "IOAA-0012"
+        assert payload["codigo_normalizado"] == "CUUH-0012"
+        assert payload["estado"] == "pendiente_confirmacion"
+        assert payload["respuesta_para_decir"] == (
+            "Letras: Charlie, Uniform, Uniform, Hotel. "
+            "Números: cero, cero, uno, dos. ¿Es correcto?"
+        )
+        # The caller repeats the code with a spoken separator; it remains the
+        # same client identifier and still requires confirmation before OTP.
+        repeated = await session.call_tool(
+            "preparar_confirmacion_cliente",
+            {
+                "codigo_transcrito": "Charlie Uniform Uniform Hotel guión cero cero uno dos"
+            },
+        )
+        assert not repeated.is_error
+        assert json.loads(repeated.content[0].text) == payload

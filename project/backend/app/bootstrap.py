@@ -15,7 +15,6 @@ from app.persistence.checkpoints import open_checkpointer
 from app.persistence.locking import LocalWorkerLock
 from app.persistence.workflow import WorkflowStore
 from app.preparation.graph import build_graph
-from app.preparation.references import REFERENCE_DIR, ReferenceCatalog
 from app.preparation.service import PreparationService
 from app.verification.repository import SQLiteVerificationRepository
 from app.verification.service import CalendarAccessService
@@ -47,6 +46,7 @@ def create_opening_runtime(
     github=None,
     allow_simulated_board=False,
     simulated_board_case="",
+    approval_mode="board",
 ):
     """Agent 2 shares the workflow PostgreSQL database, not OTP or demo storage."""
     from types import SimpleNamespace
@@ -84,6 +84,13 @@ def create_opening_runtime(
         )
 
         def board_gate(case_id):
+            if approval_mode == "direction":
+                certificate = repository.get(case_id).get("approval_certificate")
+                if not certificate or certificate.get("kind") != "direction_decision":
+                    raise ValueError("Falta la confirmación explícita de dirección.")
+                return certificate
+            if approval_mode != "board":
+                raise ValueError("Modo de aprobación de agente 2 no reconocido.")
             allow_mock_case = case_id == simulated_board_case
             if allow_mock_case and not repository.get(case_id)["is_fictitious"]:
                 raise ValueError(
@@ -107,8 +114,15 @@ def create_opening_runtime(
             )
         )
         service = OpeningService(repository, execution, documents.validate, board_gate)
+        from app.project_opening.conversation import OpeningConversation
+
+        conversation = OpeningConversation(service, saver)
         return SimpleNamespace(
-            service=service, board=board, store=store, close=resources.close
+            service=service,
+            conversation=conversation,
+            board=board,
+            store=store,
+            close=resources.close,
         )
     except BaseException:
         resources.close()
@@ -122,7 +136,6 @@ def create_document_preparation_runtime(
     from types import SimpleNamespace
 
     from app.preparation.deliveries import PreparationDeliveries
-    from app.preparation.references import search_references
 
     if not database_url.startswith(("postgresql://", "postgresql+psycopg://")):
         raise ValueError("La preparación documental requiere PostgreSQL.")
@@ -148,9 +161,7 @@ def create_document_preparation_runtime(
             return content.executive_package(transcript)
 
         service = PreparationService(
-            LangGraphExecution(
-                build_graph(saver, search_references, supplied_draft, store)
-            ),
+            LangGraphExecution(build_graph(saver, drafter=supplied_draft, store=store)),
             store,
             manager_id,
             on_sync=process.sync_preparation,
@@ -175,7 +186,6 @@ def create_runtime(
     google=None,
     notifier=None,
     drafter=None,
-    reference_dir=REFERENCE_DIR,
     clock=time.time,
     client_lookup=None,
 ):
@@ -191,35 +201,73 @@ def create_runtime(
             clock = mock_clock
         store = WorkflowStore(settings.database_url, clock=clock)
         resources.callback(store.engine.dispose)
-        store.import_references(reference_dir)
         saver = resources.enter_context(open_checkpointer(settings.checkpoint_url))
-        references = ReferenceCatalog(store)
         if settings.mode == "mock":
             from app.integrations.mocks import MockPreparer, MockSlack, MockWorkspace
 
             google = google or MockWorkspace(store, settings.mock_dir)
             notifier = notifier or MockSlack(store, settings.manager_id)
-            drafter = drafter or MockPreparer(references, store, mock_clock)
+            drafter = drafter or MockPreparer(store, mock_clock)
         else:
             google = google or GoogleWorkspace(settings.google_token_file)
             notifier = notifier or SlackNotifier(
                 settings.slack_token, settings.slack_user_id
             )
-            drafter = drafter or OpenAIPreparer(
-                settings.openai_key,
-                settings.openai_model,
-                search=references.search,
-                read=references.read_reference,
-                allow_inference=settings.inference_enabled,
-            )
+            if drafter is None and settings.preparation_provider == "chatgpt":
+                import httpx
+
+                from app.core.config import private_path
+                from app.integrations.ai.chatgpt_preparer import ChatGPTPreparer
+                from app.integrations.ai.plan_session import PlanSession
+
+                def session_factory():
+                    client = httpx.Client(timeout=120, follow_redirects=False)
+                    resources.callback(client.close)
+                    return PlanSession(
+                        client,
+                        private_path("chatgpt/meeting-assistant"),
+                        "http://127.0.0.1:8767/auth/callback",
+                    )
+
+                drafter = ChatGPTPreparer(
+                    session_factory,
+                    settings.openai_model,
+                    store,
+                    allow_inference=settings.inference_enabled,
+                )
+            elif drafter is None:
+                drafter = OpenAIPreparer(
+                    settings.openai_key,
+                    settings.openai_model,
+                    allow_inference=settings.inference_enabled,
+                )
         process = ProcessService(
             LangGraphExecution(build_process_graph(saver)), store, settings.manager_id
         )
+        from app.integrations.processed_documents import ProcessedDocuments
+        from app.preparation.processing import ProcessedMeeting
+
+        modern = settings.mode == "live"
+        package_model = ProcessedMeeting if modern else None
         service = PreparationService(
-            LangGraphExecution(build_graph(saver, references.search, drafter, store)),
+            LangGraphExecution(
+                build_graph(
+                    saver, drafter=drafter, store=store, package_model=package_model
+                )
+            ),
             store,
             settings.manager_id,
             on_sync=process.sync_preparation,
+            **(
+                {
+                    "package_model": ProcessedMeeting,
+                    "publisher": ProcessedDocuments(
+                        store, settings.documents_dir or project_path("..") / "insumos"
+                    ),
+                }
+                if modern
+                else {}
+            ),
         )
         return WorkflowRuntime(
             settings,
@@ -229,7 +277,6 @@ def create_runtime(
             google=google,
             notifier=notifier,
             drafter=drafter,
-            references=references,
             worker_lock=LocalWorkerLock(settings.database_url),
             resources=resources,
             mock_clock=mock_clock,

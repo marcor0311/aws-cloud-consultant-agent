@@ -1,5 +1,7 @@
-"""Private single-operator STDIO entry point; never expose as unauthenticated HTTP."""
+"""Private preparation MCP over STDIO or bearer-protected local HTTP."""
 
+import argparse
+import os
 from typing import Any
 
 from mcp.server.mcpserver import MCPServer
@@ -11,7 +13,8 @@ from app.integrations.errors import ProviderError
 from app.integrations.opening_documents import OpeningDocuments
 from app.persistence.workflow import Busy
 from app.preparation.deliveries import PreparationDeliveries
-from app.preparation.references import read_reference, search_references
+from app.preparation.models import ExecutivePackage
+from app.preparation.processing import DOCUMENT_CONTRACTS
 from app.project_opening.models import ApprovedFile
 from app.workflow.settings import WorkflowSettings
 
@@ -20,16 +23,17 @@ def create_server(service, runtime=None):
     server = MCPServer(
         "Agente de preparación",
         instructions=(
+            "Cuando Stuart escriba /prepare, usa prepare; solo consulta, nunca inicia generación. "
+            "Distingue queued, processing, blocked y awaiting_review según el resultado real. "
+            "No digas que sigue procesando una tarea fallida ni autorices inferencia por consultar. "
             "Para trabajar con Stuart, invoca primero agente_preparacion sin proyecto: "
             "muestra los proyectos y pregunta cuál quiere trabajar. Los borradores ya "
             "los prepara el agente antes de que Stuart llegue. Al elegir proyecto, "
             "presenta el resumen y la presentación, y ofrece mejorarlos. "
-            "La primera aprobación genera el guion desde las diapositivas aprobadas. "
-            "Antes de esa aprobación, vincula los cinco archivos exportados con registrar_archivos_presentacion. "
-            "Después muestra el guion y solicita su aprobación expresa en la nueva revisión. "
-            "Tras aprobar el guion, invoca exportar_paquete_aprobado para entregar seis archivos y su manifiesto. "
-            "Para editar solo el guion usa actualizar_insumos con speaker_notes; "
-            "tras solicitar ajustes al guion, usa guardar_guion_revisado. "
+            "El procesador actual genera cinco archivos corporativos: resumen de reunión PDF, ficha "
+            "de proyecto PDF, presentación HTML/PDF y transcripción íntegra PDF. Devuelve estado, "
+            "identificador, revisión, carpeta y nombres/rutas para abrirlos. "
+            "No añade preguntas de descubrimiento, comparaciones ni guion. "
             "Guarda comentarios o cambios explícitos mediante las herramientas. "
             "Solo aprobar la revisión exacta tras una decisión expresa de Stuart; "
             "leer documentos o recibir Slack no constituye aprobación."
@@ -44,7 +48,6 @@ def create_server(service, runtime=None):
         except (ValueError, ProviderError, Busy) as error:
             raise ToolError(str(error)) from error
 
-    @server.tool()
     def registrar_archivos_presentacion(
         expediente_id: str,
         revision: int,
@@ -72,8 +75,20 @@ def create_server(service, runtime=None):
     def exportar_paquete_aprobado(
         expediente_id: str, revision: int, directorio: str = ""
     ) -> dict:
-        """Exporta seis archivos aprobados por versión y registra sus hashes; no publica en GitHub."""
+        """Devuelve el conjunto aprobado de su versión; conserva los manifiestos anteriores."""
         call(service._owned, expediente_id)
+        current = call(service.get, expediente_id)["state"]
+        if current.get("deliverable_contract") in DOCUMENT_CONTRACTS:
+            if (
+                current.get("status") != "ready_for_stage_2"
+                or current.get("revision") != revision
+            ):
+                raise ToolError(
+                    "Primero aprobar la revisión vigente del conjunto documental."
+                )
+            if runtime:
+                return call(runtime.open_preparation, expediente_id)
+            return service.store.get(f"processed-files:{expediente_id}:{revision}")
         documents = OpeningDocuments(
             directorio or PROJECT_DIR.parent / "insumos temporales de agente 1",
             PROJECT_DIR / "agents/2. meeting assistant/templates/architecture.md",
@@ -111,17 +126,18 @@ def create_server(service, runtime=None):
 
     @server.tool()
     def consultar_preparacion(expediente_id: str) -> dict:
-        """Lee transcripción, notas de reunión, referencias y tarea pendiente del expediente."""
+        """Lee transcripción, notas de reunión y tarea pendiente del expediente."""
+        if runtime and service.package_model is not ExecutivePackage:
+            return call(runtime.open_preparation, expediente_id)
         return call(service.get, expediente_id)
 
     @server.tool()
     def guardar_borrador(expediente_id: str, borrador: str) -> dict:
-        """Guarda JSON ExecutivePackage (schema en la pausa), con speaker_notes vacío."""
+        """Guarda el JSON del contrato indicado por la pausa del procesador."""
         if not borrador.strip():
             raise ToolError("El borrador no puede estar vacío.")
         return call(service.resume, expediente_id, "draft_with_chatgpt", borrador)
 
-    @server.tool()
     def guardar_guion_revisado(expediente_id: str, revision: int, guion: str) -> dict:
         """Tras ajustes solicitados al guion: guarda una nueva revisión, sin aprobarla."""
         if not guion.strip():
@@ -130,11 +146,15 @@ def create_server(service, runtime=None):
             service.resume, expediente_id, "revise_speaker_notes", guion, revision
         )
 
+    if service.package_model is ExecutivePackage:
+        server.tool()(registrar_archivos_presentacion)
+        server.tool()(guardar_guion_revisado)
+
     @server.tool()
     def revisar_preparacion(
         expediente_id: str, decision: str, comentarios: str = "", revision: int = 0
     ) -> dict:
-        """Aprueba/revisa el subject pendiente: presentación primero, guion después."""
+        """Aprueba o solicita cambios sobre la revisión vigente de los documentos."""
         if decision not in {"approve", "revise"}:
             raise ToolError("Usar approve o revise.")
         if decision == "revise" and not comentarios.strip():
@@ -149,18 +169,13 @@ def create_server(service, runtime=None):
                     decision=decision,
                     feedback=comentarios,
                 )
-            return call(service.review, expediente_id, revision, decision, comentarios)
+            result = call(
+                service.review, expediente_id, revision, decision, comentarios
+            )
+            if service.package_model is not ExecutivePackage:
+                return call(runtime.open_preparation, expediente_id)
+            return result
         return call(service.review, expediente_id, revision, decision, comentarios)
-
-    @server.tool()
-    def buscar_referencias(consulta: str) -> list[dict]:
-        """Busca briefs ficticios por palabras y devuelve evidencia y procedencia."""
-        return runtime.search(consulta) if runtime else search_references(consulta)
-
-    @server.tool()
-    def consultar_referencia(proyecto_id: str) -> dict:
-        """Lee el brief completo y arquitecturas ficticias antes de citar el caso."""
-        return call(runtime.read_reference if runtime else read_reference, proyecto_id)
 
     @server.tool()
     def consultar_tiempos(expediente_id: str) -> dict:
@@ -168,6 +183,11 @@ def create_server(service, runtime=None):
         return call(service.metrics, expediente_id)
 
     if runtime:
+
+        @server.tool(annotations={"readOnlyHint": True})
+        def prepare(proyecto_id: str = "") -> dict:
+            """/prepare: consulta progreso o entrega documentos listos para revisar y pulir."""
+            return call(runtime.open_preparation, proyecto_id)
 
         @server.tool()
         def agente_preparacion(proyecto_id: str = "") -> dict:
@@ -194,9 +214,12 @@ def create_server(service, runtime=None):
             comentario: str = "",
         ) -> dict:
             """Guarda secciones mejoradas en la conversación como nueva revisión pendiente de aprobación."""
-            return call(
+            result = call(
                 service.update_package, expediente_id, revision, cambios, comentario
             )
+            if service.package_model is not ExecutivePackage:
+                return call(runtime.open_preparation, expediente_id)
+            return result
 
         @server.tool()
         def aceptar_entrega(handoff_id: str) -> dict:
@@ -277,10 +300,37 @@ def create_server(service, runtime=None):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--transport", choices=("stdio", "streamable-http"), default="stdio"
+    )
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8769)
+    args = parser.parse_args()
     load_environment()
+    if args.transport == "streamable-http":
+        token = os.getenv("PREPARATION_MCP_BEARER_TOKEN", "")
+        if len(token) < 32:
+            parser.error(
+                "PREPARATION_MCP_BEARER_TOKEN requiere al menos 32 caracteres."
+            )
     runtime = create_runtime(WorkflowSettings.from_environment())
     try:
-        create_server(runtime.service, runtime).run(transport="stdio")
+        server = create_server(runtime.service, runtime)
+        if args.transport == "stdio":
+            server.run(transport="stdio")
+        else:
+            import uvicorn
+
+            from app.integrations.mcp_http import BearerProtectedMCP
+
+            app = BearerProtectedMCP(
+                server.streamable_http_app(
+                    host=args.host, stateless_http=True, json_response=True
+                ),
+                token,
+            )
+            uvicorn.run(app, host=args.host, port=args.port)
     finally:
         runtime.close()
 

@@ -22,6 +22,7 @@ from app.integrations.opening_preview import PreviewGitHub, simulate_board_appro
 from app.persistence.locking import Busy
 from app.preparation.deliveries import SCRIPT_NAME, files_digest
 from app.preparation.insumos import MeetingInsumos, MeetingTranscript
+from app.preparation.processing import CORPORATE_FILENAMES
 from app.project_opening.mcp import create_server
 
 ROOT = PROJECT_DIR.parent
@@ -37,7 +38,11 @@ SOURCE = ROOT / "insumos temporales de agente 1"
 
 def request_with_delivery(store, request):
     """Resolve a five-file presentation fixture to its exact approved six-file delivery."""
-    if len(request["files"]) == 6 or store.get("opening:" + request["case_id"]):
+    if (
+        len(request["files"]) in {3, 6}
+        or {f["name"] for f in request["files"]} == set(CORPORATE_FILENAMES)
+        or store.get("opening:" + request["case_id"])
+    ):
         return request
     status = store.get("status:" + request["case_id"]) or {}
     manifest = store.get(
@@ -171,6 +176,11 @@ def main():
     mcp = commands.add_parser("mcp")
     mcp.add_argument("--mock-board-for-case", default="")
     mcp.add_argument("--live-execution-id", default="")
+    mcp.add_argument(
+        "--transport", choices=("stdio", "streamable-http"), default="stdio"
+    )
+    mcp.add_argument("--host", default="127.0.0.1")
+    mcp.add_argument("--port", type=int, default=8768)
     preview = commands.add_parser("preview")
     preview.add_argument(
         "--request",
@@ -234,6 +244,7 @@ def main():
         github=provider,
         allow_simulated_board=args.command == "preview",
         simulated_board_case=getattr(args, "mock_board_for_case", ""),
+        approval_mode="direction" if args.command == "mcp" else "board",
     )
     try:
         service = runtime.service
@@ -265,11 +276,23 @@ def main():
                     },
                 )
                 simulate_board_approval(runtime.board, args.mock_board_for_case)
-            create_server(
+            server = create_server(
                 service,
                 (AGENT / "prompts/assistant.txt").read_text(),
-                board=runtime.board,
-            ).run(transport="stdio")
+                conversation=runtime.conversation,
+            )
+            if args.transport == "stdio":
+                server.run(transport="stdio")
+            else:
+                from app.project_opening.mcp import BearerProtectedMCP
+
+                token = os.getenv("AGENT2_MCP_BEARER_TOKEN", "")
+                app = BearerProtectedMCP(
+                    server.streamable_http_app(host=args.host), token
+                )
+                import uvicorn
+
+                uvicorn.run(app, host=args.host, port=args.port, log_level="info")
             return
         if args.command == "preview":
             request = request_with_delivery(runtime.store, request)

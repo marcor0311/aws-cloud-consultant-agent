@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import router
 from app.api.dependencies import clear_runtime
+from app.api.health import router as health_router
 from app.core.config import load_environment
 
 load_environment()
@@ -36,6 +37,7 @@ app.add_middleware(
 )
 
 app.include_router(router, prefix="/api")
+app.include_router(health_router)
 
 
 # Endpoint raíz para verificar que el backend funciona

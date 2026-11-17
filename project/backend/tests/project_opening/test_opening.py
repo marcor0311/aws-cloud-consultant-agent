@@ -25,8 +25,10 @@ from app.preparation.deliveries import PreparationDeliveries
 from app.preparation.graph import build_graph
 from app.preparation.insumos import MeetingInsumos, MeetingTranscript
 from app.preparation.local_intake import start_local_preparation
+from app.preparation.models import ExecutivePackage
 from app.preparation.service import PreparationService
 from app.project_opening.board import BoardService
+from app.project_opening.conversation import OpeningConversation
 from app.project_opening.graph import build_opening_graph
 from app.project_opening.service import OpeningService
 from app.workflow.graph import build_process_graph
@@ -246,6 +248,7 @@ def seed_preparation(store, saver, request, directory):
     provider = OpenAIPreparer(
         "offline-key",
         "offline-model",
+        package_model=ExecutivePackage,
         client=httpx.Client(transport=httpx.MockTransport(respond)),
         allow_inference=True,
     )
@@ -491,25 +494,25 @@ def test_preparation_to_agent2_documents_issue_and_handoffs_persist(tmp_path, so
         )
         assert resolve_case(store, None, "new-execution") == source["case_id"]
         assert store.get("opening-number:nike")["last"] == approved["project_number"]
-        manifest = store.get(f"artifact-files:{source['case_id']}:5")
-        script_path = (
-            Path(manifest["source_directory"])
-            / manifest["bundle_path"]
-            / "speaker-notes.md"
-        )
-        original = script_path.read_bytes()
-        script_path.write_bytes(b"Guion alterado despues de aprobar.")
-        with pytest.raises(ValueError, match="cambió después de aprobarse"):
+        package_key = f"approved-package:{source['case_id']}:5"
+        approved_package = store.get(package_key)
+        original_script = approved_package["contents"]["speaker-notes.md"]
+        approved_package["contents"]["speaker-notes.md"] = base64.b64encode(
+            b"Guion alterado despues de aprobar."
+        ).decode()
+        store.put(package_key, "approved-package", approved_package)
+        with pytest.raises(ValueError, match="PostgreSQL"):
             service.run(source["case_id"])
         assert not github.repositories
-        script_path.write_bytes(original)
-        manifest_path = script_path.parent / "manifest.json"
-        original_manifest = manifest_path.read_bytes()
-        manifest_path.write_bytes(b"{}")
-        with pytest.raises(ValueError, match="manifiesto local cambió"):
+        approved_package["contents"]["speaker-notes.md"] = original_script
+        original_manifest = approved_package["contents"]["manifest.json"]
+        approved_package["contents"]["manifest.json"] = base64.b64encode(b"{}").decode()
+        store.put(package_key, "approved-package", approved_package)
+        with pytest.raises(ValueError, match="manifiesto guardado en PostgreSQL"):
             service.run(source["case_id"])
         assert not github.repositories
-        manifest_path.write_bytes(original_manifest)
+        approved_package["contents"]["manifest.json"] = original_manifest
+        store.put(package_key, "approved-package", approved_package)
         with pytest.raises(ValueError, match="initial_structure_merge_pending"):
             service.run(source["case_id"])
         assert (
@@ -580,3 +583,101 @@ def test_preparation_to_agent2_documents_issue_and_handoffs_persist(tmp_path, so
                 == file["sha256"]
             )
     restarted.engine.dispose()
+
+
+def test_guided_mcp_opens_approved_preparation_from_postgres_records(tmp_path, source):
+    database = f"sqlite:///{tmp_path / 'guided-workflow.sqlite3'}"
+    checkpoint = str(tmp_path / "guided-checkpoints.sqlite3")
+    store = WorkflowStore(database)
+    inputs = tmp_path / "guided-inputs"
+    inputs.mkdir()
+    for file in source["files"]:
+        (tmp_path / file["name"]).rename(inputs / file["name"])
+
+    class ImmediateGitHub(GitHub):
+        def merge_initial_structure(self, record):
+            self.merged = True
+            return {"number": 1, "merged": True, "merge_sha": "b" * 40}
+
+    github = ImmediateGitHub()
+    repository = ProjectOpeningRepository(store)
+    documents = OpeningDocuments(tmp_path / "unused", TEMPLATE, store)
+    with open_checkpointer(checkpoint) as saver:
+        source = seed_preparation(store, saver, source, inputs)
+
+        def approval(case_id):
+            return repository.get(case_id)["approval_certificate"]
+
+        service = OpeningService(
+            repository,
+            LangGraphExecution(
+                build_opening_graph(
+                    saver,
+                    repository,
+                    github,
+                    documents.files,
+                    documents.issue,
+                    approval,
+                )
+            ),
+            documents.validate,
+            approval,
+        )
+        conversation = OpeningConversation(service, saver)
+        from app.project_opening.mcp import create_server
+
+        server = create_server(service, conversation=conversation)
+
+        async def call(name, arguments=None):
+            result = await server.call_tool(name, arguments or {})
+            return json.loads(result.content[0].text)
+
+        started = asyncio.run(call("iniciar_apertura_guiada"))
+        assert started["status"] == "waiting_for_answer"
+        assert started["field"] == "project"
+        session_id = started["session_id"]
+
+        def answer(value):
+            return asyncio.run(
+                call(
+                    "responder_apertura_guiada",
+                    {"sesion_id": session_id, "respuesta": value},
+                )
+            )
+
+        assert answer(source["case_id"])["field"] == "approved"
+        assert answer("sí")["field"] == "queue_position"
+        assert answer("1")["field"] == "budget"
+        assert answer("180000")["field"] == "architect"
+        assert answer("HiddenShadow77UC")["field"] == "confirm_creation"
+        assert not github.repositories
+
+        manifest = store.get(f"artifact-files:{source['case_id']}:5")
+        persisted = store.get(f"approved-package:{source['case_id']}:5")
+        assert persisted["files_sha256"] == manifest["files_sha256"]
+        assert len(persisted["contents"]) == 7
+        bundle = Path(manifest["source_directory"]) / manifest["bundle_path"]
+        for path in bundle.iterdir():
+            path.unlink()
+        bundle.rmdir()
+
+        result = answer("sí")
+        assert result["status"] == "delivered"
+        opening = service.get(source["case_id"])
+        assert opening["budget"]["total"] == "180000.00"
+        assert opening["architect"] == "HiddenShadow77UC"
+        assert opening["issue"]["assignee"] == "HiddenShadow77UC"
+        published_inputs = {
+            path: data
+            for path, data in github.published.items()
+            if path.startswith("docs/01-discovery/")
+        }
+        assert len(published_inputs) == 7
+        assert all(
+            hashlib.sha256(
+                published_inputs["docs/01-discovery/" + file["name"]]
+            ).hexdigest()
+            == file["sha256"]
+            for file in source["files"]
+        )
+    store.engine.dispose()

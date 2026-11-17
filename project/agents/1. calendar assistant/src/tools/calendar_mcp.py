@@ -57,6 +57,11 @@ def _require_access(operation: str, email: str = "") -> None:
 def preparar_confirmacion_cliente(codigo_transcrito: str) -> dict:
     """Normaliza el código dictado (también letras fonéticas) y prepara su confirmación.
 
+    Llama al recibir el código completo o una corrección, antes de confirmarlo.
+    codigo_transcrito conserva las palabras fonéticas y los dígitos recibidos:
+    cada palabra NATO representa una letra, incluidas las repeticiones.
+    El guion escrito o hablado es opcional y solo separa los grupos; no se dicta.
+    Usa codigo_normalizado del resultado para iniciar la verificación tras confirmar.
     No consulta registros ni autentica. Lee letras y números por separado y espera confirmación.
     """
     return prepare_client_confirmation(codigo_transcrito)

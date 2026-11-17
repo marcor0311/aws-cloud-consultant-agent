@@ -1,5 +1,6 @@
 """Load exact approved files; render one shared issue contract for every project."""
 
+import base64
 import hashlib
 import json
 import tempfile
@@ -53,6 +54,22 @@ class OpeningDocuments:
         return directory
 
     def read(self, file, manifest=None):
+        if (
+            self.store
+            and manifest
+            and manifest.get("case_id")
+            and manifest.get("revision")
+        ):
+            saved = self.store.get(
+                f"approved-package:{manifest['case_id']}:{manifest['revision']}"
+            )
+            if saved and file.name in saved["contents"]:
+                data = base64.b64decode(saved["contents"][file.name], validate=True)
+                if hashlib.sha256(data).hexdigest() != file.sha256:
+                    raise ValueError(
+                        "El insumo persistido en PostgreSQL no coincide con su hash."
+                    )
+                return data
         directory = self.directory(manifest)
         path = directory / file.name
         if path.is_symlink() or path.resolve().parent != directory.resolve():
@@ -69,8 +86,25 @@ class OpeningDocuments:
         for file in files:
             self.read(file, manifest)
         if manifest and manifest.get("bundle_path"):
+            expected_manifest = delivery_manifest(manifest)
+            saved = (
+                self.store.get(
+                    f"approved-package:{manifest['case_id']}:{manifest['revision']}"
+                )
+                if self.store
+                else None
+            )
+            if saved:
+                persisted_manifest = base64.b64decode(
+                    saved["contents"]["manifest.json"], validate=True
+                )
+                if persisted_manifest != expected_manifest:
+                    raise ValueError(
+                        "El manifiesto guardado en PostgreSQL no coincide con la revisión aprobada."
+                    )
+                return
             path = self.directory(manifest) / "manifest.json"
-            if path.is_symlink() or path.read_bytes() != delivery_manifest(manifest):
+            if path.is_symlink() or path.read_bytes() != expected_manifest:
                 raise ValueError(
                     "El manifiesto local cambió después de exportarse; conciliar sin sobrescribirlo."
                 )
@@ -132,6 +166,24 @@ class OpeningDocuments:
             manifest = deliveries.bind(
                 case_id, revision, files, source_directory=metadata["source_directory"]
             )
+            stored_contents = {
+                name: base64.b64encode(data).decode("ascii")
+                for name, data in contents.items()
+            }
+            storage_key = f"approved-package:{case_id}:{revision}"
+            previous_package = self.store.get(storage_key)
+            package_record = {
+                "case_id": case_id,
+                "revision": revision,
+                "files_sha256": manifest["files_sha256"],
+                "contents": stored_contents,
+            }
+            if previous_package and previous_package != package_record:
+                raise ValueError(
+                    "El paquete aprobado ya está guardado con otros bytes."
+                )
+            if not previous_package:
+                self.store.put(storage_key, "approved-package", package_record)
             return {**manifest, "directory": str(target)}
 
     def files(self, record):
@@ -164,7 +216,10 @@ class OpeningDocuments:
             "Los insumos aprobados están en `docs/01-discovery/`. "
             "El diseño se documenta en `docs/03-architecture/` y se revisa mediante PR.\n"
         ).encode()
-        if record.get("board_approval"):
+        if (
+            record.get("board_approval")
+            and record["board_approval"].get("kind") != "direction_decision"
+        ):
             files.update(board_documents(record["board_approval"]))
         return files
 
@@ -208,20 +263,31 @@ class OpeningDocuments:
         }
         certificate = record.get("board_approval")
         if not certificate:
-            raise ValueError("El encargo requiere el acta de aprobación de junta.")
-        minutes_path = "docs/02-board/acta-junta-" + certificate["id"] + ".md"
-        values["board_minutes"] = (
-            "[Acta de votación]("
-            + record["repository"]["url"]
-            + "/blob/"
-            + record["commit"]["sha"]
-            + "/"
-            + minutes_path
-            + "). "
-            + "SHA-256 del certificado: `"
-            + certificate["digest"]
-            + "`."
-        )
+            certificate = record.get("approval_certificate")
+        if not certificate:
+            raise ValueError("El encargo requiere una decisión explícita de dirección.")
+        if certificate.get("kind") == "direction_decision":
+            values["board_minutes"] = (
+                "Decisión de dirección aprobada y confirmada por `"
+                + certificate["actor"]
+                + "`. Referencia: "
+                + certificate["reference"]
+                + "."
+            )
+        else:
+            minutes_path = "docs/02-board/acta-junta-" + certificate["id"] + ".md"
+            values["board_minutes"] = (
+                "[Acta de votación]("
+                + record["repository"]["url"]
+                + "/blob/"
+                + record["commit"]["sha"]
+                + "/"
+                + minutes_path
+                + "). "
+                + "SHA-256 del certificado: `"
+                + certificate["digest"]
+                + "`."
+            )
         body = (
             template.split("---", 2)[2].lstrip()
             if template.startswith("---\n")

@@ -5,7 +5,7 @@ import threading
 import time
 import uuid
 
-from app.integrations.errors import ProviderError
+from app.integrations.errors import ProviderError, describe_failure
 
 
 def serve(runtime, stopped):
@@ -19,24 +19,33 @@ def serve(runtime, stopped):
         next_poll = next_maintenance = 0.0
         while not stopped.is_set():
             now = time.monotonic()
+            operation = "entrega de llamadas"
             try:
                 runtime.deliver_post_calls()
                 if now >= next_poll:
+                    operation = "consulta de Pub/Sub"
                     next_poll = now + 10
                     runtime.poll_google()
                 if now >= next_maintenance:
+                    operation = "mantenimiento de Calendar/Meet"
                     next_maintenance = now + 60
                     runtime.maintenance()
+                operation = "procesamiento de tarea"
                 if not runtime.run_once():
                     stopped.wait(1)
             except ProviderError as error:
                 logging.warning(
-                    "Workflow provider needs configuration/retry: %s",
-                    type(error).__name__,
+                    "Workflow provider needs configuration/retry (operación=%s): %s",
+                    operation,
+                    describe_failure(error),
                 )
                 stopped.wait(10)
             except Exception as error:
-                logging.warning("Workflow worker needs retry: %s", type(error).__name__)
+                logging.warning(
+                    "Workflow worker needs retry (operación=%s): %s",
+                    operation,
+                    describe_failure(error),
+                )
                 stopped.wait(5)
 
 

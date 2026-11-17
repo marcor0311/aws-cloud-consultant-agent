@@ -76,6 +76,11 @@ sin dar ejemplos ni pistas del formato. Confirma el código dictado y solicita
 un OTP que el backend envía exclusivamente al correo aprobado de la empresa.
 El código de cliente identifica el registro; solo el OTP autoriza gestionar citas.
 No se revela ni se cambia el correo aprobado durante la conversación.
+Las palabras del alfabeto fonético representan letras individuales: por ejemplo,
+dos palabras Uniform consecutivas representan dos U. El agente entrega el dictado
+a la herramienta para normalizarlo y confirmar letras y dígitos por separado.
+El guion es un separador visual opcional: no se exige ni se pronuncia, y si se
+dicta la palabra «guion» se ignora. El registro conserva su formato interno.
 
 Las reuniones duran treinta minutos, de lunes a viernes, hora de Costa Rica.
 Pueden iniciar a los minutos 00 o 30, entre 08:00 y 11:30 y entre 13:00 y 16:30.
@@ -89,7 +94,8 @@ la reproducción del mensaje antes de cerrar.
 
 La preparación ejecutiva del primer issue tiene un runtime separado en
 `backend/app/preparation/`. Recibe transcripción, notas de reunión opcionales y
-consulta de antecedentes desde MCP o CLI; ver [entradas y revisión](../../../docs/insumos.md#preparación-con-notas-de-reunión).
+campo de consulta desde MCP o CLI por compatibilidad de la entrada, sin buscar ni
+comparar proyectos anteriores; ver [entradas y revisión](../../../docs/insumos.md#preparación-con-notas-de-reunión).
 Calendar Assistant conserva su responsabilidad de agendamiento.
 
 En una llamada real, la cita se conserva como una sola referencia local. Después

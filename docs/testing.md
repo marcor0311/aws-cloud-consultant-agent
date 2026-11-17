@@ -3,13 +3,18 @@
 La suite tiene cinco recorridos habituales:
 
 1. Registro de cliente → API de verificación → OTP → acceso a agenda, con SQL temporal.
-2. Captura de transcripción → HTTP → cola → LangGraph → estado persistido tras reinicio; inicio CLI/MCP sin notas y conciliación exigida al añadir notas a la misma entrada.
-3. Transcripción y notas separadas → borrador con citas por fuente y discrepancia pendiente de revisión → archivos de presentación → aprobación → guion → cambio de presentación invalida el guion → aprobación del guion → exportación versionada de seis archivos → validación de hashes → agente 2 → junta simulada → rama documental → PR pendiente → merge → issue con manifiesto → handoffs en SQL.
+2. Captura de transcripción → HTTP → cola automática → recuperación de una pausa antigua `draft_with_chatgpt` sin tarea activa → OAuth/Responses simulados → LangGraph → revisión humana con identidad de entrada preservada → cinco archivos corporativos → aprobación sin guion → entrega exacta al agente 2; consulta `prepare` por MCP HTTP con Bearer antes y después de generar, sin inferencia duplicada; inicio CLI/MCP sin notas y conciliación exigida al añadir notas a la misma entrada.
+3. Transcripción y notas separadas → borrador con citas por fuente y discrepancia pendiente de revisión → archivos de presentación → aprobación → guion → cambio de presentación invalida el guion → aprobación del guion → exportación versionada y persistida en SQL de seis archivos → decisión guiada por MCP → confirmación final → rama documental → PR → issue asignado con manifiesto → handoffs en SQL.
 4. Sesión OAuth y SDK simulados → LangGraph → transporte MCP real → resultado guardado; reabrir la ejecución reutiliza el resultado.
 5. Agente 1 → conexión STDIO con su servidor MCP → invocación de una herramienta.
 
+El recorrido de transcripción también regenera desde una revisión con contenido
+comparativo antiguo: comprueba que ese texto no llegue al modelo ni al nuevo
+resumen, conservando intacta la revisión histórica y la transcripción.
+
 Solo hay otros dos recorridos, bajo demanda: el circuito completo de voz guionada
-hasta el handoff y la preparación/apertura con PostgreSQL aislado real.
+hasta el handoff y el E2E de agente 1 a agente 2 sobre PostgreSQL aislado real,
+incluidos el diálogo MCP y la publicación simulada en GitHub.
 Los proveedores externos son simulados. Ninguna prueba usa tokens de ChatGPT o LiveKit.
 
 ```sh
