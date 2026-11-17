@@ -8,11 +8,13 @@ from uuid import UUID
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Response
 
-from app.delivery.models import DemoRequest
+from app.delivery.models import DemoRequest, ReportDecision
+from app.delivery.review import ReportReview, configured_manager
 from app.delivery.workflow import DeliveryWorkflow, public_result
 from app.persistence.delivery import DeliveryBusy, DeliveryConflict, PostgresRepository
 
 router = APIRouter(prefix="/delivery", tags=["Entrega 1 local"])
+review_router = APIRouter(prefix="/delivery", tags=["Revisión ejecutiva local"])
 
 
 @lru_cache
@@ -77,3 +79,27 @@ def get_artifact(delivery_id: UUID, artifact_id: UUID, repo: Repository):
             "Cache-Control": "no-store",
         },
     )
+
+
+@review_router.get("/runs/{delivery_id}/report")
+def get_report(delivery_id: UUID, repo: Repository):
+    try:
+        return ReportReview(repo).get(delivery_id)
+    except LookupError as error:
+        raise HTTPException(404, str(error)) from error
+    except psycopg.Error as error:
+        raise HTTPException(503, "Persistencia de revisión no disponible") from error
+
+
+@review_router.post("/runs/{delivery_id}/report/decisions")
+def decide_report(delivery_id: UUID, decision: ReportDecision, repo: Repository):
+    try:
+        return ReportReview(repo).decide(delivery_id, decision, configured_manager())
+    except LookupError as error:
+        raise HTTPException(404, str(error)) from error
+    except (DeliveryConflict, DeliveryBusy) as error:
+        raise HTTPException(409, str(error)) from error
+    except (psycopg.Error, ValueError) as error:
+        raise HTTPException(
+            503, "Configurar operador y persistencia de revisión"
+        ) from error

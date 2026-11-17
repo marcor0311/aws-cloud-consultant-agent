@@ -149,6 +149,37 @@ class Check(Contract):
     detail: str
 
 
+class EmulatorCheck(Contract):
+    name: Text
+    status: Literal["passed", "failed", "not_run"]
+    category: Literal[
+        "terraform", "security", "emulator", "integration", "policy", "cleanup"
+    ]
+
+
+class EmulatorEvidence(Contract):
+    schema_version: Literal["1.0"]
+    scope: Literal["aws-emulator-s3-demo"]
+    baseline_commit: str = Field(pattern=r"^[0-9a-f]{40}$")
+    bucket_name: Text
+    region: Text
+    started_at: AwareDatetime
+    ended_at: AwareDatetime
+    versions: dict
+    resources: list[Text] = Field(max_length=100)
+    checks: list[EmulatorCheck] = Field(min_length=1, max_length=20)
+    run_url: Text | None = None
+
+    def matches(self, request: DemoRequest) -> bool:
+        architecture = request.architecture
+        return (
+            self.baseline_commit == architecture.baseline.commit
+            and self.region == architecture.region
+            and self.bucket_name == architecture.bucket_name
+            and self.started_at <= self.ended_at
+        )
+
+
 class EngineeringHandoff(Contract):
     schema_version: Literal["1.0"] = "1.0"
     handoff_id: UUID
@@ -172,8 +203,18 @@ class ReportDraft(Contract):
     schema_version: Literal["1.0"] = "1.0"
     report_id: UUID
     handoff_id: UUID
-    version: Literal[1] = 1
-    status: Literal["draft"] = "draft"
+    version: int = Field(default=1, ge=1)
+    status: Literal["draft", "changes_requested", "approved", "closed"] = "draft"
     artifact: ArtifactRef
     metrics: dict
     pending_items: list[str]
+    revision_text: Text | None = None
+    approved_document: ArtifactRef | None = None
+
+
+class ReportDecision(Contract):
+    decision_id: UUID
+    version: int = Field(ge=1)
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    action: Literal["request_changes", "revise", "approve", "record_presentation"]
+    detail: Text

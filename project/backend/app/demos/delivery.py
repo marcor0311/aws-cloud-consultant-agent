@@ -2,7 +2,8 @@
 
 from fastapi import FastAPI
 
-from app.api.delivery import router
+from app.api.delivery import review_router, router
 
 app = FastAPI(title="Entrega 1 - Ingeniería e informe", version="0.1.0")
 app.include_router(router, prefix="/api")
+app.include_router(review_router, prefix="/api")

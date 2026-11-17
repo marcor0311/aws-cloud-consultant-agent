@@ -4,9 +4,9 @@ La suite tiene cinco recorridos habituales:
 
 1. Registro de cliente → API de verificación → OTP → acceso a agenda, con SQL temporal.
 2. Captura de transcripción → HTTP → cola automática → recuperación de una pausa antigua `draft_with_chatgpt` sin tarea activa → OAuth/Responses simulados → LangGraph → revisión humana con identidad de entrada preservada → cinco archivos corporativos → aprobación sin guion → entrega exacta al agente 2; consulta `prepare` por MCP HTTP con Bearer antes y después de generar, sin inferencia duplicada; inicio CLI/MCP sin notas y conciliación exigida al añadir notas a la misma entrada.
-3. Transcripción y notas separadas → borrador con citas por fuente y discrepancia pendiente de revisión → archivos de presentación → aprobación → guion → cambio de presentación invalida el guion → aprobación del guion → exportación versionada y persistida en SQL de seis archivos → decisión guiada por MCP → confirmación final → rama documental → PR → issue asignado con manifiesto → handoffs en SQL.
+3. Transcripción y notas separadas → borrador con citas por fuente y discrepancia pendiente de revisión → archivos de presentación → aprobación → guion → cambio de presentación invalida el guion → aprobación del guion → exportación versionada de seis archivos → validación de hashes → agente 2 → junta simulada → rama documental → PR pendiente → merge → issue con manifiesto → handoffs en SQL. El mismo recorrido cubre junta negativa (rechazo y abstención) → cola → bloqueo si la versión no coincide → Dirección `declined`, con reintento tras reinicio sin duplicar el rechazo ni abrir repo/issue.
 4. Sesión OAuth y SDK simulados → LangGraph → transporte MCP real → resultado guardado; reabrir la ejecución reutiliza el resultado.
-5. Agente 1 → conexión STDIO con su servidor MCP → invocación de una herramienta.
+5. Agente 1 → conexión STDIO con su servidor MCP → invocación de herramienta → backend HTTP simulado deniega registro → oferta de asesor → rechazo sin transferencia o aceptación con SIP REFER simulado → éxito o recuperación tras timeout/rechazo del proveedor. Usa el SDK real con modelo guionado, sin evaluar comprensión del lenguaje.
 
 El recorrido de transcripción también regenera desde una revisión con contenido
 comparativo antiguo: comprueba que ese texto no llegue al modelo ni al nuevo

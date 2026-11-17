@@ -1,5 +1,6 @@
 """Business contract, timing mathematics and a real PostgreSQL-backed API."""
 
+import asyncio
 import copy
 import json
 import os
@@ -17,9 +18,10 @@ from psycopg.conninfo import make_conninfo
 from pydantic import ValidationError
 from pypdf import PdfReader
 
-from app.api.delivery import configured_repository, repository, router
+from app.api.delivery import configured_repository, repository, review_router, router
+from app.delivery.mcp import create_server
 from app.delivery.metrics import calculate_metrics
-from app.delivery.models import DemoRequest, PhaseTiming
+from app.delivery.models import DemoRequest, EmulatorEvidence, PhaseTiming
 from app.delivery.workflow import DeliveryWorkflow
 from app.persistence.delivery import DeliveryBusy, PostgresRepository
 
@@ -57,6 +59,7 @@ def repo():
 def client(repo):
     app = FastAPI()
     app.include_router(router, prefix="/api")
+    app.include_router(review_router, prefix="/api")
     app.dependency_overrides[repository] = lambda: repo
     return TestClient(app)
 
@@ -209,6 +212,94 @@ def test_business_block_does_not_produce_report(client, repo, payload, case):
             ).fetchone()["count"]
             == 0
         )
+
+
+def test_report_revision_approval_and_close(
+    client, repo, payload, monkeypatch, tmp_path
+):
+    monkeypatch.setenv("DELIVERY_ENGAGEMENT_MANAGER", "Operador de demostración")
+    if evidence_path := os.getenv("DELIVERY_TEST_EMULATOR_EVIDENCE"):
+        evidence = EmulatorEvidence.model_validate_json(
+            Path(evidence_path).read_bytes()
+        )
+        assert evidence.run_url
+        assert all(check.status == "passed" for check in evidence.checks)
+        result = DeliveryWorkflow(repo).run(
+            DemoRequest.model_validate(payload), evidence
+        )
+    else:
+        result = client.post("/api/delivery/runs", json=payload).json()
+    run_url = f"/api/delivery/runs/{result['delivery_id']}"
+    first = result["report"]
+
+    def decision(report, action, detail):
+        return {
+            "decision_id": str(uuid4()),
+            "version": report["version"],
+            "sha256": report["artifact"]["sha256"],
+            "action": action,
+            "detail": detail,
+        }
+
+    def submit(value):
+        return client.post(f"{run_url}/report/decisions", json=value)
+
+    assert (
+        submit(decision(first, "record_presentation", "Sesión de prueba")).status_code
+        == 409
+    )
+    changes = decision(first, "request_changes", "Agregar conclusión ejecutiva")
+    assert submit(changes).json()["report"]["status"] == "changes_requested"
+    revision = decision(first, "revise", "Conclusión revisada para dirección")
+    second = submit(revision).json()["report"]
+    assert second["version"] == 2
+    assert submit(revision).json()["report"] == second
+    assert submit(decision(first, "approve", "Revisión anterior")).status_code == 409
+    assert (
+        client.get(
+            f"{run_url}/artifacts/{first['artifact']['artifact_id']}"
+        ).status_code
+        == 200
+    )
+    approved = submit(decision(second, "approve", "Aprobado en la demostración")).json()
+    assert approved["status"] == "approved"
+    pdf_id = approved["report"]["approved_document"]["artifact_id"]
+    download = client.get(f"{run_url}/artifacts/{pdf_id}")
+    text = "\n".join(
+        page.extract_text() for page in PdfReader(BytesIO(download.content)).pages
+    )
+    assert "APROBADO" in text
+    assert "Conclusión revisada para dirección" in text
+    assert second["artifact"]["sha256"] in text
+    if evidence_path:
+        assert evidence.run_url in text
+        assert "terraform destroy" in text
+    closed = submit(
+        decision(second, "record_presentation", "Acta de demostración")
+    ).json()
+    assert closed["status"] == "closed"
+    history = client.get(f"{run_url}/report").json()["report_decisions"]
+    assert [entry["decision"]["action"] for entry in history] == [
+        "request_changes",
+        "revise",
+        "approve",
+        "record_presentation",
+    ]
+
+    async def verify_mcp_download():
+        server = create_server(repo, "Operador de demostración")
+        result = await server.call_tool(
+            "consultar_informe", {"entrega_id": payload["delivery_id"]}
+        )
+        report = result.structured_content
+        assert report["status"] == "closed"
+        resources = list(await server.read_resource(report["pdf_uri"]))
+        assert len(resources) == 1
+        assert resources[0].mime_type == "application/pdf"
+        assert resources[0].content == download.content
+
+    asyncio.run(verify_mcp_download())
+    (tmp_path / "informe-ejecutivo-demostracion.pdf").write_bytes(download.content)
 
 
 def test_missing_input_is_422(client, payload):

@@ -218,6 +218,16 @@ lógico implementado como grafo del backend y consta en el registro de agentes.
 Las pruebas conservan los mocks y transcripts simulados. No hay escenarios ni
 workflows de simulación cloud; las pruebas no hacen llamadas reales al agente.
 
+Un resultado MCP respaldado por el backend con `not_registered` o `not_enabled`
+cambia a una fase de derivación (`tools/advisor_transfer.py`) sin herramientas de
+calendario ni datos del registro. Conserva la voz de Alisa, ofrece hablar con un
+asesor y requiere aceptación explícita posterior a la oferta reproducida.
+`integrations/sip_transfer.py` envía SIP REFER para el único participante SIP
+remoto de la sala activa, con destino E.164 privado y espera acotada. Un fallo
+conserva la conversación y ofrece contacto alternativo; no habilita el registro
+ni autoriza citas. No se crean llamadas nuevas, trunks ni cuentas de proveedor.
+Ver [configuración y límites](../project/agents/1.%20calendar%20assistant/README.md#transferencia-de-la-llamada-activa).
+
 La sesión de voz conserva una referencia privada de la cita y entrega un recibo
 firmado después de cerrar el audio. El backend persiste la entrega y el worker
 procesa la cita sin depender de la sesión OTP ya cerrada. La validación incluye
@@ -287,8 +297,15 @@ verifica el merge, asigna el issue y registra la entrega. Un merge
 bloqueado conserva el PR y pausa el proceso antes del issue. Los nuevos expedientes
 crean repositorios públicos por defecto (`private=false`) en `aws-cloud-consulting-group`; el template permanece en la
 cuenta personal. `issue_assignee` permite un responsable temporal del issue sin
-cambiar el arquitecto destinatario del handoff. El proceso principal de seis etapas no avanza
-automáticamente: la conexión con las reuniones de dirección queda para después.
+cambiar el arquitecto destinatario del handoff. Una aprobación de junta todavía
+no avanza automáticamente el proceso principal. Un resultado `not_approved`
+encola el rechazo en la misma transacción que sella el certificado; el worker
+existente entrega `stage.rejected` y cierra Dirección como `declined`.
+`project_opening/decisions.py` verifica certificado, apertura, manifiesto, entrega
+aceptada y aprobación exacta de preparación en el proceso. Usa revisión y hash
+persistidos, el emisor de la entrega del acta y el resultado certificado como
+motivo; no infiere una opinión humana. Si falta correspondencia, conserva la tarea
+fallida con un recibo de bloqueo para conciliación. No crea otro worker ni avisos.
 
 Los reintentos concilian identidad del repo, blobs y marcador del issue antes de
 escribir. Los PDF se cargan como blobs base64 y el paquete se publica en un único
