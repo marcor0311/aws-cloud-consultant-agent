@@ -42,6 +42,9 @@ def test_postgres_queue_checkpoints_and_handoff_survive_restart(tmp_path):
     calls = []
 
     class GitHub:
+        def find_user(self, login):
+            return login
+
         def ensure_repository(self, record):
             return {
                 "url": "https://github.com/test/repo",

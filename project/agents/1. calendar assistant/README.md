@@ -130,6 +130,16 @@ Las reuniones duran treinta minutos, de lunes a viernes, hora de Costa Rica.
 Pueden iniciar a los minutos 00 o 30, entre 08:00 y 11:30 y entre 13:00 y 16:30.
 Los rangos ofrecidos representan horas de inicio. Las herramientas vuelven a
 validar la autorización y las reglas al agendar o reagendar.
+Se aceptan horas habladas como «ocho treinta», «14 horas» o «mediodía» (esta
+última se rechaza por el almuerzo) y fechas como «pasado mañana».
+
+Cada cliente tiene una sola reunión inicial futura. Si el correo aprobado ya
+tiene una cita de Stuart, `consultar_horarios` y `agendar_reunion` devuelven
+`ya_tiene_reunion` con esa cita y Alisa ofrece reagendarla o cancelarla. Así la
+llamada conserva una única cita en su recibo de cierre. Repetir `agendar_reunion`
+para el mismo horario en la misma llamada devuelve la invitación ya creada, sin
+duplicarla ni registrarla dos veces; si Google responde 409 porque un intento
+anterior se confirmó sin respuesta, se recupera ese evento.
 
 Reagendar y cancelar requieren identificar la cita del correo aprobado y una
 confirmación explícita de la persona. El servidor comprueba que el evento siga
