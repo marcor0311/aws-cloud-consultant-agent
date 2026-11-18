@@ -8,12 +8,14 @@ from typing import Any, TypedDict
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 
+from app.integrations.errors import ProviderError
 from app.preparation.processing import CORPORATE_FILENAMES
-from app.project_opening.models import OpeningRequest
+from app.project_opening.models import OpeningRequest, project_identity, slug
 
 
 class ConversationState(TypedDict, total=False):
     session_id: str
+    choices: list[dict[str, Any]]
     case_id: str
     approved: bool
     queue_position: int
@@ -32,17 +34,33 @@ def _yes_no(answer):
     raise ValueError("Responde sí o no.")
 
 
+def _ask(question, error=None):
+    """Pause for Stuart; a repeated question explains why the last answer failed."""
+    return interrupt({**question, "error": error} if error else question)
+
+
 class OpeningConversation:
     """Collect the explicit direction decision and confirm GitHub writes."""
 
-    def __init__(self, service, checkpointer, *, owner="aws-cloud-consulting-group"):
+    def __init__(
+        self,
+        service,
+        checkpointer,
+        *,
+        owner="aws-cloud-consulting-group",
+        find_user=None,
+    ):
         self.service = service
         self.repository = service.repository
         self.store = self.repository.store
         self.owner = owner
+        # Optional read-only GitHub lookup; it never writes before confirmation.
+        self.find_user = find_user
         graph = StateGraph(ConversationState)
+        graph.add_node("choices", self._choices)
         graph.add_node("project", self._project)
         graph.add_node("decision", self._decision)
+        graph.add_node("confirm_rejection", self._confirm_rejection)
         graph.add_node("priority", self._priority)
         graph.add_node("budget", self._budget)
         graph.add_node("architect", self._architect)
@@ -50,13 +68,19 @@ class OpeningConversation:
         graph.add_node("reject", self._reject)
         graph.add_node("cancel", self._cancel)
         graph.add_node("open", self._open)
-        graph.add_edge(START, "project")
+        graph.add_edge(START, "choices")
         graph.add_conditional_edges(
-            "project",
-            lambda state: "decision" if state.get("case_id") else END,
+            "choices",
+            lambda state: "project" if state.get("choices") else END,
+        )
+        graph.add_edge("project", "decision")
+        graph.add_conditional_edges(
+            "decision",
+            lambda state: "priority" if state["approved"] else "confirm_rejection",
         )
         graph.add_conditional_edges(
-            "decision", lambda state: "priority" if state["approved"] else "reject"
+            "confirm_rejection",
+            lambda state: "reject" if state["status"] == "confirmed" else "cancel",
         )
         graph.add_edge("priority", "budget")
         graph.add_edge("budget", "architect")
@@ -137,6 +161,8 @@ class OpeningConversation:
                     == set(CORPORATE_FILENAMES)
                 )
                 and not self.store.get(f"opening:{case_id}")
+                # A rejection ends the flow; the Engagement Manager takes over.
+                and not self.repository.direction_decision(case_id)
             ):
                 ready.append(
                     {
@@ -149,45 +175,97 @@ class OpeningConversation:
                 )
         return ready
 
-    def _project(self, state):
-        choices = self._prepared()
+    def _numbered(self):
+        return [
+            {"option": index, **project}
+            for index, project in enumerate(self._prepared(), 1)
+        ]
+
+    def _choices(self, state):
+        # Fixed in the checkpoint so replays and numbered answers stay stable.
+        choices = self._numbered()
         if not choices:
-            return {"status": "no_prepared_projects"}
+            return {"choices": [], "status": "no_prepared_projects"}
+        return {"choices": choices}
+
+    def _selected(self, state):
+        # Sessions checkpointed before choices were stored fall back to a fresh list.
+        return next(
+            p
+            for p in state.get("choices") or self._numbered()
+            if p["case_id"] == state["case_id"]
+        )
+
+    def _project(self, state):
+        choices = state.get("choices") or self._numbered()
+        error = None
         while True:
-            selected = interrupt(
+            selected = _ask(
                 {
                     "field": "project",
-                    "question": "¿Cuál proyecto quieres gestionar? Puedes decir el nombre o usar su case_id.",
+                    "question": "¿Cuál proyecto quieres gestionar? Puedes decir su número, nombre o case_id.",
                     "projects": choices,
-                }
+                },
+                error,
             )
             answer = str(selected).strip().casefold()
             matches = [
                 project
                 for project in choices
                 if answer
-                in {project["case_id"].casefold(), project["project"].casefold()}
+                in {
+                    str(project["option"]),
+                    project["case_id"].casefold(),
+                    project["project"].casefold(),
+                }
             ]
             if len(matches) == 1:
+                self.repository.start_direction(matches[0]["case_id"])
                 return {"case_id": matches[0]["case_id"]}
+            error = (
+                "Hay más de un proyecto con ese nombre; usa su número o case_id."
+                if matches
+                else f"No encontré «{str(selected)[:80]}» entre los proyectos preparados."
+            )
 
     def _decision(self, state):
+        project = self._selected(state)
+        error = None
         while True:
-            answer = interrupt(
+            answer = _ask(
                 {
                     "field": "approved",
-                    "question": f"¿Dirección aprobó que continúe el proyecto {state['case_id']}? Responde sí o no.",
-                }
+                    "question": f"¿Dirección aprobó que continúe el proyecto {project['project']} ({state['case_id']})? Responde sí o no.",
+                },
+                error,
             )
             try:
                 return {"approved": _yes_no(answer)}
-            except ValueError:
-                continue
+            except ValueError as invalid:
+                error = str(invalid)
+
+    def _confirm_rejection(self, state):
+        project = self._selected(state)
+        error = None
+        while True:
+            answer = _ask(
+                {
+                    "field": "confirm_rejection",
+                    "question": f"¿Confirmas que Dirección rechazó {project['project']}? Se registrará el rechazo, el proyecto saldrá de la lista y no se creará repositorio ni issue. Responde sí o no.",
+                },
+                error,
+            )
+            try:
+                confirmed = _yes_no(answer)
+                return {"status": "confirmed" if confirmed else "cancelled"}
+            except ValueError as invalid:
+                error = str(invalid)
 
     def _priority(self, state):
         choices = self.repository.queue()
+        error = None
         while True:
-            answer = interrupt(
+            answer = _ask(
                 {
                     "field": "queue_position",
                     "question": "¿En qué posición debe quedar el proyecto en la cola actual?",
@@ -199,98 +277,114 @@ class OpeningConversation:
                         }
                         for item in choices
                     ],
-                }
+                },
+                error,
             )
             try:
-                position = int(str(answer).strip())
+                position = int(str(answer).strip().removeprefix("#"))
                 if 1 <= position <= len(choices) + 1:
                     return {"queue_position": position}
             except (TypeError, ValueError):
-                continue
+                pass
+            error = f"Indica un número entero entre 1 y {len(choices) + 1}."
 
     def _budget(self, state):
+        error = None
         while True:
-            answer = interrupt(
+            answer = _ask(
                 {
                     "field": "budget",
                     "question": "¿Cuál es el presupuesto total aprobado? Indica el monto en USD.",
-                }
+                },
+                error,
             )
+            text = re.sub(r"(?i)usd|\$|,|\s", "", str(answer))
             try:
-                amount = Decimal(
-                    str(answer)
-                    .strip()
-                    .replace("$", "")
-                    .replace(",", "")
-                    .replace("USD", "")
-                    .strip()
-                )
-                if amount > 0 and amount.as_tuple().exponent >= -2:
+                amount = Decimal(text)
+                if (
+                    amount.is_finite()
+                    and amount > 0
+                    and amount.as_tuple().exponent >= -2
+                    and amount < Decimal("1e12")
+                ):
                     return {"budget_total": str(amount.quantize(Decimal("0.01")))}
             except (InvalidOperation, ValueError):
-                continue
+                pass
+            error = "Indica un monto positivo en USD, con dos decimales como máximo; por ejemplo 180000 o 180,000.50."
 
     def _architect(self, state):
+        error = None
         while True:
-            answer = interrupt(
+            answer = _ask(
                 {
                     "field": "architect",
                     "question": "¿Qué usuario de GitHub será el arquitecto asignado?",
-                }
+                },
+                error,
             )
             architect = str(answer).strip().removeprefix("@").strip()
-            if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9-]{0,38}", architect):
+            if not re.fullmatch(r"[A-Za-z0-9](?:-?[A-Za-z0-9]){0,38}", architect):
+                error = "Indica un usuario de GitHub válido: letras, números y guiones."
+                continue
+            if self.find_user is None:
                 return {"architect": architect}
+            try:
+                login = self.find_user(architect)
+            except ProviderError:
+                error = "No pude verificar el usuario en GitHub; vuelve a indicarlo."
+                continue
+            if login:
+                return {"architect": login}
+            error = f"No encontré el usuario {architect} en GitHub."
 
     def _confirm(self, state):
-        project = next(
-            item for item in self._prepared() if item["case_id"] == state["case_id"]
-        )
+        project = self._selected(state)
         status = self.store.get(f"status:{state['case_id']}")
         manifest = self.store.get(
             f"artifact-files:{state['case_id']}:{status['revision']}"
         )
+        counter = self.store.get(f"opening-number:{slug(project['company'])}") or {}
+        identity = project_identity(
+            project["company"], counter.get("last", 0) + 1, project["project"]
+        )
+        error = None
         while True:
-            answer = interrupt(
+            answer = _ask(
                 {
                     "field": "confirm_creation",
-                    "question": "Confirma que registre la aprobación y estos datos, cree el repositorio desde el template, publique los documentos aprobados y cree el issue de arquitectura asignado al arquitecto? Responde sí o no.",
+                    "question": "¿Confirmas que registre la aprobación y estos datos, cree el repositorio desde el template, publique los documentos aprobados y cree el issue de arquitectura asignado al arquitecto? Responde sí o no.",
                     "summary": {
                         "project": project["project"],
+                        "company": project["company"],
                         "approved": True,
                         "queue_position": state["queue_position"],
                         "budget_usd": state["budget_total"],
                         "architect": state["architect"],
-                        "repository_template": "marcor0311/aws-cloud-consulting-project-template",
+                        "repository_template": OpeningRequest.model_fields[
+                            "template_repository"
+                        ].default,
+                        "repository_title": identity["title"],
+                        "repository": f"{self.owner}/{identity['repository_name']}",
+                        "repository_number_note": "El número por compañía se reserva al confirmar.",
                         "files_to_publish": len(manifest["files"]),
+                        "files": [file["name"] for file in manifest["files"]],
+                        "publication_path": "docs/01-discovery/",
+                        "architecture_issue": {
+                            "title": "[Arquitectura] " + identity["title"],
+                            "assignee": state["architect"],
+                        },
                     },
-                }
+                },
+                error,
             )
             try:
                 confirmed = _yes_no(answer)
                 return {"status": "confirmed" if confirmed else "cancelled"}
-            except ValueError:
-                continue
+            except ValueError as invalid:
+                error = str(invalid)
 
     def _reject(self, state):
-        record = {
-            "case_id": state["case_id"],
-            "decision": "rejected",
-            "actor": "Stuart",
-            "recorded_at": self.store.clock(),
-            "session_id": state["session_id"],
-        }
-        key = "opening-decision:" + state["case_id"]
-        previous = self.store.get(key)
-        if previous and previous.get("decision") != "rejected":
-            raise ValueError("El proyecto ya tiene una decisión de apertura distinta.")
-        self.store.put(key, "opening-decision", record)
-        self.store.event(
-            "opening-rejected:" + state["case_id"],
-            state["case_id"],
-            "opening.rejected",
-            {"actor": "Stuart", "session_id": state["session_id"]},
-        )
+        self.repository.reject(state["case_id"], "Stuart", state["session_id"])
         return {"status": "rejected", "case_id": state["case_id"]}
 
     def _cancel(self, state):
@@ -298,15 +392,16 @@ class OpeningConversation:
             "opening-cancelled:" + state["session_id"],
             state["case_id"],
             "opening.confirmation_cancelled",
-            {"actor": "Stuart"},
+            {
+                "actor": "Stuart",
+                "step": "creation" if state.get("approved") else "rejection",
+            },
         )
         return {"status": "cancelled", "case_id": state["case_id"]}
 
     def _open(self, state):
         opening = self.store.get(f"opening:{state['case_id']}")
-        project = opening or next(
-            item for item in self._prepared() if item["case_id"] == state["case_id"]
-        )
+        project = opening or self._selected(state)
         status = self.store.get(f"status:{state['case_id']}")
         manifest = self.store.get(
             f"artifact-files:{state['case_id']}:{status['revision']}"
@@ -364,6 +459,9 @@ class OpeningConversation:
         record = self.service.register(
             OpeningRequest.model_validate(request).model_dump(mode="json")
         )
+        # Direction's stage ends with the registered approval; execution is timed
+        # separately in the project-opening phase until the architecture handoff.
+        self.repository.finish_direction(record["case_id"])
         result = self.service.run(record["case_id"])
         self.store.put(
             "opening-decision:" + state["case_id"],

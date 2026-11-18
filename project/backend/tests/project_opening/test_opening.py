@@ -724,6 +724,9 @@ def test_guided_mcp_opens_approved_preparation_from_postgres_records(tmp_path, s
         (tmp_path / file["name"]).rename(inputs / file["name"])
 
     class ImmediateGitHub(GitHub):
+        def find_user(self, login):
+            return {"hiddenshadow77uc": "HiddenShadow77UC"}.get(login.casefold())
+
         def merge_initial_structure(self, record):
             self.merged = True
             return {"number": 1, "merged": True, "merge_sha": "b" * 40}
@@ -752,7 +755,7 @@ def test_guided_mcp_opens_approved_preparation_from_postgres_records(tmp_path, s
             documents.validate,
             approval,
         )
-        conversation = OpeningConversation(service, saver)
+        conversation = OpeningConversation(service, saver, find_user=github.find_user)
         from app.project_opening.mcp import create_server
 
         server = create_server(service, conversation=conversation)
@@ -760,11 +763,6 @@ def test_guided_mcp_opens_approved_preparation_from_postgres_records(tmp_path, s
         async def call(name, arguments=None):
             result = await server.call_tool(name, arguments or {})
             return json.loads(result.content[0].text)
-
-        started = asyncio.run(call("iniciar_apertura_guiada"))
-        assert started["status"] == "waiting_for_answer"
-        assert started["field"] == "project"
-        session_id = started["session_id"]
 
         def answer(value):
             return asyncio.run(
@@ -774,11 +772,32 @@ def test_guided_mcp_opens_approved_preparation_from_postgres_records(tmp_path, s
                 )
             )
 
+        # A "no" needs its own confirmation; cancelling it records nothing.
+        started = asyncio.run(call("iniciar_apertura_guiada"))
+        session_id = started["session_id"]
+        assert started["projects"][0]["option"] == 1
+        assert answer("otro proyecto")["error"]
+        assert answer("1")["field"] == "approved"
+        assert answer("no")["field"] == "confirm_rejection"
+        assert answer("no")["status"] == "cancelled"
+        assert repository.direction_decision(source["case_id"]) is None
+
+        started = asyncio.run(call("iniciar_apertura_guiada"))
+        assert started["status"] == "waiting_for_answer"
+        assert started["field"] == "project"
+        session_id = started["session_id"]
         assert answer(source["case_id"])["field"] == "approved"
         assert answer("sí")["field"] == "queue_position"
         assert answer("1")["field"] == "budget"
+        assert answer("mucho")["field"] == "budget"
         assert answer("180000")["field"] == "architect"
-        assert answer("HiddenShadow77UC")["field"] == "confirm_creation"
+        assert "No encontré" in answer("ArquitectoInexistente")["error"]
+        confirmation = answer("@hiddenshadow77uc")
+        assert confirmation["field"] == "confirm_creation"
+        summary = confirmation["summary"]
+        assert summary["architect"] == "HiddenShadow77UC"
+        assert summary["repository"].startswith("aws-cloud-consulting-group/")
+        assert summary["files"] == [file["name"] for file in source["files"]]
         assert not github.repositories
 
         manifest = store.get(f"artifact-files:{source['case_id']}:5")
@@ -793,6 +812,14 @@ def test_guided_mcp_opens_approved_preparation_from_postgres_records(tmp_path, s
         result = answer("sí")
         assert result["status"] == "delivered"
         opening = service.get(source["case_id"])
+        assert summary["repository"].endswith("/" + opening["repository_name"])
+        metrics = asyncio.run(
+            call("consultar_metricas_apertura", {"expediente_id": source["case_id"]})
+        )
+        assert {p["phase"]: p["in_progress"] for p in metrics["phases"]} == {
+            "stage-2": False,
+            "project-opening": False,
+        }
         assert opening["budget"]["total"] == "180000.00"
         assert opening["architect"] == "HiddenShadow77UC"
         assert opening["issue"]["assignee"] == "HiddenShadow77UC"

@@ -50,6 +50,9 @@ class OpeningService:
     def audit(self, case_id):
         return self.repository.audit(case_id)
 
+    def metrics(self, case_id):
+        return self.repository.metrics(case_id)
+
     def preflight(self, case_id):
         record = self.get(case_id)
         if record["status"] == "declined":

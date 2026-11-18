@@ -119,7 +119,7 @@ def create_opening_runtime(
         service = OpeningService(repository, execution, documents.validate, board_gate)
         from app.project_opening.conversation import OpeningConversation
 
-        conversation = OpeningConversation(service, saver)
+        conversation = OpeningConversation(service, saver, find_user=provider.find_user)
         return SimpleNamespace(
             service=service,
             conversation=conversation,

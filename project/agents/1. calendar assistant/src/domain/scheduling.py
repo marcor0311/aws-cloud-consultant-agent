@@ -204,6 +204,9 @@ def _parse_requested_date(value: str, now: datetime) -> date:
         return date.fromisoformat(phrase)
     except ValueError:
         pass
+    # dateparser reads "pasado mañana" as tomorrow's "mañana" or fails.
+    if re.fullmatch(r"(el\s+)?pasado\s+mañana", phrase, flags=re.IGNORECASE):
+        return now.astimezone(TIME_ZONE).date() + timedelta(days=2)
 
     phrase = alpha2digit(phrase, "es", threshold=0)
     phrase = re.sub(
@@ -234,7 +237,15 @@ def _parse_requested_date(value: str, now: datetime) -> date:
 
 
 def _parse_requested_time(value: str) -> time:
-    phrase = alpha2digit(" ".join(value.strip().split()), "es", threshold=0)
+    phrase = " ".join(value.strip().split())
+    # Noon is a valid answer even though lunch policy will reject it later.
+    phrase = re.sub(
+        r"\b(a\s+)?(las\s+)?(doce\s+|12\s+)?(el\s+|del\s+)?medio\s*d[ií]a\b",
+        " 12 ",
+        phrase,
+        flags=re.I,
+    )
+    phrase = alpha2digit(phrase, "es", threshold=0)
     normalized = phrase.casefold().replace(".", "")
     is_pm = bool(re.search(r"\b(p\s*m|de la tarde|de la noche)\b", normalized))
     is_am = bool(re.search(r"\b(a\s*m|de la mañana)\b", normalized))
@@ -243,9 +254,11 @@ def _parse_requested_time(value: str) -> time:
         " ",
         normalized,
     )
-    normalized = re.sub(r"\ben punto\b", " ", normalized)
+    normalized = re.sub(r"\b(en punto|horas?|hrs?)\b", " ", normalized)
     normalized = re.sub(r"\s+y\s+media\b", ":30", normalized)
     normalized = re.sub(r"\s+y\s+(\d{1,2})\b", r":\1", normalized)
+    # Spoken "ocho treinta" arrives as "8 30".
+    normalized = re.sub(r"\b(\d{1,2})\s+(\d{2})\b", r"\1:\2", normalized)
     # Reject unparsed minutes/seconds instead of silently using just the hour.
     match = re.fullmatch(r"\s*(\d{1,2})(?::(\d{1,2}))?\s*", normalized)
     if not match:

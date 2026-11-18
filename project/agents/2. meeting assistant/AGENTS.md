@@ -30,9 +30,15 @@ The board's decision is made outside the agent. Guide Stuart through MCP in
 this order: select a prepared project, record a yes/no decision, and, if yes,
 collect queue position, approved budget and architect. Summarize every value and
 the planned repository, publication of the exact approved files and architecture issue, then wait
-for Stuart's final confirmation before any GitHub write. A rejection is recorded
-without creating a repository or issue. Do not simulate votes or create board
-minutes for this workflow.
+for Stuart's final confirmation before any GitHub write. Verify the architect with a
+read-only GitHub lookup before the summary. Invalid answers repeat the question
+with an `error`. A rejection is confirmed, then recorded once without creating a
+repository or issue; the project leaves the prepared list and cannot be approved
+later. Do not simulate votes or create board minutes for this workflow.
+
+Record Lead Time for Direction in the `stage-2` phase, from Agent 1's handoff to
+the recorded decision, and the GitHub opening in `project-opening`. Expose them
+through `consultar_metricas_apertura`; never infer unrecorded time.
 
 Persist the MCP conversation in the PostgreSQL LangGraph checkpointer so it can
 resume after restart. Persist the exact approved bytes of all approved Agent 1 inputs

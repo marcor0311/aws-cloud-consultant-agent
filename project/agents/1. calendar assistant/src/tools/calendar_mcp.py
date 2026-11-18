@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import sys
+import uuid
 from datetime import date, datetime, time, timedelta
 
 from googleapiclient.errors import HttpError
@@ -184,6 +185,8 @@ def consultar_horarios(
 
     Solo ofrece inicios en punto o y media: 08:00 a 11:30 y 13:00 a 16:30, hora de Costa Rica.
     Los rangos son de horas de inicio; ninguna cita cruza el almuerzo o el cierre.
+    Sin evento_a_reagendar, si el cliente ya tiene una reunión futura devuelve
+    estado=ya_tiene_reunion con reunion_existente en lugar de horarios.
 
     Args:
         fecha_solicitada: Expresión de fecha de la persona, por ejemplo una fecha
@@ -211,12 +214,14 @@ def consultar_horarios(
     requested_time = (
         _parse_requested_time(hora_solicitada) if hora_solicitada.strip() else None
     )
-    if evento_a_reagendar:
-        correo_confirmado = _require_confirmed_email(correo_confirmado)
+    correo_confirmado = _require_confirmed_email(correo_confirmado)
     service = _calendar_service()
     if evento_a_reagendar:
         _get_manageable_event(service, evento_a_reagendar, correo_confirmado, now)
         busy = _busy_except_event(service, now, horizon_end, evento_a_reagendar)
+    elif existing := next(_future_meetings(service, correo_confirmado, now), None):
+        # Offer the existing initial meeting before spending turns on new slots.
+        return _existing_meeting_result(existing)
     else:
         busy = _get_busy_intervals(service, now, horizon_end)
     days = (
@@ -328,7 +333,8 @@ def _availability_message(options: list[dict[str, str]], prefix: str = "") -> st
     ranges = _format_available_ranges(options)
     options_text = "; y ".join(ranges)
     if prefix:
-        return f"{prefix} tengo horarios de inicio disponibles {options_text}, cada media hora. ¿Qué horario le funciona?"
+        verb = "Tengo" if prefix.endswith(".") else "tengo"
+        return f"{prefix} {verb} horarios de inicio disponibles {options_text}, cada media hora. ¿Qué horario le funciona?"
     return f"Tengo horarios de inicio disponibles {options_text}, cada media hora. ¿Qué horario le funciona?"
 
 
@@ -345,8 +351,12 @@ def agendar_reunion(
     nombre: str,
     correo_confirmado: str = "",
     tema: str = "",
-) -> dict[str, str]:
+) -> dict[str, object]:
     """Crea una invitación de 30 minutos después de verificar el OTP y confirmar la hora.
+
+    Cada cliente tiene una sola reunión inicial futura: si ya existe, devuelve
+    estado=ya_tiene_reunion con esa cita y no crea otra. Repetir la llamada para
+    el mismo horario devuelve la invitación ya creada.
 
     Args:
         inicio: Hora elegida, en formato ISO 8601 con zona horaria, obtenida de consultar_horarios.
@@ -378,6 +388,25 @@ def agendar_reunion(
         )
 
     service = _calendar_service()
+    calendar_id = _calendar_ids(service)[0]
+    event_id = hashlib.sha256(
+        f"{_access.session_id}:{start.isoformat()}:{email}".encode()
+    ).hexdigest()
+    # A repeated call (model retry or a timeout after Google committed) must not
+    # report the client's own new event as a busy slot or create a second one.
+    previous = _find_event(service, calendar_id, event_id)
+    if previous and previous.get("status") != "cancelled":
+        if not _matches_stuart_meeting(previous, email):
+            raise RuntimeError("Google Calendar no pudo crear la invitación.")
+        logger.info("Reserva repetida: se devuelve la invitación ya creada.")
+        return _booking_result(previous, calendar_id, operation_started)
+    if previous:
+        # Google keeps cancelled IDs; a booking after cancelling needs a new one.
+        event_id = uuid.uuid4().hex
+    if existing := next(_future_meetings(service, email, now), None):
+        logger.info("Reserva rechazada: el cliente ya tiene una reunión futura.")
+        return _existing_meeting_result(existing)
+
     end = start + MEETING_DURATION
     busy = _get_busy_intervals(service, start, end)
     if not _slot_is_free(start, busy):
@@ -398,9 +427,7 @@ def agendar_reunion(
         description += f"\nTema: {tema.strip()[:1000]}"
 
     event = {
-        "id": hashlib.sha256(
-            f"{_access.session_id}:{start.isoformat()}:{email}".encode()
-        ).hexdigest(),
+        "id": event_id,
         "summary": f"Reunión con Stuart — {nombre.strip()}",
         "description": description,
         "start": {"dateTime": start.isoformat(), "timeZone": TIME_ZONE_NAME},
@@ -414,9 +441,7 @@ def agendar_reunion(
         },
         "conferenceData": {
             "createRequest": {
-                "requestId": hashlib.sha256(
-                    f"{_access.session_id}:{start.isoformat()}".encode()
-                ).hexdigest(),
+                "requestId": hashlib.sha256(event_id.encode()).hexdigest(),
                 "conferenceSolutionKey": {"type": "hangoutsMeet"},
             }
         },
@@ -425,7 +450,7 @@ def agendar_reunion(
         created = (
             service.events()
             .insert(
-                calendarId=_calendar_ids(service)[0],
+                calendarId=calendar_id,
                 body=event,
                 sendUpdates="all",
                 conferenceDataVersion=1,
@@ -433,16 +458,32 @@ def agendar_reunion(
             .execute()
         )
     except HttpError as error:
-        raise RuntimeError("Google Calendar no pudo crear la invitación.") from error
+        # 409: an earlier attempt was committed although its response was lost.
+        committed = (
+            _find_event(service, calendar_id, event_id)
+            if error.resp.status == 409
+            else None
+        )
+        if not committed or not _matches_stuart_meeting(committed, email):
+            raise RuntimeError(
+                "Google Calendar no pudo crear la invitación."
+            ) from error
+        created = committed
 
-    sync = _access.record_meeting(
-        _calendar_ids(service)[0],
-        created.get("id", ""),
-        "scheduled",
-        created.get("etag", ""),
-        operation_started,
-    )
+    return _booking_result(created, calendar_id, operation_started)
 
+
+# One MCP process serves one call; a repeated booking is recorded only once.
+_recorded_bookings: dict[str, str] = {}
+
+
+def _booking_result(event: dict, calendar_id: str, started_at: str) -> dict[str, str]:
+    event_id = event.get("id", "")
+    if event_id not in _recorded_bookings:
+        _recorded_bookings[event_id] = _access.record_meeting(
+            calendar_id, event_id, "scheduled", event.get("etag", ""), started_at
+        )
+    start, end = _event_times(event)
     return {
         "estado": "agendada",
         "inicio": start.isoformat(timespec="minutes"),
@@ -450,14 +491,25 @@ def agendar_reunion(
         "duracion_minutos": "30",
         "zona_horaria": TIME_ZONE_NAME,
         "invitacion_enviada": "correo registrado",
-        "organizador": created.get("organizer", {}).get(
+        "organizador": event.get("organizer", {}).get(
             "email", os.getenv("GOOGLE_ACCOUNT_EMAIL", "").strip()
         ),
-        "evento_id": created.get("id", ""),
-        "enlace": created.get("htmlLink", ""),
-        "enlace_meet": created.get("hangoutLink", ""),
-        "preparacion_estado": sync,
+        "evento_id": event_id,
+        "enlace": event.get("htmlLink", ""),
+        "enlace_meet": event.get("hangoutLink", ""),
+        "preparacion_estado": _recorded_bookings[event_id],
     }
+
+
+def _find_event(service, calendar_id: str, event_id: str) -> dict | None:
+    try:
+        return service.events().get(calendarId=calendar_id, eventId=event_id).execute()
+    except HttpError as error:
+        if error.resp.status in (404, 410):
+            return None
+        raise RuntimeError(
+            "Google Calendar no pudo comprobar la invitación."
+        ) from error
 
 
 def _list_events(service, start: datetime, end: datetime):
@@ -511,6 +563,40 @@ def _matches_stuart_meeting(event: dict, email: str) -> bool:
         return False
     start, end = _event_times(event)
     return end - start == MEETING_DURATION
+
+
+def _future_meetings(service, email: str, now: datetime, start=None, end=None):
+    """Future Stuart meetings whose invitee is exactly the verified email."""
+    start = start or now
+    end = end or now + timedelta(days=365)
+    for event in _list_events(service, start, end):
+        if _matches_stuart_meeting(event, email) and _event_times(event)[0] > now:
+            yield event
+
+
+def _meeting_summary(event: dict) -> dict[str, str]:
+    start, end = _event_times(event)
+    return {
+        "evento_id": event["id"],
+        "inicio": start.isoformat(timespec="minutes"),
+        "fin": end.isoformat(timespec="minutes"),
+        "fecha_local": (
+            f"{WEEKDAYS_ES[start.weekday()]} {start.day} de "
+            f"{MONTHS_ES[start.month - 1]} {_time_phrase(start)}"
+        ),
+    }
+
+
+def _existing_meeting_result(event: dict) -> dict[str, object]:
+    meeting = _meeting_summary(event)
+    return {
+        "estado": "ya_tiene_reunion",
+        "reunion_existente": meeting,
+        "respuesta_para_decir": (
+            f"Ya tiene una reunión inicial con Stuart el {meeting['fecha_local']}. "
+            "Si lo desea, puedo ayudarle a reagendarla o cancelarla."
+        ),
+    }
 
 
 def _get_manageable_event(service, evento_id, correo, now) -> dict:
@@ -577,23 +663,8 @@ def buscar_reuniones(
             raise ValueError("Solo se buscan citas futuras.")
     email = _require_confirmed_email(correo_confirmado)
     matches = []
-    for event in _list_events(_calendar_service(), start, end):
-        if not _matches_stuart_meeting(event, email):
-            continue
-        event_start, event_end = _event_times(event)
-        if event_start <= now:
-            continue
-        matches.append(
-            {
-                "evento_id": event["id"],
-                "inicio": event_start.isoformat(timespec="minutes"),
-                "fin": event_end.isoformat(timespec="minutes"),
-                "fecha_local": (
-                    f"{WEEKDAYS_ES[event_start.weekday()]} {event_start.day} de "
-                    f"{MONTHS_ES[event_start.month - 1]} {_time_phrase(event_start)}"
-                ),
-            }
-        )
+    for event in _future_meetings(_calendar_service(), email, now, start, end):
+        matches.append(_meeting_summary(event))
         if len(matches) > 10:
             break
     logger.info(

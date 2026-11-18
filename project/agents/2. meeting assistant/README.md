@@ -13,16 +13,26 @@ las instrucciones y la plantilla del issue; no se importa como paquete Python.
 
 El MCP lleva a Stuart por estas preguntas, en orden:
 
-1. ¿Qué proyecto preparado quiere gestionar?
+1. ¿Qué proyecto preparado quiere gestionar? (número de la lista, nombre o `case_id`)
 2. ¿Dirección aprobó o rechazó que continúe?
-3. Si fue aprobado, ¿en qué posición debe quedar en la cola actual?
-4. ¿Cuál es el presupuesto total aprobado en USD?
-5. ¿Qué usuario de GitHub será el arquitecto asignado?
-6. ¿Confirma el resumen y la creación del repositorio, la publicación de los archivos aprobados
-   insumos y el issue asignado?
+3. Si fue rechazado, ¿confirma el rechazo?
+4. Si fue aprobado, ¿en qué posición debe quedar en la cola actual?
+5. ¿Cuál es el presupuesto total aprobado en USD?
+6. ¿Qué usuario de GitHub será el arquitecto asignado? El MCP verifica en GitHub,
+   solo con lectura, que el usuario exista.
+7. ¿Confirma el resumen y la creación del repositorio, la publicación de los archivos
+   aprobados y el issue asignado?
 
-Un rechazo se guarda en PostgreSQL y termina sin escrituras en GitHub. Una
-cancelación en la confirmación final tampoco crea recursos. La sesión conversacional
+El resumen final muestra el título y el nombre previstos del repositorio, el template,
+los nombres de los archivos que se publicarán y el issue de arquitectura con su
+asignado. Si una respuesta no es válida, la misma pregunta vuelve con un campo
+`error` que explica el motivo.
+
+Un rechazo confirmado se guarda en PostgreSQL, acepta la entrega del agente 1 y
+termina sin escrituras en GitHub. El proyecto sale de la lista de preparados y no se
+puede aprobar después desde otra sesión; el Engagement Manager se encarga. Una
+cancelación, en la confirmación del rechazo o en la final, no registra la decisión
+ni crea recursos. La sesión conversacional
 y las respuestas pendientes se guardan en checkpoints LangGraph para poder
 continuar después de reiniciar el proceso.
 
@@ -65,6 +75,15 @@ Cuando Stuart confirma, LangGraph crea el repositorio desde
 arquitectura según `templates/architecture.md`. El issue se asigna al arquitecto
 indicado. Los reintentos concilian estado remoto antes de repetir efectos; no
 fuerzan ramas ni reemplazan cambios humanos.
+
+### Lead Time y Process Time
+
+La fase `stage-2` mide el tiempo en Dirección: empieza cuando el agente 1 entrega
+el paquete aprobado y termina cuando se registra la aprobación o el rechazo. La fase
+`project-opening` mide la apertura en GitHub hasta el handoff al arquitecto; su
+Process Time son las sesiones de trabajo registradas del agente. La herramienta MCP
+`consultar_metricas_apertura` devuelve ambas fases y los handoffs con su espera.
+No se infieren tiempos que no estén registrados.
 
 Los nombres siguen esta convención:
 

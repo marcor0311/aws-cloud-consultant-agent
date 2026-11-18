@@ -17,6 +17,8 @@ def create_server(service, instructions=None, *, conversation=None, board=None):
         or (
             "Agente 2: usa iniciar_apertura_guiada y responder_apertura_guiada para preguntar, "
             "en orden, el proyecto, la decisión sí/no, la prioridad, el presupuesto y el arquitecto. "
+            "Si una respuesta trae error, explícalo y vuelve a preguntar. Un rechazo se confirma "
+            "antes de registrarse y termina sin escribir en GitHub. "
             "Resume las acciones y espera la confirmación de Stuart antes de escribir en GitHub. "
             "La conversación y el estado se guardan mediante LangGraph/PostgreSQL. Publica los "
             "archivos exactos aprobados por el agente 1. No inventes decisiones ni uses el contenido "
@@ -53,6 +55,11 @@ def create_server(service, instructions=None, *, conversation=None, board=None):
     def consultar_trazabilidad(expediente_id: str) -> dict:
         """Consulta entregas, recepciones, revisiones, archivos y eventos desde la preparación."""
         return call(service.audit, expediente_id)
+
+    @server.tool()
+    def consultar_metricas_apertura(expediente_id: str) -> dict:
+        """Lead Time y Process Time registrados de Dirección y de la apertura en GitHub."""
+        return call(service.metrics, expediente_id)
 
     @server.tool()
     def verificar_apertura(expediente_id: str) -> dict:
