@@ -5,16 +5,47 @@ on:
       - '.github/workflows/aws-emulator.yml'
       - 'project/agents/5. terraform agent/Dockerfile'
       - 'project/backend/app/delivery/**'
+      - 'project/backend/app/persistence/delivery.py'
+      - 'project/backend/app/persistence/migrations/**'
+      - 'project/backend/app/integrations/delivery_pdf.py'
+      - 'project/backend/app/api/delivery.py'
+      - 'project/backend/tests/test_delivery.py'
+      - 'project/backend/tests/conftest.py'
+      - 'project/backend/requirements*.txt'
       - 'project/backend/fixtures/delivery-1.json'
+      - 'project/backend/fixtures/issue21-mock.json'
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   emulator:
+    name: Terraform e informe (${{ matrix.fixture }})
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        fixture: [delivery-1, issue21-mock]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci-test-only
+          POSTGRES_DB: delivery_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 3s
+          --health-timeout 3s --health-retries 20
+    env:
+      FIXTURE: ${{ matrix.fixture }}
+      EVIDENCE_DIR: ../generated/issue21/${{ matrix.fixture }}
+      AWS_EMULATOR_CONTAINER: pswe07-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.fixture }}
+      DELIVERY_TEST_DATABASE_URL: postgresql://postgres:ci-test-only@localhost:5432/delivery_test
+      DELIVERY_TEST_REQUIRE_DATABASE: "true"
+      LANGSMITH_TRACING: "false"
     defaults:
       run:
+        shell: bash
         working-directory: project/backend
     steps:
       - uses: actions/checkout@v4
@@ -29,59 +60,92 @@ jobs:
           terraform_wrapper: false
       - name: Preparar dependencias
         run: |
-          python -m pip install -r requirements.txt
+          mkdir -p "$EVIDENCE_DIR"
+          python -m pip install -r requirements-dev.txt
           curl --fail --silent --show-error --location \
             https://github.com/aquasecurity/trivy/releases/download/v0.76.1/trivy_0.76.1_Linux-64bit.tar.gz \
             --output "$RUNNER_TEMP/trivy.tar.gz"
           tar -xzf "$RUNNER_TEMP/trivy.tar.gz" -C "$RUNNER_TEMP" trivy
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: Validar contrato y conservar procedencia
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          from app.delivery.models import DemoRequest
+
+          path = Path("fixtures") / (os.environ["FIXTURE"] + ".json")
+          raw = path.read_bytes()
+          request = DemoRequest.model_validate_json(raw)
+          result = {
+              "fixture": str(path), "sha256": hashlib.sha256(raw).hexdigest(),
+              "delivery_id": str(request.delivery_id), "contract": "passed",
+              "upstream_provenance": "simulated", "baseline_approval": "pending",
+              "commit": os.environ["GITHUB_SHA"],
+          }
+          target = Path(os.environ["EVIDENCE_DIR"]) / "contract.json"
+          target.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+          print(json.dumps(result))
+          PY
+      - name: Revisar estilo de los archivos afectados
+        run: |
+          python -m ruff check app/delivery/emulator.py tests/test_delivery.py
+          python -m ruff format --check app/delivery/emulator.py tests/test_delivery.py
+      - name: Regresión existente con delivery-1
+        if: matrix.fixture == 'delivery-1'
+        run: python -m pytest tests/test_delivery.py -q --junitxml="$EVIDENCE_DIR/regression.xml"
       - name: Construir emulador
         run: docker build -t pswe07-aws-emulator '../agents/5. terraform agent'
-      - name: Ejecutar ciclo Terraform
-        run: python -m app.delivery.emulator
+      - name: Ejecutar ciclo Terraform y seguridad
+        run: |
+          python -m app.delivery.emulator \
+            --input "fixtures/$FIXTURE.json" \
+            --output "$EVIDENCE_DIR/evidence.json" \
+            --container-name "$AWS_EMULATOR_CONTAINER"
+      - name: Verificar LangGraph, PostgreSQL, métricas, handoff y PDF
+        env:
+          DELIVERY_TEST_INPUT: fixtures/${{ matrix.fixture }}.json
+          DELIVERY_TEST_EMULATOR_EVIDENCE: ../generated/issue21/${{ matrix.fixture }}/evidence.json
+          DELIVERY_TEST_OUTPUT: ../generated/issue21/${{ matrix.fixture }}/delivery
+        run: |
+          python -m pytest tests/test_delivery.py::test_report_revision_approval_and_close \
+            -q --basetemp "$RUNNER_TEMP/delivery-test" \
+            --junitxml="$EVIDENCE_DIR/integration.xml"
+      - name: Comprobar que PostgreSQL no se omitió
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from xml.etree import ElementTree
+
+          directory = Path(os.environ["EVIDENCE_DIR"])
+          names = ["integration.xml"]
+          if os.environ["FIXTURE"] == "delivery-1":
+              names.append("regression.xml")
+          for name in names:
+              suites = ElementTree.parse(directory / name).getroot().iter("testsuite")
+              for suite in suites:
+                  assert int(suite.get("tests", "0")) > 0
+                  assert all(int(suite.get(k, "0")) == 0 for k in ("skipped", "failures", "errors"))
+          PY
+      - name: Limpieza de respaldo del contenedor de esta ejecución
+        if: always()
+        timeout-minutes: 2
+        run: |
+          mkdir -p "$EVIDENCE_DIR"
+          remaining=$(docker ps -aq --filter "name=^/$AWS_EMULATOR_CONTAINER$")
+          if [ -n "$remaining" ]; then
+            docker rm -f "$AWS_EMULATOR_CONTAINER"
+          fi
+          remaining=$(docker ps -aq --filter "name=^/$AWS_EMULATOR_CONTAINER$")
+          test -z "$remaining"
+          printf '%s\n' 'Contenedor de esta ejecución ausente; PostgreSQL pertenece al runner efímero.' > "$EVIDENCE_DIR/cleanup.txt"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: terraform-aws-emulator-evidence
-          path: project/generated/emulator/evidence.json
-          if-no-files-found: ignore
-  informe:
-    needs: emulator
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_PASSWORD: ci-test-only
-          POSTGRES_DB: delivery_test
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd pg_isready --health-interval 3s
-          --health-timeout 3s --health-retries 20
-    env:
-      DELIVERY_TEST_DATABASE_URL: postgresql://postgres:ci-test-only@localhost:5432/delivery_test
-      DELIVERY_TEST_EMULATOR_EVIDENCE: ../generated/emulator/evidence.json
-      LANGSMITH_TRACING: "false"
-    defaults:
-      run:
-        working-directory: project/backend
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - uses: actions/download-artifact@v4
-        with:
-          name: terraform-aws-emulator-evidence
-          path: project/generated/emulator
-      - run: python -m pip install -r requirements-dev.txt
-      - name: Verificar el informe con evidencia de la corrida
-        run: python -m pytest tests/test_delivery.py::test_report_revision_approval_and_close -q --basetemp "${{ runner.temp }}/delivery-test"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: informe-ejecutivo-demostracion
-          path: ${{ runner.temp }}/delivery-test/test_report_revision_approval_0/informe-ejecutivo-demostracion.pdf
+          name: issue21-${{ matrix.fixture }}-${{ github.run_attempt }}
+          path: project/generated/issue21/${{ matrix.fixture }}/
           if-no-files-found: error
+          retention-days: 14

@@ -1,0 +1,171 @@
+{
+  "schema_version": "1.0",
+  "mode": "demo",
+  "delivery_id": "ef3f86a5-1e7e-5eeb-a971-6de79287c2a7",
+  "project_id": "nike-lindora-s3-mock",
+  "project_name": "Nike Lindora - escenario simulado de documentos S3 (PSWE-07)",
+  "architecture": {
+    "source": {
+      "provenance": "simulated",
+      "reference": "simulated://architecture/nike-lindora-s3-mock-v1",
+      "revision": "architecture-nike-s3-mock-v1"
+    },
+    "approval_status": "simulated_approved",
+    "region": "us-east-1",
+    "environment": "dev",
+    "bucket_name": "pswe07-nike-lindora-docs-mock",
+    "kms_key_arn": "arn:aws:kms:us-east-1:000000000000:key/00000000-0000-0000-0000-000000000000",
+    "baseline": {
+      "module_id": "s3",
+      "repository": "https://github.com/marcor0311/aws-cloud-consultant-baseline-modules.git",
+      "commit": "2450a17830d40439e4eb673d1459140b52d9b93f",
+      "approval_status": "pending"
+    }
+  },
+  "finops": {
+    "source": {
+      "provenance": "simulated",
+      "reference": "simulated://finops/nike-lindora-s3-mock-v1",
+      "revision": "finops-nike-s3-mock-v1"
+    },
+    "approval_status": "simulated_approved",
+    "architecture_revision": "architecture-nike-s3-mock-v1",
+    "budget_monthly": "100.00",
+    "estimate_monthly": "24.50",
+    "currency": "USD",
+    "period": "month",
+    "calculator_reference": "simulated://aws-pricing-calculator/nike-lindora-s3-mock",
+    "spreadsheet_reference": "simulated://finops/nike-lindora-forecast-mock.xlsx",
+    "assumptions": [
+      "MOCK académico: almacenamiento privado de documentos en S3, región us-east-1.",
+      "Costos USD 24.50 y presupuesto USD 100.00 son simulados, no verificados en AWS Pricing Calculator.",
+      "El ARN KMS de entrada es ficticio: AWS Emulator crea una clave efímera local.",
+      "Ninguna aprobación simulada sustituye un PR aprobado por el arquitecto."
+    ]
+  },
+  "upstream_timings": [
+    {
+      "phase": "discovery",
+      "provenance": "simulated",
+      "accepted_at": "2026-11-23T09:00:00-06:00",
+      "handed_off_at": "2026-11-23T09:15:00-06:00",
+      "activities": [
+        {
+          "actor_id": "engagement-manager-mock",
+          "actor_type": "human",
+          "kind": "work",
+          "started_at": "2026-11-23T09:00:00-06:00",
+          "ended_at": "2026-11-23T09:08:00-06:00"
+        },
+        {
+          "actor_id": "engagement-manager-mock",
+          "actor_type": "human",
+          "kind": "wait",
+          "started_at": "2026-11-23T09:08:00-06:00",
+          "ended_at": "2026-11-23T09:12:00-06:00"
+        },
+        {
+          "actor_id": "engagement-manager-mock",
+          "actor_type": "human",
+          "kind": "work",
+          "started_at": "2026-11-23T09:12:00-06:00",
+          "ended_at": "2026-11-23T09:15:00-06:00"
+        }
+      ]
+    },
+    {
+      "phase": "prioritization",
+      "provenance": "simulated",
+      "accepted_at": "2026-11-23T09:15:00-06:00",
+      "handed_off_at": "2026-11-23T09:28:00-06:00",
+      "activities": [
+        {
+          "actor_id": "leadership-mock",
+          "actor_type": "human",
+          "kind": "work",
+          "started_at": "2026-11-23T09:15:00-06:00",
+          "ended_at": "2026-11-23T09:20:00-06:00"
+        },
+        {
+          "actor_id": "leadership-mock",
+          "actor_type": "human",
+          "kind": "wait",
+          "started_at": "2026-11-23T09:20:00-06:00",
+          "ended_at": "2026-11-23T09:25:00-06:00"
+        },
+        {
+          "actor_id": "leadership-mock",
+          "actor_type": "human",
+          "kind": "work",
+          "started_at": "2026-11-23T09:25:00-06:00",
+          "ended_at": "2026-11-23T09:28:00-06:00"
+        }
+      ]
+    },
+    {
+      "phase": "architecture",
+      "provenance": "simulated",
+      "accepted_at": "2026-11-23T09:28:00-06:00",
+      "handed_off_at": "2026-11-23T10:10:00-06:00",
+      "activities": [
+        {
+          "actor_id": "architect-mock",
+          "actor_type": "human",
+          "kind": "work",
+          "started_at": "2026-11-23T09:28:00-06:00",
+          "ended_at": "2026-11-23T09:40:00-06:00"
+        },
+        {
+          "actor_id": "architecture-agent-mock",
+          "actor_type": "agent",
+          "kind": "work",
+          "started_at": "2026-11-23T09:34:00-06:00",
+          "ended_at": "2026-11-23T09:49:00-06:00"
+        },
+        {
+          "actor_id": "architect-mock",
+          "actor_type": "human",
+          "kind": "wait",
+          "started_at": "2026-11-23T09:49:00-06:00",
+          "ended_at": "2026-11-23T10:00:00-06:00"
+        },
+        {
+          "actor_id": "architect-mock",
+          "actor_type": "human",
+          "kind": "rework",
+          "started_at": "2026-11-23T10:00:00-06:00",
+          "ended_at": "2026-11-23T10:10:00-06:00"
+        }
+      ]
+    },
+    {
+      "phase": "finops",
+      "provenance": "simulated",
+      "accepted_at": "2026-11-23T10:10:00-06:00",
+      "handed_off_at": "2026-11-23T10:34:00-06:00",
+      "activities": [
+        {
+          "actor_id": "finops-agent-mock",
+          "actor_type": "agent",
+          "kind": "work",
+          "started_at": "2026-11-23T10:10:00-06:00",
+          "ended_at": "2026-11-23T10:22:00-06:00"
+        },
+        {
+          "actor_id": "finops-mock",
+          "actor_type": "human",
+          "kind": "wait",
+          "started_at": "2026-11-23T10:22:00-06:00",
+          "ended_at": "2026-11-23T10:28:00-06:00"
+        },
+        {
+          "actor_id": "finops-mock",
+          "actor_type": "human",
+          "kind": "work",
+          "started_at": "2026-11-23T10:28:00-06:00",
+          "ended_at": "2026-11-23T10:34:00-06:00"
+        }
+      ]
+    }
+  ]
+}

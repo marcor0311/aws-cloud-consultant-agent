@@ -5,6 +5,7 @@ import copy
 import json
 import os
 from concurrent.futures import ThreadPoolExecutor
+from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
 from uuid import uuid4
@@ -38,6 +39,8 @@ def payload():
 def repo():
     dsn = os.getenv("DELIVERY_TEST_DATABASE_URL")
     if not dsn:
+        if os.getenv("DELIVERY_TEST_REQUIRE_DATABASE") == "true":
+            pytest.fail("CI requiere PostgreSQL; no se permite omitir el recorrido")
         pytest.skip("Requiere DELIVERY_TEST_DATABASE_URL para PostgreSQL de pruebas")
     schema = "delivery_test_" + uuid4().hex
     with psycopg.connect(dsn, autocommit=True) as connection:
@@ -45,8 +48,8 @@ def repo():
     repository = PostgresRepository(
         make_conninfo(dsn, options=f"-c search_path={schema}")
     )
-    repository.initialize()
     try:
+        repository.initialize()
         yield repository
     finally:
         with psycopg.connect(dsn, autocommit=True) as connection:
@@ -217,18 +220,90 @@ def test_business_block_does_not_produce_report(client, repo, payload, case):
 def test_report_revision_approval_and_close(
     client, repo, payload, monkeypatch, tmp_path
 ):
+    # Only this integration journey accepts an alternate fixture. The ordinary
+    # regression keeps delivery-1 and its original timing expectations.
+    if input_path := os.getenv("DELIVERY_TEST_INPUT"):
+        payload = json.loads(Path(input_path).read_text(encoding="utf-8"))
+        payload["delivery_id"] = str(uuid4())
+    request = DemoRequest.model_validate(payload)
+    output = Path(os.getenv("DELIVERY_TEST_OUTPUT", str(tmp_path)))
+    output.mkdir(parents=True, exist_ok=True)
     monkeypatch.setenv("DELIVERY_ENGAGEMENT_MANAGER", "Operador de demostración")
     if evidence_path := os.getenv("DELIVERY_TEST_EMULATOR_EVIDENCE"):
         evidence = EmulatorEvidence.model_validate_json(
             Path(evidence_path).read_bytes()
         )
-        assert evidence.run_url
+        if os.getenv("GITHUB_ACTIONS") == "true":
+            assert evidence.run_url
         assert all(check.status == "passed" for check in evidence.checks)
-        result = DeliveryWorkflow(repo).run(
-            DemoRequest.model_validate(payload), evidence
+        assert evidence.matches(request)
+        assert {check.name for check in evidence.checks} >= {
+            "terraform fmt",
+            "terraform init",
+            "terraform validate",
+            "Trivy",
+            "AWS Emulator TLS",
+            "terraform plan",
+            "Políticas del plan",
+            "terraform apply",
+            "Verificación después de apply",
+            "terraform destroy",
+            "Eliminar contenedor",
+        }
+        result = DeliveryWorkflow(repo).run(request, evidence)
+        assert (
+            DeliveryWorkflow(PostgresRepository(repo.dsn)).run(request, evidence)
+            == result
         )
     else:
         result = client.post("/api/delivery/runs", json=payload).json()
+    assert result["status"] == "draft_ready"
+    handoff = result["handoff"]
+    assert handoff["review_status"] == "pending"
+    assert handoff["integration_status"] == "no_pr"
+    assert result["report"]["handoff_id"] == handoff["handoff_id"]
+    phases = {phase["phase"]: phase for phase in result["metrics"]["phases"]}
+    assert set(phases) == {t.phase for t in request.upstream_timings} | {
+        "engineering",
+        "report",
+    }
+    for phase, metric in phases.items():
+        assert metric["provenance"] == (
+            "real" if phase in {"engineering", "report"} else "simulated"
+        )
+        assert metric["lead_time_seconds"] >= 0
+        assert metric["process_time_seconds"] >= 0
+    if input_path and Path(input_path).name == "issue21-mock.json":
+        architecture = phases["architecture"]
+        assert architecture["lead_time_seconds"] == 2520
+        assert architecture["process_time_seconds"] == 2220
+        assert architecture["active_elapsed_seconds"] == 1860
+        assert architecture["wait_seconds"] == 660
+        assert architecture["rework_effort_seconds"] == 600
+        assert not result["metrics"]["missing_phases"]
+    persisted = PostgresRepository(repo.dsn).get(request.delivery_id)
+    assert persisted["handoff"] == handoff
+    assert persisted["report"] == result["report"]
+    assert persisted["report_timing"]["provenance"] == "real"
+    if evidence_path:
+        assert persisted["request"]["emulator_evidence"] == evidence.model_dump(
+            mode="json"
+        )
+        assert all(check["status"] == "passed" for check in handoff["checks"])
+    for ref in [*handoff["artifacts"], result["report"]["artifact"]]:
+        artifact = repo.artifact(request.delivery_id, ref["artifact_id"])
+        content = bytes(artifact["content"])
+        assert sha256(content).hexdigest() == ref["sha256"]
+        (output / ref["filename"]).write_bytes(content)
+    for name, value in {
+        "input.json": payload,
+        "delivery-draft.json": result,
+        "handoff.json": handoff,
+        "metrics.json": result["metrics"],
+    }.items():
+        (output / name).write_text(
+            json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
     run_url = f"/api/delivery/runs/{result['delivery_id']}"
     first = result["report"]
 
@@ -268,11 +343,16 @@ def test_report_revision_approval_and_close(
     text = "\n".join(
         page.extract_text() for page in PdfReader(BytesIO(download.content)).pages
     )
+    assert request.project_name in " ".join(text.split())
+    assert "costos simulados" in text
+    assert "Gasto real" in text
+    assert "No disponible" in text
     assert "APROBADO" in text
     assert "Conclusión revisada para dirección" in text
     assert second["artifact"]["sha256"] in text
     if evidence_path:
-        assert evidence.run_url in text
+        if evidence.run_url:
+            assert evidence.run_url in text
         assert "terraform destroy" in text
     closed = submit(
         decision(second, "record_presentation", "Acta de demostración")
@@ -299,7 +379,17 @@ def test_report_revision_approval_and_close(
         assert resources[0].content == download.content
 
     asyncio.run(verify_mcp_download())
-    (tmp_path / "informe-ejecutivo-demostracion.pdf").write_bytes(download.content)
+    assert (
+        sha256(download.content).hexdigest()
+        == approved["report"]["approved_document"]["sha256"]
+    )
+    (output / "informe-ejecutivo-demostracion.pdf").write_bytes(download.content)
+    (output / "delivery-closed.json").write_text(
+        json.dumps(closed, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    (output / "report-decisions.json").write_text(
+        json.dumps(history, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
 
 
 def test_missing_input_is_422(client, payload):
