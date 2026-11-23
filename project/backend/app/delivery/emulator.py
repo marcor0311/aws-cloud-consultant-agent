@@ -6,9 +6,10 @@ import os
 import ssl
 import subprocess
 from datetime import UTC, datetime
+from hashlib import sha256
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from time import sleep
+from time import monotonic, sleep
 from urllib.error import URLError
 from urllib.request import HTTPSHandler, ProxyHandler, build_opener
 from uuid import uuid4
@@ -34,17 +35,32 @@ KEY_RESOURCE = """resource "aws_kms_key" "test" {
 """
 
 
-def execute(command, cwd, env):
-    result = subprocess.run(
-        command,
-        cwd=cwd,
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=180,
-        encoding="utf-8",
-        errors="replace",
-    )
+def execute(command, cwd, env, log_dir=None):
+    # Never export terraform show JSON: it contains state/plan values.
+    log = None
+    if log_dir is not None:
+        number = len(list(log_dir.glob("*.log"))) + 1
+        log = log_dir / f"{number:03d}-{command[0]}-{command[1]}.log"
+    try:
+        result = subprocess.run(
+            command,
+            cwd=cwd,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=180,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        if log:
+            log.write_text(f"{type(error).__name__}: {error}\n", encoding="utf-8")
+        raise
+    if log:
+        content = f"exit_code={result.returncode}\n"
+        if command[:2] != ["terraform", "show"]:
+            content += result.stdout + result.stderr
+        log.write_text(content, encoding="utf-8")
     if result.returncode:
         print(result.stdout)
         print(result.stderr)
@@ -86,7 +102,7 @@ def require_policy(plan):
         )
 
 
-def run(request, image, output):
+def run(request, image, output, container_name=None):
     started = datetime.now(UTC)
     checks = []
     versions = {}
@@ -95,18 +111,32 @@ def run(request, image, output):
         os.getenv("GITHUB_SERVER_URL", "") + "/" + os.getenv("GITHUB_REPOSITORY", "")
     )
     run_id = os.getenv("GITHUB_RUN_ID")
-    container = "pswe07-" + uuid4().hex
-    container_started = False
+    container = container_name or "pswe07-" + uuid4().hex
+    container_attempted = False
     output = output.resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
+    log_dir = output.parent / "logs"
+    log_dir.mkdir(exist_ok=True)
+    executions = []
 
     def check(name, action, category):
+        check_started = datetime.now(UTC)
+        clock_started = monotonic()
+        execution = {"name": name, "category": category}
         try:
             value = action()
         except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as error:
+            execution["error"] = str(error)
             print(f"{name}: {error}", flush=True)
             checks.append({"name": name, "status": "failed", "category": category})
             return False, None
+        finally:
+            execution.update(
+                started_at=check_started.isoformat(),
+                ended_at=datetime.now(UTC).isoformat(),
+                elapsed_seconds=monotonic() - clock_started,
+            )
+            executions.append(execution)
         print(f"{name}: correcto", flush=True)
         checks.append({"name": name, "status": "passed", "category": category})
         return True, value
@@ -133,13 +163,14 @@ def run(request, image, output):
         )
 
         def docker(*args):
-            return execute(["docker", *args], work, env)
+            return execute(["docker", *args], work, env, log_dir)
 
         def terraform(*args):
-            return execute(["terraform", *args], work, env)
+            return execute(["terraform", *args], work, env, log_dir)
 
         def start_emulator():
-            nonlocal container_started
+            nonlocal container_attempted
+            container_attempted = True
             docker(
                 "run",
                 "-d",
@@ -151,7 +182,6 @@ def run(request, image, output):
                 "127.0.0.1::9297",
                 image,
             )
-            container_started = True
             endpoint = "https://" + docker("port", container, "9297/tcp")
             prefix = f"{container}:/home/emulator/.aws/emulator/9297"
             for _ in range(30):
@@ -198,6 +228,9 @@ def run(request, image, output):
             return json.loads(terraform("show", "-json", "integration.tfplan"))
 
         def scan():
+            versions["trivy"] = execute(
+                ["trivy", "--version"], work, env, log_dir
+            ).splitlines()[0]
             manifest = json.loads(
                 (work / ".terraform/modules/modules.json").read_text(encoding="utf-8")
             )
@@ -216,11 +249,25 @@ def run(request, image, output):
                 ],
                 work,
                 env,
+                log_dir,
             )
-            versions["trivy"] = execute(["trivy", "--version"], work, env).splitlines()[
-                0
-            ]
             print(result)
+
+        def destroy():
+            terraform("destroy", "-no-color", "-auto-approve")
+            if terraform("state", "list"):
+                raise ValueError("El estado conserva recursos después de destroy")
+
+        def remove_container():
+            remaining = docker(
+                "ps", "-a", "--filter", f"name=^/{container}$", "--format", "{{.Names}}"
+            )
+            if remaining:
+                docker("rm", "-f", container)
+            if docker(
+                "ps", "-a", "--filter", f"name=^/{container}$", "--format", "{{.Names}}"
+            ):
+                raise ValueError("El contenedor persiste después de la limpieza")
 
         def verify():
             if (
@@ -252,7 +299,7 @@ def run(request, image, output):
                     lambda: terraform("validate", "-no-color"),
                     "terraform",
                 )
-                check("Trivy", scan, "security")
+                secure, _ = check("Trivy", scan, "security")
                 ready, _ = check("AWS Emulator TLS", start_emulator, "emulator")
                 if ready and validated:
                     planned, planned_values = check(
@@ -268,7 +315,7 @@ def run(request, image, output):
                             lambda: require_policy(planned_values),
                             "policy",
                         )
-                        if allowed:
+                        if allowed and secure:
                             try:
                                 applied, _ = check(
                                     "terraform apply",
@@ -286,16 +333,14 @@ def run(request, image, output):
                             finally:
                                 check(
                                     "terraform destroy",
-                                    lambda: terraform(
-                                        "destroy", "-no-color", "-auto-approve"
-                                    ),
+                                    destroy,
                                     "integration",
                                 )
         finally:
-            if container_started:
+            if container_attempted:
                 check(
                     "Eliminar contenedor",
-                    lambda: docker("rm", "-f", container),
+                    remove_container,
                     "cleanup",
                 )
             names = (
@@ -335,6 +380,25 @@ def run(request, image, output):
                 json.dumps(evidence, ensure_ascii=False, indent=2) + "\n",
                 encoding="utf-8",
             )
+            statuses = {item["name"]: item["status"] for item in checks}
+            for execution in executions:
+                execution["status"] = statuses[execution["name"]]
+            manifest = {
+                "fixture_request_sha256": sha256(
+                    request.model_dump_json().encode()
+                ).hexdigest(),
+                "commit": os.getenv("GITHUB_SHA"),
+                "run_url": evidence["run_url"],
+                "run_attempt": os.getenv("GITHUB_RUN_ATTEMPT"),
+                "upstream_provenance": "simulated",
+                "execution_provenance": "real",
+                "scope": "S3/KMS local; no AWS deployment or real approval",
+                "checks": executions,
+            }
+            (output.parent / "execution.json").write_text(
+                json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
     return all(item["status"] == "passed" for item in checks)
 
 
@@ -345,9 +409,12 @@ def main():
         "--output", type=Path, default=Path("../generated/emulator/evidence.json")
     )
     parser.add_argument("--image", default="pswe07-aws-emulator")
+    parser.add_argument("--container-name", help="Nombre exclusivo para limpieza en CI")
     args = parser.parse_args()
     request = DemoRequest.model_validate_json(args.input.read_bytes())
-    raise SystemExit(0 if run(request, args.image, args.output) else 1)
+    raise SystemExit(
+        0 if run(request, args.image, args.output, args.container_name) else 1
+    )
 
 
 if __name__ == "__main__":

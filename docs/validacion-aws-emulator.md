@@ -47,3 +47,98 @@ La evidencia queda adjunta a la entrega y disponible para el informe. Para un
 proyecto real, el PR de infraestructura debe ir al repositorio del proyecto,
 referenciar la revisión de diseño y los insumos aprobados de FinOps, y obtener
 la revisión del arquitecto antes de entregar al Engagement Manager.
+
+
+## Issue 21 y regresión en GitHub Actions
+
+El workflow ejecuta dos recorridos independientes: `delivery-1.json` y
+`issue21-mock.json`. `fail-fast: false` permite conservar la evidencia de ambos
+si uno falla. Cada job usa su propio PostgreSQL 16 y contenedor del emulador.
+Windows no necesita importar `xxhash` ni `psycopg_binary`: las dependencias,
+Terraform y la integración se ejecutan en Ubuntu con Python 3.12.
+
+Antes del emulador se valida cada fixture con `DemoRequest`; no se relaja el
+contrato ni se convierten aprobaciones ficticias en reales. La suite completa
+`tests/test_delivery.py` conserva su fixture predeterminado y se ejecuta una vez
+en el job `delivery-1`. Solo el recorrido existente
+`test_report_revision_approval_and_close` admite `DELIVERY_TEST_INPUT` y se
+ejecuta para ambos fixtures, con evidencia de su propio bucket/región/baseline.
+CI falla si falta PostgreSQL o si los resultados JUnit incluyen omisiones.
+
+El recorrido acredita la ejecución de los nodos de ingeniería e informe de
+LangGraph, persistencia y recuperación del handoff en PostgreSQL, idempotencia,
+métricas, hashes de los archivos, PDF y revisión/cierre de demostración vía
+API/MCP. Las decisiones de aprobación en esa prueba son simuladas: no aprueban
+infraestructura, no integran un PR y no cierran el issue #21.
+
+### Evidencias y procedencia
+
+Cada job publica `issue21-<fixture>-<intento>` durante 14 días, incluso ante un
+fallo. Incluye `contract.json` (hash del fixture y commit), `evidence.json`
+(contrato compatible con el informe), `execution.json` (intervalos medidos por
+comprobación), logs de comandos, JUnit y `cleanup.txt`. Si el recorrido del
+informe termina, `delivery/` contiene entrada con UUID de prueba, entrega,
+handoff, métricas, archivos Terraform, decisiones y PDFs con sus hashes en JSON.
+Un fallo temprano puede dejar evidencia parcial; su ausencia no significa éxito.
+No se exportan archivos de credenciales, certificados privados, planes ni estado
+Terraform. La salida JSON de `terraform show` se usa en memoria y no se archiva.
+
+Arquitectura, FinOps, costos y tiempos anteriores son **simulados**. Las
+comprobaciones ejecutadas, PDFs y mediciones de ingeniería/informe son **reales**
+dentro del entorno local emulado. El LT/PT de ingeniería mide la preparación y
+persistencia del handoff; no incorpora la duración previa de Terraform. Los
+intervalos técnicos se conservan aparte en `execution.json`. El gasto AWS real
+sigue sin estar disponible; no se consultan precios ni servicios AWS reales.
+El baseline fijado sigue pendiente de aprobación, aunque las pruebas pasen.
+
+### Seguridad, fallos y limpieza
+
+Trivy HIGH/CRITICAL y las políticas del plan deben pasar antes de `apply`.
+Se distinguen categorías de Terraform, seguridad, política, integración,
+conexión y limpieza. Una categoría de fallo no demuestra por sí misma una
+limitación del emulador: se debe revisar el log y reproducir su causa.
+
+El runner elimina variables AWS/TF heredadas para los comandos y usa únicamente
+las credenciales efímeras del emulador y endpoints TLS en loopback. No se añaden
+secrets AWS, OIDC ni permisos `id-token`. Tras intentar `apply`, `finally`
+ejecuta `destroy` y exige un estado vacío. Otro `finally` elimina el contenedor,
+también si falla su arranque. El paso `if: always()` elimina como respaldo solo
+el nombre exclusivo de esa corrida; nunca purga otros contenedores. Los esquemas
+PostgreSQL de prueba se eliminan incluso si falla la migración. Un fallo de
+limpieza hace fallar el job. Una terminación abrupta del runner puede impedir
+los pasos de limpieza: el aislamiento final depende del runner hospedado efímero,
+no de una garantía de que `destroy` haya terminado.
+
+### Reproducir en Ubuntu
+
+Desde `project/backend`, con PostgreSQL aislado de pruebas y las herramientas
+indicadas arriba disponibles:
+
+```bash
+python -m pip install -r requirements-dev.txt
+python -m pytest tests/test_delivery.py -q
+FIXTURE=issue21-mock  # Repetir con delivery-1 para la integración original.
+python -m app.delivery.emulator --input "fixtures/$FIXTURE.json" \
+  --output "../generated/issue21/$FIXTURE/evidence.json"
+DELIVERY_TEST_INPUT="fixtures/$FIXTURE.json" \
+DELIVERY_TEST_EMULATOR_EVIDENCE="../generated/issue21/$FIXTURE/evidence.json" \
+DELIVERY_TEST_OUTPUT="../generated/issue21/$FIXTURE/delivery" \
+python -m pytest tests/test_delivery.py::test_report_revision_approval_and_close -q
+```
+
+La prueba exige un `run_url` real dentro de Actions. Fuera de Actions admite
+evidencia local sin URL y el informe la identifica como corrida local; no se
+deben inventar variables `GITHUB_*` para atribuirla a una ejecución remota.
+Para una demostración local sin evidencia se omite
+`DELIVERY_TEST_EMULATOR_EVIDENCE`.
+
+Los cambios locales y el fixture deben estar versionados y publicados antes de
+que Actions pueda ejecutarlos. Publicar la branch requiere autorización del
+usuario. Después se puede disparar exclusivamente la branch de trabajo:
+
+```powershell
+gh workflow run aws-emulator.yml --repo marcor0311/aws-cloud-consultant-agent --ref entrega2issue21y22
+gh run list --repo marcor0311/aws-cloud-consultant-agent --workflow aws-emulator.yml --branch entrega2issue21y22 --limit 5
+gh run watch RUN_ID --repo marcor0311/aws-cloud-consultant-agent --exit-status
+gh run download RUN_ID --repo marcor0311/aws-cloud-consultant-agent --dir evidence/issue21
+```
