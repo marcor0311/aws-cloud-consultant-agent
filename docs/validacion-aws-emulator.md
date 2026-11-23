@@ -63,7 +63,10 @@ contrato ni se convierten aprobaciones ficticias en reales. La suite completa
 en el job `delivery-1`. Solo el recorrido existente
 `test_report_revision_approval_and_close` admite `DELIVERY_TEST_INPUT` y se
 ejecuta para ambos fixtures, con evidencia de su propio bucket/región/baseline.
-CI falla si falta PostgreSQL o si los resultados JUnit incluyen omisiones.
+El job de integración fija `DELIVERY_TEST_REQUIRE_DATABASE=true`: falla si falta
+PostgreSQL o si los resultados JUnit incluyen omisiones. La suite offline general
+conserva sus omisiones explícitas sin una URL de PostgreSQL; estas no acreditan
+la integración y no sustituyen los jobs dedicados con base real.
 
 El recorrido acredita la ejecución de los nodos de ingeniería e informe de
 LangGraph, persistencia y recuperación del handoff en PostgreSQL, idempotencia,

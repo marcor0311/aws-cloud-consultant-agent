@@ -39,7 +39,7 @@ def payload():
 def repo():
     dsn = os.getenv("DELIVERY_TEST_DATABASE_URL")
     if not dsn:
-        if os.getenv("GITHUB_ACTIONS") == "true":
+        if os.getenv("DELIVERY_TEST_REQUIRE_DATABASE") == "true":
             pytest.fail("CI requiere PostgreSQL; no se permite omitir el recorrido")
         pytest.skip("Requiere DELIVERY_TEST_DATABASE_URL para PostgreSQL de pruebas")
     schema = "delivery_test_" + uuid4().hex
