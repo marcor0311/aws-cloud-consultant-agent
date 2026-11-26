@@ -1,5 +1,6 @@
 """FinOps-owned contracts; shared Architecture contracts are imported, not copied."""
 
+import hashlib
 from datetime import datetime
 from typing import Literal
 
@@ -72,4 +73,50 @@ class FinOpsEvaluationDecision(FinOpsModel):
             raise ValueError("La aprobación requiere autorización trazable.")
         if self.decision != "approved" and self.authorization_reference:
             raise ValueError("Solo una aprobación puede declarar autorización.")
+        return self
+
+
+class FinOpsIssueSnapshot(FinOpsModel):
+    """Observed GitHub issue assigned to FinOps for one exact architecture."""
+
+    contract_version: Literal["1.0"] = "1.0"
+    provider: Literal["github"] = "github"
+    repository_url: str = Field(
+        pattern=r"^https://github\.com/[^/]+/[^/]+$", max_length=500
+    )
+    issue_url: str = Field(
+        pattern=r"^https://github\.com/[^/]+/[^/]+/issues/[0-9]+$",
+        max_length=550,
+    )
+    issue_number: int = Field(ge=1)
+    state: Literal["open"] = "open"
+    title: str = Field(min_length=1, max_length=300)
+    body: str = Field(min_length=1, max_length=50000)
+    body_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    labels: list[str] = Field(min_length=1, max_length=30)
+    assignees: list[str] = Field(min_length=1, max_length=20)
+    observed_at: datetime
+    architecture_revision: int = Field(ge=1)
+    architecture_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    architecture_issue_url: str = Field(
+        pattern=r"^https://github\.com/[^/]+/[^/]+/issues/[0-9]+$"
+    )
+    architecture_pull_request_url: str = Field(
+        pattern=r"^https://github\.com/[^/]+/[^/]+/pull/[0-9]+$"
+    )
+    architecture_merge_commit_sha: str = Field(pattern=r"^[0-9a-f]{40}$")
+
+    @model_validator(mode="after")
+    def snapshot_is_self_consistent(self):
+        if self.observed_at.tzinfo is None or self.observed_at.utcoffset() is None:
+            raise ValueError("observed_at debe incluir zona horaria.")
+        if self.issue_url != f"{self.repository_url}/issues/{self.issue_number}":
+            raise ValueError("El issue FinOps no corresponde al repositorio declarado.")
+        calculated = hashlib.sha256(self.body.encode()).hexdigest()
+        if self.body_sha256 != calculated:
+            raise ValueError("body_sha256 no corresponde al cuerpo observado.")
+        if len(self.labels) != len(set(self.labels)):
+            raise ValueError("Los labels del issue no pueden repetirse.")
+        if len(self.assignees) != len(set(self.assignees)):
+            raise ValueError("Los responsables del issue no pueden repetirse.")
         return self

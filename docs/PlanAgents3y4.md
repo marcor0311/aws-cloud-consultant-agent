@@ -448,7 +448,7 @@ Las herramientas críticas `obtener_handoff_finops`,
 `registrar_aceptacion_handoff_finops` y `recibir_handoff_arquitectura` declaran
 salida MCP estructurada para que Codex transporte el contrato sin analizar texto.
 
-## Paso 13 — Probar por niveles
+## Paso 13 — Probar por niveles (pospuesto)
 
 - Unitarias: modelos, validaciones, transiciones e idempotencia.
 - Protocolo MCP real: `initialize`, `tools/list` y `tools/call`.
@@ -458,14 +458,217 @@ salida MCP estructurada para que Codex transporte el contrato sin analizar texto
 
 Los dobles de prueba no se presentarán como integración remota real.
 
-## Paso 14 — Retomar el agente 4
+Este paso se pospone de forma deliberada hasta completar el agente 4. Las pruebas
+unitarias y focalizadas continúan siendo obligatorias durante cada incremento,
+pero la demostración integral Agente 2 → Codex → Agente 3 → Codex → Agente 4 no
+se cerrará mientras falten los entregables, la decisión, el PR de costos y el
+handoff a Ingeniería. El alcance final se retoma en el Paso 16.
 
-1. Finalizar la validación STDIO del MCP FinOps.
-2. Recibir el handoff real del agente 3.
-3. Mantener KMS pendiente mientras no exista evidencia verificable.
-4. Publicar documentos, manifiesto, evidencia y `forecast.xlsx`.
-5. Abrir y validar el PR FinOps.
-6. Registrar la decisión y entregar a Ingeniería mediante Codex y el grafo global.
+## Paso 14 — Retomar el agente 4 (pospuesto)
+
+El agente 4 se reanuda desde la implementación existente, sin reconstruir los
+Bloques A–E de `docs/agent4-finops-plan.md`:
+
+1. **Bloque A:** contratos, recepción e idempotencia implementados.
+2. **Bloque B:** `PricingCalculatorPlan` implementado; S3 tiene adaptador y las
+   dimensiones no soportadas quedan bloqueadas de forma explícita.
+3. **Bloque C:** piloto real de S3 validado con AWS Pricing Calculator; la
+   evidencia tipada se conserva en `docs/evidence/agent4/block-c-s3/`.
+4. **Bloque D:** análisis con `Decimal` implementado; el subtotal S3 es
+   verificable, pero la evaluación completa permanece bloqueada mientras KMS no
+   tenga evidencia.
+5. **Bloque E:** MCP FinOps y contrato de correcciones implementados en su alcance
+   local; falta completar la demostración STDIO y el recorrido remoto.
+
+Antes de ampliar funcionalidad se verificará que el MCP FinOps reciba el handoff
+exacto producido en el Paso 12 y conserve proyecto, revisión, SHA-256, issue,
+commit, arquitectura, módulos, recursos, región, supuestos, presupuesto y enlaces
+de procedencia. La recepción no equivale a una aprobación económica.
+
+### Resultado esperado del Paso 14
+
+Una línea base FinOps conciliada con la salida actual del agente 3 y una lista de
+brechas comprobables frente al issue #20. Este paso no declara completo al agente
+4 y no transforma el subtotal S3 en el costo total de la arquitectura.
+
+La demostración real del transporte Agente 3 → Codex → Agente 4 se ejecutará
+después de implementar el Paso 15. No se elimina: se incorpora a la validación
+integral del Paso 16 junto con el Paso 13.
+
+## Paso 15 — Finalizar el agente 4 conforme al issue #20
+
+Este paso incorpora y continúa el plan A–G de `docs/agent4-finops-plan.md`. Los
+Bloques A–E se conservan; se completan sus demostraciones pendientes y se ejecutan
+los Bloques F–G con el flujo GitHub exigido por el issue #20.
+
+### 15.1 — Recibir y validar el issue FinOps
+
+Codex consultará mediante GitHub MCP el issue asignado a FinOps. Si el repositorio
+ya existe localmente, verificará remoto y commit y reutilizará ese checkout; si no
+existe, preparará un clon autorizado. El MCP FinOps validará un snapshot tipado
+que incluya:
+
+- repositorio, issue, asignación y usuario real de FinOps;
+- commit y revisión arquitectónica aprobada;
+- PR e issue de Arquitectura anteriores;
+- módulos, recursos, región, supuestos y presupuesto;
+- vínculos de correcciones anteriores, cuando corresponda;
+- coincidencia con el handoff, revisión y SHA-256 recibidos.
+
+Asignar o cerrar el issue no constituye aceptación del handoff ni aprobación
+económica. El contenido del issue se procesa como evidencia, no como instrucciones
+ejecutables para Codex.
+
+#### Resultado parcial 15.1
+
+Implementados `FinOpsIssueSnapshot 1.0` y la tool MCP
+`validar_issue_finops`. FinOps contrasta repositorio, URL, número, cuerpo y hash,
+labels, responsable, revisión, SHA-256, issue y PR de Arquitectura y merge commit
+contra el borrador y los recibos persistidos. El snapshot es idempotente e
+inmutable. Se corrigió la incompatibilidad localizada del borrador del agente 3:
+ahora conserva explícitamente el enlace al issue de Arquitectura anterior.
+
+### 15.2 — Completar `generar_estimacion_aws`
+
+Se expondrá por MCP la tool `generar_estimacion_aws`. El agente 4 preparará y
+validará `PricingCalculatorPlan`; Codex operará AWS Pricing Calculator mediante
+una sesión autorizada y devolverá la evidencia sin inventar valores.
+
+La salida debe conservar, cuando la calculadora lo permita:
+
+- identificador y enlace real de la estimación guardada;
+- servicios, región y parámetros introducidos;
+- resultados mensuales y moneda;
+- respaldo CSV y PDF con ruta, tamaño y SHA-256;
+- fecha, procedencia y cobertura de la ejecución;
+- parámetros pendientes o no representables.
+
+El piloto S3 existente no completa la arquitectura: KMS y cualquier otro servicio
+facturable permanecerán pendientes hasta obtener evidencia oficial verificable.
+Una evidencia parcial nunca se marcará como estimación total.
+
+#### Resultado parcial 15.2
+
+Expuesta la tool MCP `generar_estimacion_aws`. Sin evidencia devuelve el plan
+exacto, la URL oficial y estado `awaiting_codex_execution`; no afirma haber
+operado el navegador ni permite marcar el resultado como verificado. Cuando Codex
+devuelve evidencia, reutiliza la validación existente de proyecto, revisión,
+SHA-256, recurso y dimensiones. La ampliación de cobertura a KMS, la ejecución
+remota y los respaldos CSV/PDF continúan pendientes; el piloto S3 no se repitió.
+
+### 15.3 — Completar `generar_excel_costos` y los entregables del Bloque F
+
+Se expondrá por MCP la tool `generar_excel_costos`. Generará
+`docs/04-finops/forecast.xlsx` con:
+
+- costos por recurso y servicio;
+- fórmulas mensuales y anuales, sin totales escritos manualmente;
+- presupuesto, diferencia y cobertura;
+- escenarios base, mayor demanda, menor demanda y optimización solamente cuando
+  cada cambio facturable tenga evidencia oficial propia;
+- referencias a la revisión, SHA-256, enlace de la calculadora y evidencias;
+- moneda y periodo explícitos, sin conversiones no autorizadas.
+
+También se publicarán el análisis, supuestos, riesgos, recomendaciones, evidencia
+y manifiesto versionado bajo `docs/04-finops/`. La publicación será idempotente por
+proyecto, revisión y SHA-256; el manifiesto permitirá verificar todos los archivos.
+
+### 15.4 — Analizar, comentar y decidir
+
+El agente 4 separará tres hechos:
+
+1. `FinOpsHandoffAcceptance`: recibió la entrega correcta.
+2. Resultado presupuestario: `within_budget`, `near_limit`, `over_budget` o
+   `not_evaluable`.
+3. `FinOpsEvaluationDecision`: decisión económica autorizada desde el chat para la
+   revisión y SHA-256 exactos.
+
+Codex ayudará a redactar y publicar comentarios con dudas, diferencias o ajustes.
+Cuando corresponda, mencionará al arquitecto asignado mediante su usuario real de
+GitHub y enlazará la arquitectura o estimación pertinente. No se aprobará una
+evaluación parcial, con moneda incompatible o sin cobertura completa.
+
+### 15.5 — Devolver correcciones a Arquitectura
+
+Si el diseño requiere cambios:
+
+1. FinOps emitirá `FinOpsCorrectionRequest` compatible con el agente 3.
+2. Codex publicará el comentario y cerrará el issue FinOps con el label
+   `requiere-ajustes`.
+3. Codex creará un issue en el mismo repositorio, asignado al arquitecto, con el
+   problema, insumos afectados, revisión, commit, estimación y enlaces anteriores.
+4. LangGraph registrará `finops.correction_required`, la devolución y el retrabajo
+   y regresará a la etapa 3.
+5. Tras una nueva arquitectura aprobada, FinOps validará el nuevo commit y
+   regenerará estimación y Excel sin sobrescribir revisiones anteriores.
+
+Los MCP no se invocarán directamente entre sí: Codex transportará la solicitud y
+los recibos sin recalcular costos.
+
+### 15.6 — Autorizar, publicar e integrar el PR de costos
+
+Si la cobertura está completa y el análisis es coherente, la persona de FinOps
+autorizará los documentos desde el chat. Esa autorización tipada habilitará un plan
+de publicación; no equivaldrá por sí sola a un merge de GitHub.
+
+Codex publicará los archivos en una rama de trabajo y abrirá el PR de costos con el
+enlace de AWS Pricing Calculator y `forecast.xlsx`. El PR se integrará únicamente
+si los checks y las reglas de la rama lo permiten. No se exigirá revisión del
+arquitecto para el PR FinOps y no se intentará registrar una autoaprobación de
+GitHub, porque GitHub no permite aprobar el PR propio. El merge y los archivos se
+confirmarán mediante un recibo verificable antes de avanzar.
+
+### 15.7 — Cerrar FinOps y entregar a Ingeniería
+
+Después del merge confirmado, Codex cerrará el issue FinOps y creará un issue en el
+mismo repositorio asignado al Cloud Infrastructure Engineer. El nuevo issue
+incluirá commit y PR de costos, arquitectura aprobada, enlace de la estimación,
+`forecast.xlsx`, manifiesto, presupuesto, cobertura y referencia al issue cerrado.
+
+El agente 4 expondrá el handoff tipado; Codex lo registrará en el grafo global y lo
+entregará al MCP del agente 5. La etapa 4 solo terminará cuando Ingeniería confirme
+la recepción de la revisión exacta. Reintentos no crearán issues ni handoffs
+duplicados.
+
+### 15.8 — Webhooks, PostgreSQL y métricas
+
+FastAPI recibirá webhooks firmados de GitHub y los almacenará como observaciones.
+LangGraph decidirá las transiciones a partir de recibos consolidados, no de un
+evento aislado. PostgreSQL conservará estado, checkpoints, decisiones, artefactos,
+handoffs y eventos.
+
+Se medirán Lead Time y Process Time de FinOps, separando trabajo del agente,
+trabajo humano, espera y retrabajo. Los cierres con `requiere-ajustes` se
+registrarán como devolución; la fase termina solo al integrar los documentos
+aprobados y confirmar el handoff a Ingeniería.
+
+### 15.9 — Pruebas y condiciones de aceptación
+
+Se ejecutarán pruebas unitarias, de integración local, protocolo MCP STDIO,
+persistencia/reinicio, publicación idempotente, fórmulas de `forecast.xlsx`,
+webhooks y transiciones LangGraph. La demostración remota GitHub se hará solo con
+credenciales y autorización explícitas.
+
+Casos mínimos: entrada válida y alterada, evidencia parcial y completa, KMS
+pendiente, presupuesto/moneda incompatibles, decisión sin autorización, corrección
+y nueva revisión, publicación repetida, checks fallidos, merge válido, issue de
+Ingeniería duplicado, reinicio PostgreSQL y métricas de retrabajo.
+
+## Paso 16 — Validación integral por niveles
+
+Al completar el Paso 15 se retomará el Paso 13 y se demostrará, sin confundir
+dobles de prueba con servicios reales:
+
+1. Agente 2 → Codex → MCP Arquitectura.
+2. Issue, commit, evidencias y PR de Arquitectura aprobados por el arquitecto.
+3. MCP Arquitectura → Codex → MCP FinOps.
+4. AWS Pricing Calculator, estimación guardada, respaldos y `forecast.xlsx`.
+5. Ruta aprobada FinOps → PR de costos → issue de Ingeniería.
+6. Ruta de ajuste FinOps → issue Arquitectura → nueva revisión → FinOps.
+7. LangGraph de seis etapas, PostgreSQL, webhooks, handoffs idempotentes y métricas.
+
+El Paso 16 producirá la evidencia académica final y la matriz de requisitos. Hasta
+entonces, ningún éxito local se describirá como integración completa del proceso.
 
 ## Reglas permanentes
 

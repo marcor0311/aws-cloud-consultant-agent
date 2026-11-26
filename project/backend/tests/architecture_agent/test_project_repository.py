@@ -1063,6 +1063,7 @@ def test_codex_github_boundary_requires_exact_pr_before_finops(tmp_path):
 
     draft = service.prepare_finops_issue("project-case", "finops-owner")
     assert approval["pull_request_url"] in draft["body"]
+    assert package["source_issue"] in draft["body"]
     issue_receipt = {
         "contract_version": "1.0",
         "plan_sha256": draft["plan_sha256"],

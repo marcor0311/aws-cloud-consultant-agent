@@ -491,6 +491,7 @@ class ArchitectureService:
         )
         body = (
             f"Arquitectura aprobada: {approval['pull_request_url']}\n\n"
+            f"Issue de Arquitectura: {package['source_issue']}\n\n"
             f"Merge commit: `{approval['merge_commit_sha']}`\n\n"
             f"Región: `{package['region']}`\n\n"
             f"Recursos: {', '.join(item['resource_id'] for item in package['resources'])}\n\n"

@@ -11,7 +11,11 @@ from app.architecture.service import ArchitectureService
 from app.finops.analysis import FinOpsEconomicAnalyzer
 from app.finops.calculator import PricingCalculatorPreparer
 from app.finops.evidence import PricingCalculatorEvidence
-from app.finops.models import FinOpsEvaluationDecision, FinOpsIntake
+from app.finops.models import (
+    FinOpsEvaluationDecision,
+    FinOpsIntake,
+    FinOpsIssueSnapshot,
+)
 
 
 class FinOpsIntakeService:
@@ -114,6 +118,92 @@ class FinOpsService:
     def receive_handoff(self, case_id, handoff):
         return self.intakes.receive(case_id, handoff)
 
+    def register_issue(self, case_id, revision, snapshot_payload):
+        intake = FinOpsIntake.model_validate(self.intakes.get(case_id, revision))
+        snapshot = FinOpsIssueSnapshot.model_validate(snapshot_payload)
+        draft = self.store.get(
+            f"architecture-finops-issue-draft:{case_id}:{revision}"
+        )
+        receipt = self.store.get(f"architecture-finops-issue:{case_id}:{revision}")
+        approval = self.store.get(
+            f"architecture-github-approval:{case_id}:{revision}"
+        )
+        if not draft or not receipt or not approval:
+            raise ValueError(
+                "Faltan el borrador, recibo o aprobación GitHub de Arquitectura."
+            )
+        if (
+            snapshot.issue_url != receipt["issue_url"]
+            or snapshot.issue_number != receipt["issue_number"]
+            or snapshot.body_sha256 != receipt["body_sha256"]
+            or snapshot.body_sha256 != draft["body_sha256"]
+            or snapshot.repository_url != draft["repository_url"]
+            or snapshot.assignees != draft["assignees"]
+            or not set(draft["labels"]) <= set(snapshot.labels)
+            or snapshot.architecture_revision != revision
+            or snapshot.architecture_sha256 != intake.handoff.artifact_sha256
+            or snapshot.architecture_issue_url != intake.handoff.source_issue
+            or snapshot.architecture_pull_request_url
+            != approval["pull_request_url"]
+            or snapshot.architecture_merge_commit_sha
+            != approval["merge_commit_sha"]
+        ):
+            raise ValueError("El issue FinOps no coincide con la entrega aprobada.")
+        required_links = {
+            snapshot.architecture_issue_url,
+            snapshot.architecture_pull_request_url,
+        }
+        if not all(link in snapshot.body for link in required_links):
+            raise ValueError("El issue FinOps no conserva los enlaces de Arquitectura.")
+        if snapshot.architecture_merge_commit_sha not in snapshot.body:
+            raise ValueError("El issue FinOps no conserva el merge commit aprobado.")
+
+        payload = snapshot.model_dump(mode="json")
+        key = f"finops-issue:{case_id}:{revision}"
+        previous = self.store.get(key)
+        if previous and previous != payload:
+            raise ValueError("La revisión ya tiene otro snapshot del issue FinOps.")
+        if not previous:
+            self.store.put(key, "finops_issue_snapshot", payload)
+            self.store.event(
+                f"finops-issue:{case_id}:{revision}",
+                case_id,
+                "finops.issue_validated",
+                {
+                    "revision": revision,
+                    "issue_url": snapshot.issue_url,
+                    "architecture_sha256": snapshot.architecture_sha256,
+                },
+            )
+        return {"duplicate": bool(previous), "issue": payload}
+
+    def generate_aws_estimate(self, case_id, revision, evidence_payload=None):
+        issue = self.store.get(f"finops-issue:{case_id}:{revision}")
+        if not issue:
+            raise ValueError("Primero se debe validar el issue asignado a FinOps.")
+        preparation = self.prepare_calculator(case_id, revision)
+        if evidence_payload is None:
+            return {
+                "status": "awaiting_codex_execution",
+                "operator": "codex-browser",
+                "calculator_url": "https://calculator.aws/",
+                "plan": preparation["plan"],
+                "required_evidence": [
+                    "estimate_url",
+                    "monthly_cost_and_currency",
+                    "verified_parameters",
+                    "csv_or_pdf_export_with_sha256",
+                ],
+                "may_mark_verified": False,
+            }
+        registered = self.register_evidence(case_id, revision, evidence_payload)
+        return {
+            "status": registered["evidence"]["status"],
+            "operator": "codex-browser",
+            "evidence": registered["evidence"],
+            "duplicate": registered["duplicate"],
+        }
+
     def intake_status(self, case_id, revision):
         intake = self.intakes.get(case_id, revision)
         handoff_id = f"{case_id}:stage-3:stage-4:v{revision}"
@@ -122,6 +212,7 @@ class FinOpsService:
             "persisted_handoff": self.store.handoff(handoff_id),
             "evidence_count": len(self._evidences(case_id, revision)),
             "has_analysis": bool(self.store.get(self._analysis_pointer(case_id, revision))),
+            "issue": self.store.get(f"finops-issue:{case_id}:{revision}"),
         }
 
     def prepare_calculator(self, case_id, revision):
@@ -320,6 +411,7 @@ class FinOpsService:
             "case_id": case_id,
             "revision": revision,
             "intake": self.intakes.get(case_id, revision),
+            "issue": self.store.get(f"finops-issue:{case_id}:{revision}"),
             "plan": self.store.get(f"finops-calculator-plan:{case_id}:{revision}"),
             "evidences": self._evidences(case_id, revision),
             "current_analysis": self.store.get(

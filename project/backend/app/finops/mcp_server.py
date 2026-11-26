@@ -63,9 +63,30 @@ def create_server(service):
         return call(service.intake_status, expediente_id, revision)
 
     @server.tool()
+    def validar_issue_finops(
+        expediente_id: str, revision: int, issue: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Valida el issue GitHub observado contra el handoff y recibos aprobados."""
+        return call(service.register_issue, expediente_id, revision, issue)
+
+    @server.tool()
     def preparar_plan_calculadora(expediente_id: str, revision: int) -> dict:
         """Prepara parámetros para Codex sin consultar ni calcular precios."""
         return call(service.prepare_calculator, expediente_id, revision)
+
+    @server.tool()
+    def generar_estimacion_aws(
+        expediente_id: str,
+        revision: int,
+        evidencia: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Prepara la ejecución para Codex o valida la evidencia real devuelta."""
+        return call(
+            service.generate_aws_estimate,
+            expediente_id,
+            revision,
+            evidencia,
+        )
 
     @server.tool()
     def registrar_evidencia_calculadora(

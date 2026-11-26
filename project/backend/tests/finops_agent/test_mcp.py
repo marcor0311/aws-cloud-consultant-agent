@@ -1,6 +1,7 @@
 """FinOps MCP application and real STDIO protocol journey."""
 
 import asyncio
+import hashlib
 import json
 import os
 import sys
@@ -58,6 +59,67 @@ def service_at(tmp_path):
         artifact_sha256=handoff["artifact_sha256"],
     )
     return database, store, FinOpsService(store), handoff
+
+
+def seed_finops_issue(store, service, handoff):
+    repository_url = "https://github.com/example/project"
+    issue_url = f"{repository_url}/issues/20"
+    pull_request_url = f"{repository_url}/pull/19"
+    merge_commit_sha = "b" * 40
+    body = (
+        f"Arquitectura aprobada: {pull_request_url}\n\n"
+        f"Issue de Arquitectura: {handoff['source_issue']}\n\n"
+        f"Merge commit: `{merge_commit_sha}`\n\n"
+        f"Revisión: 1; artefacto: `{handoff['artifact_sha256']}`."
+    )
+    body_sha256 = hashlib.sha256(body.encode()).hexdigest()
+    draft = {
+        "repository_url": repository_url,
+        "body": body,
+        "body_sha256": body_sha256,
+        "labels": ["finops", "architecture-approved"],
+        "assignees": ["finops-owner"],
+    }
+    store.put(
+        "architecture-finops-issue-draft:block-c-s3:1",
+        "architecture_finops_issue_draft",
+        draft,
+    )
+    store.put(
+        "architecture-finops-issue:block-c-s3:1",
+        "architecture_finops_issue",
+        {
+            "issue_url": issue_url,
+            "issue_number": 20,
+            "body_sha256": body_sha256,
+        },
+    )
+    store.put(
+        "architecture-github-approval:block-c-s3:1",
+        "architecture_github_approval",
+        {
+            "pull_request_url": pull_request_url,
+            "merge_commit_sha": merge_commit_sha,
+        },
+    )
+    snapshot = {
+        "repository_url": repository_url,
+        "issue_url": issue_url,
+        "issue_number": 20,
+        "state": "open",
+        "title": "[FinOps] project architecture v001",
+        "body": body,
+        "body_sha256": body_sha256,
+        "labels": ["finops", "architecture-approved"],
+        "assignees": ["finops-owner"],
+        "observed_at": "2026-11-25T10:00:00-06:00",
+        "architecture_revision": 1,
+        "architecture_sha256": handoff["artifact_sha256"],
+        "architecture_issue_url": handoff["source_issue"],
+        "architecture_pull_request_url": pull_request_url,
+        "architecture_merge_commit_sha": merge_commit_sha,
+    }
+    return service.register_issue("block-c-s3", 1, snapshot), snapshot
 
 
 def decision_payload(reference, handoff, decision, decision_id):
@@ -158,7 +220,9 @@ def test_dedicated_finops_server_exposes_only_finops_tools(tmp_path):
         assert set(create_server(service)._tool_manager._tools) == {
             "recibir_handoff_arquitectura",
             "consultar_recepcion_finops",
+            "validar_issue_finops",
             "preparar_plan_calculadora",
+            "generar_estimacion_aws",
             "registrar_evidencia_calculadora",
             "ejecutar_analisis_finops",
             "consultar_resultado_finops",
@@ -166,6 +230,27 @@ def test_dedicated_finops_server_exposes_only_finops_tools(tmp_path):
             "generar_solicitud_correccion_arquitectura",
             "consultar_historial_finops",
         }
+    finally:
+        store.engine.dispose()
+
+
+def test_finops_validates_issue_and_prepares_real_estimate_operation(tmp_path):
+    _, store, service, handoff = service_at(tmp_path)
+    try:
+        service.receive_handoff("block-c-s3", handoff)
+        registered, snapshot = seed_finops_issue(store, service, handoff)
+        assert registered["duplicate"] is False
+        assert service.register_issue("block-c-s3", 1, snapshot)["duplicate"] is True
+
+        operation = service.generate_aws_estimate("block-c-s3", 1)
+        assert operation["status"] == "awaiting_codex_execution"
+        assert operation["calculator_url"] == "https://calculator.aws/"
+        assert operation["may_mark_verified"] is False
+        assert operation["plan"]["status"] == "partial"
+
+        altered = {**snapshot, "architecture_sha256": "c" * 64}
+        with pytest.raises(ValueError, match="no coincide"):
+            service.register_issue("block-c-s3", 1, altered)
     finally:
         store.engine.dispose()
 
@@ -193,6 +278,36 @@ async def protocol_exchange(database, handoff):
             return initialized, tools, result
 
 
+async def protocol_issue_and_estimate_exchange(database, snapshot):
+    parameters = StdioServerParameters(
+        command=sys.executable,
+        args=["-m", "app.finops.mcp_server"],
+        cwd=str(BACKEND),
+        env={
+            **os.environ,
+            "FINOPS_DATABASE_URL": database,
+            "LANGSMITH_TRACING": "false",
+            "LANGCHAIN_TRACING_V2": "false",
+        },
+    )
+    async with stdio_client(parameters) as (reader, writer):
+        async with ClientSession(reader, writer) as session:
+            await session.initialize()
+            validated = await session.call_tool(
+                "validar_issue_finops",
+                {
+                    "expediente_id": "block-c-s3",
+                    "revision": 1,
+                    "issue": snapshot,
+                },
+            )
+            operation = await session.call_tool(
+                "generar_estimacion_aws",
+                {"expediente_id": "block-c-s3", "revision": 1},
+            )
+            return validated, operation
+
+
 def test_real_stdio_protocol_initializes_lists_and_calls_tool(tmp_path):
     database, store, _, handoff = service_at(tmp_path)
     store.engine.dispose()
@@ -203,9 +318,30 @@ def test_real_stdio_protocol_initializes_lists_and_calls_tool(tmp_path):
     assert initialized.protocol_version
     assert {item.name for item in tools.tools} >= {
         "recibir_handoff_arquitectura",
+        "validar_issue_finops",
+        "generar_estimacion_aws",
         "ejecutar_analisis_finops",
         "emitir_decision_finops",
     }
     assert result.is_error is False
     assert result.structured_content["duplicate"] is False
     assert result.structured_content["intake"]["operational_status"] == "received"
+
+
+def test_real_stdio_protocol_validates_issue_and_prepares_estimate(tmp_path):
+    database, store, service, handoff = service_at(tmp_path)
+    service.receive_handoff("block-c-s3", handoff)
+    _, snapshot = seed_finops_issue(store, service, handoff)
+    store.engine.dispose()
+
+    validated, operation = asyncio.run(
+        protocol_issue_and_estimate_exchange(database, snapshot)
+    )
+
+    assert validated.is_error is False
+    assert validated.structured_content is not None, validated.model_dump()
+    assert validated.structured_content["duplicate"] is True
+    assert operation.is_error is False
+    assert operation.structured_content is not None, operation.model_dump()
+    assert operation.structured_content["status"] == "awaiting_codex_execution"
+    assert operation.structured_content["may_mark_verified"] is False
