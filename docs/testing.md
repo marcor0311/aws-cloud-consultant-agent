@@ -42,3 +42,13 @@ corrección de secciones, revisión exacta, descarga MCP y bloqueo del cierre pa
 Se conserva en el job dedicado de delivery; no añade casos unitarios ni simulaciones
 cloud a `make test`. Requiere `DELIVERY_TEST_DATABASE_URL`; una omisión no acredita
 la integración. El PDF del recorrido se exporta para inspección visual.
+
+El recorrido existente `tests/test_delivery.py::test_handoff_report_download_and_idempotency`
+también cubre la recepción de ingeniería #21: decisiones de Arquitectura/FinOps
+aplicadas con LangGraph y persistidas en PostgreSQL, rechazo de archivos alterados,
+aceptación de handoff sin aprobación implícita, importación de resultados parciales
+con fallo de limpieza, intervalos paralelos y retrabajo explícito, reintento sin
+duplicación, recuperación desde otro runtime, consulta MCP y lectura de las mismas
+mediciones por #22. Las entradas y corridas son ficticias y no ejecutan Terraform,
+emuladores ni servicios externos. Se amplía el recorrido existente, sin añadir
+casos unitarios o matrices de comprobaciones.

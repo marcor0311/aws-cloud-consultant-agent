@@ -765,6 +765,17 @@ class WorkflowStore:
                     select(sessions).where(sessions.c.case_id == case_id)
                 ).mappings()
             ]
+        technical = [
+            r for r in self.list("engineering-evidence") if r["case_id"] == case_id
+        ]
+        classifications = {
+            i["session_id"]: i for r in technical for i in r["intervals"]
+        }
+        for session in work:
+            if annotation := classifications.get(session["id"]):
+                session.update(
+                    kind=annotation["kind"], evidence_reference=annotation["source"]
+                )
         result = []
         for phase in self.list("phase"):
             if phase["case_id"] != case_id:
@@ -811,6 +822,15 @@ class WorkflowStore:
             ]
         return {
             "case_id": case_id,
+            "technical_evidence": [
+                {
+                    "run_id": r["run_id"],
+                    "intake_id": r["intake_id"],
+                    "evidence_sha256": r["evidence_sha256"],
+                    "execution_verification": r["execution_verification"],
+                }
+                for r in technical
+            ],
             "phases": result,
             "sessions": work,
             "rework_cycles": sum(

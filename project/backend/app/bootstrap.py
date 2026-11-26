@@ -76,6 +76,29 @@ def create_report_runtime(delivery_url, workflow_url, operator):
         raise
 
 
+def create_engineering_runtime(workflow_url, artifact_root, operator):
+    """Compose local intake/evidence tracking; no infrastructure or provider execution."""
+    from types import SimpleNamespace
+
+    from app.delivery.engineering import EngineeringService
+    from app.integrations.engineering_files import EngineeringFiles
+    from app.persistence.engineering import EngineeringRepository
+
+    if not workflow_url.startswith(("postgresql://", "postgresql+psycopg://")):
+        raise ValueError("Ingeniería requiere WORKFLOW_DATABASE_URL de PostgreSQL")
+    store = WorkflowStore(
+        workflow_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    )
+    try:
+        service = EngineeringService(
+            EngineeringRepository(store), EngineeringFiles(artifact_root), operator
+        )
+        return SimpleNamespace(service=service, store=store, close=store.engine.dispose)
+    except BaseException:
+        store.engine.dispose()
+        raise
+
+
 def create_opening_runtime(
     database_url,
     source_dir,

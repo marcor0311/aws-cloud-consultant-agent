@@ -442,3 +442,20 @@ El bloqueo POSIX del worker se importa al adquirirlo; consultar informes no
 requiere `fcntl` ni iniciar ese worker, incluso en Windows.
 Las exportaciones usan `project/generated/delivery-demo`; se conserva la base
 PostgreSQL existente y sus variables `DELIVERY_DATABASE_URL`.
+
+El ingreso de ingeniería de #21 usa `delivery/engineering_models.py` y
+`delivery/engineering.py`, separado de `DemoRequest`. LangGraph coordina la
+validación y recepción; `persistence/engineering.py` persiste archivos, recibos,
+eventos e intervalos en las tablas de workflow existentes, de forma transaccional.
+`integrations/engineering_files.py` limita la lectura a una raíz explícita y verifica
+los hashes. La composición `create_engineering_runtime` requiere PostgreSQL y no
+crea proveedores, workers ni infraestructura. CLI y MCP STDIO privados delegan en
+el servicio, sin cambiar las rutas HTTP existentes.
+Las aprobaciones de entrada se contrastan con las transiciones aplicadas de
+Arquitectura/FinOps y su entrega al responsable. Las referencias de revisión de
+baselines siguen declaradas; no se consultan ni autentican revisiones externas.
+Importar resultados existentes no ejecuta comandos ni aprueba ingeniería. Cada
+intervalo técnico conserva su referencia y clasificación; el cálculo por expediente
+une intervalos por actor y distingue retrabajo medido de tiempo desconocido.
+El proceso permanece en etapa 5, pendiente de revisión/entrega definitiva.
+Ver [contratos, operación y límites de ingeniería](engineering-intake.md).
