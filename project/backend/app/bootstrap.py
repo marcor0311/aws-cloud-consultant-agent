@@ -53,6 +53,7 @@ def create_report_runtime(delivery_url, workflow_url, operator, *, checkpoint_ur
     from app.delivery.measurements import MeasurementService
     from app.delivery.report import CaseReportService
     from app.integrations.engineering_files import EngineeringFiles
+    from app.integrations.engineering_upstream import RecordedEngineeringSource
     from app.integrations.report_sources import CaseReportSources
     from app.persistence.delivery import PostgresRepository
     from app.persistence.engineering import EngineeringRepository
@@ -85,6 +86,7 @@ def create_report_runtime(delivery_url, workflow_url, operator, *, checkpoint_ur
                         EngineeringRepository(store),
                         EngineeringFiles(project_path("generated/engineering-inputs")),
                         operator,
+                        upstream=RecordedEngineeringSource(store),
                     ),
                 ),
                 operator,
@@ -114,6 +116,7 @@ def create_engineering_runtime(
     from app.delivery.engineering_publication import EngineeringPublicationService
     from app.integrations.engineering_files import EngineeringFiles
     from app.integrations.engineering_github import EngineeringGitHub
+    from app.integrations.engineering_upstream import RecordedEngineeringSource
     from app.persistence.engineering import EngineeringRepository
 
     if not workflow_url.startswith(("postgresql://", "postgresql+psycopg://")):
@@ -133,15 +136,20 @@ def create_engineering_runtime(
         provider = github or EngineeringGitHub()
         if github is None:
             resources.callback(provider.client.close)
+        process = ProcessService(
+            LangGraphExecution(build_process_graph(saver)), store, operator
+        )
         service = EngineeringService(
-            EngineeringRepository(store), EngineeringFiles(artifact_root), operator
+            EngineeringRepository(store),
+            EngineeringFiles(artifact_root),
+            operator,
+            upstream=RecordedEngineeringSource(store),
+            process=process,
         )
         publication = EngineeringPublicationService(
             service,
             provider,
-            ProcessService(
-                LangGraphExecution(build_process_graph(saver)), store, operator
-            ),
+            process,
         )
         return SimpleNamespace(
             service=service, publication=publication, store=store, close=resources.close

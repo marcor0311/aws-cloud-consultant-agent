@@ -447,7 +447,8 @@ Los cambios de secciones crean versiones y las decisiones se vinculan a versión
 hash y operador. Las métricas distinguen intervalos medidos, esfuerzo y duración
 activa; las esperas de handoff no se confunden con los huecos sin medición de fase.
 El informe puede aprobarse como parcial; su cierre permanece bloqueado hasta
-integrar la entrega real aprobada de ingeniería. No avanza etapas 5 o 6.
+integrar la entrega real aprobada de ingeniería. Registrar una presentación válida
+del informe definitivo completa la etapa 6; generar o aprobar un parcial no la cierra.
 Ver [operación y límites del informe](revision-informe-ejecutivo.md).
 El bloqueo POSIX del worker se importa al adquirirlo; consultar informes no
 requiere `fcntl` ni iniciar ese worker, incluso en Windows.
@@ -470,7 +471,8 @@ la comprobación de sus PRs/revisiones, módulos exactos, CI y merge mediante Gi
 Importar resultados existentes no ejecuta comandos ni aprueba ingeniería. Cada
 intervalo técnico conserva su referencia y clasificación; el cálculo por expediente
 une intervalos por actor y distingue retrabajo medido de tiempo desconocido.
-El proceso permanece en etapa 5, pendiente de revisión/entrega definitiva.
+Recibir insumos mantiene el proceso en etapa 5. La integración técnica aprobada
+registra la entrega definitiva y habilita la etapa 6.
 Ver [contratos, operación y límites de ingeniería](engineering-intake.md).
 
 El informe #22 puede seleccionar esa recepción mediante `CaseReportRequest.intake_id`,
@@ -491,3 +493,17 @@ el diagnóstico de mediciones; una corrección posterior exige un informe nuevo
 antes de presentar. El MCP del informe ofrece HTTP privado con el guard Bearer
 compartido, además de STDIO. La aceptación dentro del cliente ChatGPT sigue siendo
 una comprobación manual separada de la integración de protocolo.
+
+`integrations/engineering_upstream.py` adapta las publicaciones reales de #19/#20
+a la entrada de ingeniería 1.1 sin cambiar los hashes aprobados del contrato 1.0.
+Conserva los bytes y los recibos originales, verifica su correspondencia y proyecta
+la autorización FinOps existente al proceso antes de aceptar la entrega de etapa 5.
+El servicio recibe el adaptador y el proceso por composición; el informe reutiliza
+el mismo lector para comprobar vigencia y congelar la procedencia.
+
+`integrations/report_downloads.py` ofrece enlaces HTTPS firmados para PDF y fuentes
+JSON, opcionales en el MCP HTTP mediante `DELIVERY_DOWNLOAD_BASE_URL`. Vincula cada
+enlace a operador, informe, archivo, hash y cinco minutos de vigencia; la descarga
+revalida propiedad e integridad. Usa el Bearer privado como clave con un dominio
+de firma propio. El navegador usa la firma temporal, no el Bearer. El comando
+HTTP no registra URLs de acceso; no se incorpora infraestructura ni se abre un túnel.

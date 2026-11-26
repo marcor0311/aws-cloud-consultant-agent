@@ -1,6 +1,7 @@
 """Engineering receipts, files and measured intervals in the existing workflow SQL."""
 
 import base64
+from datetime import UTC, datetime
 from uuid import uuid5
 
 from sqlalchemy import insert, update
@@ -45,7 +46,9 @@ class EngineeringRepository:
             refs.append(ref)
         return refs
 
-    def register(self, request, input_sha256, operator, files, project, handoff):
+    def register(
+        self, request, input_sha256, operator, files, project, handoff, *, source=None
+    ):
         now = self.store.clock()
         received = handoff["accepted_at"] if handoff["accepted_at"] is not None else now
         record = {
@@ -65,6 +68,9 @@ class EngineeringRepository:
             "baseline_approval_validation": "external_references_declared",
             "status": "inputs_recorded",
         }
+        if source is not None:
+            record["upstream_source"] = source
+            record["approval_validation"] = "matched_recorded_architecture_and_finops"
         with self.store.engine.begin() as db:
             record["files"] = self._files(db, request.intake_id, files)
             if handoff["accepted_at"] is None:
@@ -107,6 +113,53 @@ class EngineeringRepository:
                         "issue_url": "",
                     },
                 )
+            if source is not None:
+                from app.finops.engineering_delivery import EngineeringHandoffAcceptance
+
+                acceptance_key = f"finops-engineering-acceptance:{request.case_id}:{request.finops.revision}"
+                previous = self.store.get(acceptance_key)
+                acceptance = (
+                    EngineeringHandoffAcceptance.model_validate(previous)
+                    if previous
+                    else EngineeringHandoffAcceptance(
+                        case_id=request.case_id,
+                        architecture_revision=request.finops.revision,
+                        architecture_sha256=request.finops_architecture_sha256,
+                        accepted_by=operator,
+                        accepted_at=datetime.fromtimestamp(received, UTC),
+                        engineering_reference=f"engineering://{request.case_id}/intakes/{request.intake_id}",
+                    )
+                )
+                if (
+                    acceptance.case_id != request.case_id
+                    or acceptance.architecture_revision != request.finops.revision
+                    or acceptance.architecture_sha256
+                    != request.finops_architecture_sha256
+                    or acceptance.accepted_by != operator
+                    or abs(acceptance.accepted_at.timestamp() - received) > 0.000001
+                ):
+                    raise DeliveryConflict("El recibo de aceptación FinOps no coincide")
+                payload = acceptance.model_dump(mode="json")
+                self.store.put_in(
+                    db, acceptance_key, "finops_engineering_acceptance", payload
+                )
+                record["finops_acceptance"] = payload
+                if not previous:
+                    db.execute(
+                        insert(events).values(
+                            id=f"finops-engineering-accepted:{request.case_id}:{request.finops.revision}",
+                            case_id=request.case_id,
+                            kind="finops.engineering_handoff_accepted",
+                            at=now,
+                            payload=payload,
+                        )
+                    )
+                phase_key = f"phase:{request.case_id}:stage-4"
+                phase = self.store.get(phase_key)
+                if phase and phase["completed_at"] is None:
+                    self.store.put_in(
+                        db, phase_key, "phase", {**phase, "completed_at": received}
+                    )
             self.store.put_in(
                 db, f"engineering:{request.intake_id}", "engineering", record
             )

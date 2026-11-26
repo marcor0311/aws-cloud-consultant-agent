@@ -250,6 +250,18 @@ se configura `WORKFLOW_DATABASE_URL`. El Engagement Manager no necesita operar
 GitHub. Quedan por validar el cliente MCP elegido y el piloto con entregables,
 mediciones, aprobaciones y presentación reales.
 
+## Descarga desde el cliente MCP
+
+Además de los recursos `delivery://`, el transporte HTTP permite
+`preparar_descarga_informe(entrega_id)` cuando se configura
+`DELIVERY_DOWNLOAD_BASE_URL` con el origen HTTPS existente del servidor. Devuelve
+un enlace temporal al PDF vigente y otro a la instantánea JSON de fuentes, sus
+hashes, tamaños y caducidad de cinco minutos. La descarga comprueba propiedad,
+firma e integridad; no cambia el estado de aprobación o presentación.
+El enlace actúa como permiso temporal sobre un archivo: mantenerlo dentro de la
+conversación autorizada. No hace falta enviar el Bearer desde el navegador.
+Ver [recorrido de aceptación y configuración](validacion-cliente-informe.md).
+
 ## Revisar y cerrar la demostración anterior
 
 1. Consultar el borrador y tomar `report.version` y `report.artifact.sha256`.

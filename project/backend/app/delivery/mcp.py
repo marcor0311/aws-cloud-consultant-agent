@@ -23,7 +23,9 @@ def pdf_uri(delivery_id, artifact_id):
     return f"delivery://pdf/{delivery_id}/{artifact_id}"
 
 
-def create_server(repository: PostgresRepository, operator: str, case_service=None):
+def create_server(
+    repository: PostgresRepository, operator: str, case_service=None, *, downloads=None
+):
     if case_service is not None and case_service.operator != operator:
         raise ValueError("El servicio de informes pertenece a otro operador")
     server = MCPServer(
@@ -89,6 +91,31 @@ def create_server(repository: PostgresRepository, operator: str, case_service=No
         return call(service.get, entrega_id)
 
     @server.tool()
+    def preparar_descarga_informe(entrega_id: UUID) -> CallToolResult:
+        """Con solicitud del operador, crea enlaces HTTPS al PDF vigente y sus fuentes por cinco minutos.
+
+        Cualquiera con un enlace puede descargar ese archivo durante su vigencia.
+        No compartirlo fuera de la conversación autorizada. No aprueba ni presenta.
+        """
+        if downloads is None:
+            raise ToolError(
+                "Configurar DELIVERY_DOWNLOAD_BASE_URL en el transporte HTTP para habilitar enlaces"
+            )
+
+        def prepare():
+            result = service.get(entrega_id)
+            report = result["report"]
+            artifact = report.get("approved_document") or report["artifact"]
+            link = downloads.prepare(entrega_id, artifact["artifact_id"])
+            if sources := report.get("sources"):
+                link["sources_download"] = downloads.prepare(
+                    entrega_id, sources["artifact_id"]
+                )
+            return link
+
+        return call(prepare)
+
+    @server.tool()
     def registrar_decision_informe(
         entrega_id: UUID, decision: ReportDecision
     ) -> CallToolResult:
@@ -151,13 +178,29 @@ def create_server(repository: PostgresRepository, operator: str, case_service=No
     return server
 
 
-def http_app(server, token, host="127.0.0.1"):
+def http_app(server, token, host="127.0.0.1", *, downloads=None):
     from app.integrations.mcp_http import BearerProtectedMCP
 
-    return BearerProtectedMCP(
-        server.streamable_http_app(host=host, stateless_http=True, json_response=True),
-        token,
+    mcp_app = server.streamable_http_app(
+        host=host, stateless_http=True, json_response=True
     )
+    app = BearerProtectedMCP(mcp_app, token)
+    if downloads is not None:
+        from starlette.applications import Starlette
+        from starlette.routing import Mount, Route
+
+        app = Starlette(
+            routes=[
+                Route(
+                    "/downloads/{delivery_id}/{artifact_id}",
+                    downloads.download,
+                    methods=["GET"],
+                ),
+                Mount("/", app=app),
+            ],
+            lifespan=mcp_app.router.lifespan_context,
+        )
+    return app
 
 
 def main():
@@ -184,14 +227,30 @@ def main():
         checkpoint_url=os.getenv("WORKFLOW_CHECKPOINT_URL") or None,
     )
     try:
-        server = create_server(runtime.repository, runtime.operator, runtime.service)
+        downloads = None
+        if public_url := os.getenv("DELIVERY_DOWNLOAD_BASE_URL", ""):
+            if args.transport != "streamable-http":
+                parser.error(
+                    "Las descargas HTTPS requieren --transport streamable-http"
+                )
+            from app.integrations.report_downloads import ReportDownloads
+
+            downloads = ReportDownloads(
+                runtime.repository, runtime.operator, public_url, token
+            )
+        server = create_server(
+            runtime.repository, runtime.operator, runtime.service, downloads=downloads
+        )
         if args.transport == "stdio":
             server.run(transport="stdio")
         else:
             import uvicorn
 
             uvicorn.run(
-                http_app(server, token, args.host), host=args.host, port=args.port
+                http_app(server, token, args.host, downloads=downloads),
+                host=args.host,
+                port=args.port,
+                access_log=False,
             )
     finally:
         runtime.close()
