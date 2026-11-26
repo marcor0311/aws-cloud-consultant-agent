@@ -132,6 +132,9 @@ flowchart TB
 - [Agent Toolkit for AWS](https://docs.aws.amazon.com/agent-toolkit/latest/userguide/what-is-agent-toolkit.html)
 - [AWS DevOps Agent](https://docs.aws.amazon.com/devopsagent/latest/userguide/working-with-devops-agent-accessing-devops-agent-index.html)
 - [AWS Security Agent](https://docs.aws.amazon.com/securityagent/latest/userguide/what-is.html)
+
+**Tecnologías recomendadas:**
+
 - [AWS Diagram as Code](https://github.com/awslabs/diagram-as-code): tecnología a tomar en cuenta para generar diagramas de arquitectura AWS como código; evaluar su ajuste al flujo y a los entregables del proyecto.
 
 > Acceso complementario: sesiones de Codex separadas para proyecto y baselines; [GitHub MCP](https://github.com/github/github-mcp-server) para acceso directo a módulos e issues/PRs; MCP del backend para tiempos, handoffs y coordinación con LangGraph. AWS Pricing MCP, AWS MCP y Terraform MCP configurados para el puesto.
