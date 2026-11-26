@@ -202,7 +202,7 @@ class EngineeringHandoff(Contract):
 class ReportDraft(Contract):
     schema_version: Literal["1.0"] = "1.0"
     report_id: UUID
-    handoff_id: UUID
+    handoff_id: UUID | None = None
     version: int = Field(default=1, ge=1)
     status: Literal["draft", "changes_requested", "approved", "closed"] = "draft"
     artifact: ArtifactRef
@@ -210,6 +210,8 @@ class ReportDraft(Contract):
     pending_items: list[str]
     revision_text: Text | None = None
     approved_document: ArtifactRef | None = None
+    sources: ArtifactRef | None = None
+    sections: dict[str, Text] = Field(default_factory=dict)
 
 
 class ReportDecision(Contract):
@@ -218,3 +220,20 @@ class ReportDecision(Contract):
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     action: Literal["request_changes", "revise", "approve", "record_presentation"]
     detail: Text
+    sections: dict[Literal["results", "risks", "next_steps"], Text] = Field(
+        default_factory=dict
+    )
+
+    @model_validator(mode="after")
+    def revision_only(self):
+        if self.sections and self.action != "revise":
+            raise ValueError("Los cambios de contenido requieren la acción revise")
+        return self
+
+
+class CaseReportRequest(Contract):
+    """Capture an existing case; never run the engineering agent."""
+
+    report_id: UUID
+    case_id: str = Field(pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,119}$")
+    engineering_delivery_id: UUID | None = None

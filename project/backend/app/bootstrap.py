@@ -41,6 +41,41 @@ def create_access_service():
     )
 
 
+def create_report_runtime(delivery_url, workflow_url, operator):
+    """Reports read local workflow records without composing providers or workers."""
+    from types import SimpleNamespace
+
+    from app.delivery.report import CaseReportService
+    from app.integrations.report_sources import CaseReportSources
+    from app.persistence.delivery import PostgresRepository
+
+    resources = ExitStack()
+    try:
+        repository = PostgresRepository(delivery_url)
+        service = None
+        if workflow_url:
+            if not workflow_url.startswith(("postgresql://", "postgresql+psycopg://")):
+                raise ValueError(
+                    "El informe por expediente requiere WORKFLOW_DATABASE_URL de PostgreSQL"
+                )
+            store = WorkflowStore(
+                workflow_url.replace("postgresql://", "postgresql+psycopg://", 1)
+            )
+            resources.callback(store.engine.dispose)
+            service = CaseReportService(
+                repository, CaseReportSources(store, repository), operator
+            )
+        return SimpleNamespace(
+            repository=repository,
+            operator=operator,
+            service=service,
+            close=resources.close,
+        )
+    except BaseException:
+        resources.close()
+        raise
+
+
 def create_opening_runtime(
     database_url,
     source_dir,

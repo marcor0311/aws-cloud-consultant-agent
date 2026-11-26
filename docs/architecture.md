@@ -424,5 +424,21 @@ explícita en `persistence/delivery.py` y `persistence/migrations/`, y ReportLab
 `python -m app.delivery` conserva su entrada. La API separada está en
 `demos/delivery.py`. El fixture y las pruebas pertenecen al backend.
 Este recorrido sigue separado del proceso principal y no avanza sus etapas.
+El informe independiente de #22 usa `delivery/report.py`: su grafo LangGraph
+coordina captura y renderizado, con recuperación desde la etapa persistida, sin
+checkpointer nativo adicional. Consume una instantánea
+del expediente mediante `integrations/report_sources.py` y persiste fuentes,
+PDF y decisiones en las tablas existentes de delivery. `create_report_runtime`
+compone únicamente persistencia PostgreSQL y el lector, sin proveedores ni worker.
+El MCP admite `CaseReportRequest` además de la entrada demo anterior. La API de
+loopback añade generación por expediente dentro de su router privado de revisión.
+Los cambios de secciones crean versiones y las decisiones se vinculan a versión,
+hash y operador. Las métricas distinguen intervalos medidos, esfuerzo y duración
+activa; las esperas de handoff no se confunden con los huecos sin medición de fase.
+El informe puede aprobarse como parcial; su cierre permanece bloqueado hasta
+integrar la entrega real aprobada de ingeniería. No avanza etapas 5 o 6.
+Ver [operación y límites del informe](revision-informe-ejecutivo.md).
+El bloqueo POSIX del worker se importa al adquirirlo; consultar informes no
+requiere `fcntl` ni iniciar ese worker, incluso en Windows.
 Las exportaciones usan `project/generated/delivery-demo`; se conserva la base
 PostgreSQL existente y sus variables `DELIVERY_DATABASE_URL`.

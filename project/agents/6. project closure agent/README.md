@@ -15,9 +15,13 @@ Existe un avance determinista en el nodo `executive_report_agent` de
 borrador desde la entrega de ingeniería y datos simulados, con métricas y
 respaldos persistidos. Su código permanece en el backend.
 
-Todavía faltan el acceso específico por MCP, las entradas reales del proceso,
-ajustes, aprobación humana y cierre. Generar el borrador no cierra el proyecto.
-Ver [entrega 1](../../../docs/delivery-1.md).
+El MCP de `app.delivery.mcp` también genera un informe por expediente sin ejecutar
+ingeniería, con entrada técnica opcional. Lee fuentes y mediciones existentes del
+workflow, conserva una instantánea con hash, permite corregir secciones, versionar
+y aprobar el PDF parcial. El operador debe corresponder al responsable registrado.
+Los informes parciales no cierran el expediente; faltan la integración de las
+entregas reales de Arquitectura/FinOps/Ingeniería y el cierre del proceso principal.
+Ver [revisión, métricas y límites](../../../docs/revision-informe-ejecutivo.md).
 
 Contrato funcional: [issues.md](../../../issues.md#6-engagement-manager--informe-ejecutivo).
 La numeración identifica al agente dentro del registro; no es un paquete Python.
