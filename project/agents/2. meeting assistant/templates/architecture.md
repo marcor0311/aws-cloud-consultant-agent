@@ -12,7 +12,7 @@ title: '[Arquitectura] '
 
 $context
 
-## Aprobación de junta
+## Decisión de dirección
 
 $board_minutes
 

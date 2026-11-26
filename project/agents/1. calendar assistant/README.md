@@ -17,6 +17,8 @@ El registro del conjunto de agentes y los límites con la API están en
 | `src/agent.py` | Sesión de voz, carga de modelos, herramientas y cierre de llamada |
 | `src/tools/calendar_mcp.py` | Herramientas de Calendar, disponibilidad y reglas de reuniones |
 | `src/integrations/access_client.py` | Comunicación HTTP con la verificación y autorización del backend |
+| `src/tools/advisor_transfer.py` | Fase de derivación sin calendario y aceptación posterior a la oferta |
+| `src/integrations/sip_transfer.py` | SIP REFER sobre el participante SIP de la llamada activa |
 | `src/domain/client_codes.py` | Normalización y confirmación fonética del código de cliente |
 | `src/domain/scheduling.py` | Reglas de reuniones, interpretación de fechas y rangos de inicio |
 | `src/integrations/google_calendar.py` | Cliente y credenciales de Google Calendar |
@@ -76,19 +78,79 @@ sin dar ejemplos ni pistas del formato. Confirma el código dictado y solicita
 un OTP que el backend envía exclusivamente al correo aprobado de la empresa.
 El código de cliente identifica el registro; solo el OTP autoriza gestionar citas.
 No se revela ni se cambia el correo aprobado durante la conversación.
+Las palabras del alfabeto fonético representan letras individuales: por ejemplo,
+dos palabras Uniform consecutivas representan dos U. El agente entrega el dictado
+a la herramienta para normalizarlo y confirmar letras y dígitos por separado.
+El guion es un separador visual opcional: no se exige ni se pronuncia, y si se
+dicta la palabra «guion» se ignora. El registro conserva su formato interno.
+
+Si el backend devuelve `not_registered` o `not_enabled`, incluso al revalidar una
+operación de agenda, Alisa pasa a una fase sin herramientas de calendario y ofrece
+comunicar con un asesor de negocio. Solo una aceptación explícita en un mensaje
+posterior a la oferta permite intentar la transferencia. Si rechaza, termina la
+gestión y explica cómo contactar a `asistencia@noname.com`. La autorización OTP
+no se sustituye por la transferencia ni por la aceptación de la oferta.
+
+### Transferencia de la llamada activa
+
+Configura `CALENDAR_ADVISOR_TRANSFER_E164` únicamente en el `secrets.env` privado
+o en el entorno del proceso, con `+` seguido del número internacional E.164. No se
+carga el destino desde `project/.env`, no se acepta como argumento del modelo y
+no se incluye en prompts, respuestas ni logs. El ejemplo versionado permanece vacío.
+Si falta o es inválido, Alisa no ofrece transferir: informa de inmediato que el
+asesor no está disponible en este momento e indica que puede contactar a
+`asistencia@noname.com`. No envía REFER ni accede al calendario.
+
+`CALENDAR_ADVISOR_TRANSFER_TIMEOUT_SECONDS` fija la espera de respuesta (entero de
+1 a 120, predeterminado 10 segundos); puede ir en la configuración no sensible.
+El request lleva `ringing_timeout` y un timeout HTTP cinco segundos mayor, con un
+límite local adicional. Alisa espera el resultado y, ante falta de respuesta,
+rechazo o error de transporte, retoma la conversación y orienta a contactar a
+`asistencia@noname.com`. No reintenta automáticamente: un timeout de red
+puede dejar incierto el resultado remoto. Solo la respuesta de LiveKit con estado
+exitoso confirma la transferencia; entonces se cierra la sesión del agente sin
+eliminar la sala ni colgar al destinatario.
+
+Se requiere una llamada SIP ya contestada y un único participante SIP remoto en
+la sala. Las sesiones web o de consola y las salas con varios participantes SIP
+no se transfieren. El proveedor debe soportar SIP REFER a destinos `tel:` y
+notificar su resultado. Algunos proveedores exigen un URI SIP específico; ese
+caso requiere adaptar la integración antes de una prueba autorizada.
+
+La recuperación de audio depende del proveedor. LiveKit documenta un timeout de
+medios de 15 segundos por defecto: si se configura una espera de timbrado mayor,
+el `media_timeout` de la llamada debe superar esa espera. No se modifican trunks
+ni cuentas desde este proyecto. Un buzón o IVR que conteste cuenta como éxito
+para el proveedor y no demuestra que respondió una persona.
+Ver [SIP REFER, timeout y fallos](https://docs.livekit.io/telephony/features/transfers/cold/).
+La prueba telefónica y la comprensión con un modelo real requieren autorización
+explícita para cada ejecución; esta implementación se valida con mocks offline.
 
 Las reuniones duran treinta minutos, de lunes a viernes, hora de Costa Rica.
 Pueden iniciar a los minutos 00 o 30, entre 08:00 y 11:30 y entre 13:00 y 16:30.
 Los rangos ofrecidos representan horas de inicio. Las herramientas vuelven a
 validar la autorización y las reglas al agendar o reagendar.
+Se aceptan horas habladas como «ocho treinta», «14 horas» o «mediodía» (esta
+última se rechaza por el almuerzo) y fechas como «pasado mañana».
+
+Cada cliente tiene una sola reunión inicial futura. Si el correo aprobado ya
+tiene una cita de Stuart, `consultar_horarios` y `agendar_reunion` devuelven
+`ya_tiene_reunion` con esa cita y Alisa ofrece reagendarla o cancelarla. Así la
+llamada conserva una única cita en su recibo de cierre. Repetir `agendar_reunion`
+para el mismo horario en la misma llamada devuelve la invitación ya creada, sin
+duplicarla ni registrarla dos veces; si Google responde 409 porque un intento
+anterior se confirmó sin respuesta, se recupera ese evento.
 
 Reagendar y cancelar requieren identificar la cita del correo aprobado y una
 confirmación explícita de la persona. El servidor comprueba que el evento siga
 vigente y que no haya cambiado. La despedida termina con `end_call` y espera
 la reproducción del mensaje antes de cerrar.
 
-La preparación ejecutiva del primer issue es una responsabilidad pendiente de
-otro agente; Calendar Assistant se limita al agendamiento.
+La preparación ejecutiva del primer issue tiene un runtime separado en
+`backend/app/preparation/`. Recibe transcripción, notas de reunión opcionales y
+campo de consulta desde MCP o CLI por compatibilidad de la entrada, sin buscar ni
+comparar proyectos anteriores; ver [entradas y revisión](../../../docs/insumos.md#preparación-con-notas-de-reunión).
+Calendar Assistant conserva su responsabilidad de agendamiento.
 
 En una llamada real, la cita se conserva como una sola referencia local. Después
 del cierre del audio se entrega al backend mediante un recibo firmado; el worker
@@ -105,7 +167,11 @@ uv run --locked ruff format --check src tests demos
 uv run --locked ruff check src tests demos
 ```
 
-La suite conserva una conexión real al servidor MCP con invocación de herramienta.
+La suite conserva una conexión real al servidor MCP con invocación de herramienta,
+extendida al SDK y backend HTTP local simulado para la derivación: rechazo de la
+oferta, aceptación, timeout, rechazo del proveedor, transferencia completada y
+asesor sin configurar con orientación a asistencia.
+Los mensajes son guionados: verifican herramientas y efectos, no comprensión del lenguaje.
 El recorrido de agenda y cierre con recibo queda en el E2E bajo demanda.
 Las pruebas locales utilizan datos, transcripts y proveedores ficticios. Los
 modelos guionados no consumen créditos de inferencia. CI ejecuta estas pruebas

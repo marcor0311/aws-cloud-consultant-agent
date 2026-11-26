@@ -10,6 +10,13 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
+from googleapiclient.errors import HttpError
+from httplib2 import Response
+
+
+def _http_error(status):
+    return HttpError(Response({"status": status}), b"")
+
 
 class MockDateTime(datetime):
     @classmethod
@@ -50,7 +57,10 @@ class MockCalendar:
             ]
 
     def _get(self, event_id):
-        return next(event for event in self._all() if event["id"] == event_id)
+        event = next((e for e in self._all() if e["id"] == event_id), None)
+        if event is None:
+            raise _http_error(404)
+        return event
 
     def _save(self, event):
         with sqlite3.connect(self.path) as db:
@@ -64,6 +74,9 @@ class MockCalendar:
         def action():
             if conferenceDataVersion != 1 or sendUpdates != "all":
                 raise ValueError("La demo espera una invitación con Meet.")
+            # Google rejects a reused event ID, including a cancelled one.
+            if any(event["id"] == body["id"] for event in self._all()):
+                raise _http_error(409)
             seed = hashlib.sha256(body["id"].encode()).digest()
             letters = "".join(chr(97 + value % 26) for value in seed[:10])
             code = f"{letters[:3]}-{letters[3:7]}-{letters[7:]}"

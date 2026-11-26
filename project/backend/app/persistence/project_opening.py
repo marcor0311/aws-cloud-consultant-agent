@@ -1,5 +1,8 @@
 """Project queue and decision records in the existing workflow database."""
 
+import hashlib
+import json
+
 from app.preparation.deliveries import files_digest
 from app.project_opening.models import project_identity, slug
 
@@ -48,15 +51,108 @@ class ProjectOpeningRepository:
             "files_sha256": manifest["files_sha256"],
         }
 
-    def accept_preparation(self, record, source):
-        incoming = self.store.handoff(source["handoff_id"])
-        receipt = self.store.accept_handoff(
+    def _accept_incoming(self, handoff_id):
+        incoming = self.store.handoff(handoff_id)
+        return self.store.accept_handoff(
             incoming["id"],
             "meeting-assistant",
             acting_for=incoming["to_actor"]
             if incoming["to_actor"] != "meeting-assistant"
             else None,
         )
+
+    def direction_decision(self, case_id):
+        return self.store.get("opening-decision:" + case_id)
+
+    def start_direction(self, case_id):
+        """Stage-2 Lead Time starts when agent 1's approved delivery reached Direction."""
+        key = f"phase:{case_id}:stage-2"
+        status = self.store.get(f"status:{case_id}") or {}
+        handoff = self.store.handoff(
+            f"{case_id}:stage-1:stage-2:v{status.get('revision')}"
+        )
+        if self.store.get(key) or not handoff:
+            return
+        self.store.put(
+            key,
+            "phase",
+            {
+                "case_id": case_id,
+                "phase": "stage-2",
+                "accepted_at": handoff["created_at"],
+                "completed_at": None,
+                "manager_id": "meeting-assistant",
+                "issue_url": "",
+            },
+        )
+
+    def finish_direction(self, case_id):
+        self.store.complete_phase(case_id, "stage-2")
+
+    def reject(self, case_id, actor, session_id):
+        """Record Direction's rejection once; the project then leaves Agent 2's flow."""
+        with self.lock("registry"):
+            if self.store.get(f"opening:{case_id}"):
+                raise ValueError("El proyecto ya tiene una apertura aprobada.")
+            previous = self.direction_decision(case_id)
+            if previous:
+                if previous.get("decision") != "rejected":
+                    raise ValueError(
+                        "El proyecto ya tiene una decisión de apertura distinta."
+                    )
+                return previous
+            status = self.store.get(f"status:{case_id}") or {}
+            manifest = self.store.get(
+                f"artifact-files:{case_id}:{status.get('revision')}"
+            )
+            if not manifest:
+                raise ValueError("Falta la entrega aprobada y persistida del agente 1.")
+            source = self.preparation_delivery(case_id, manifest["files"])
+            receipt = self._accept_incoming(source["handoff_id"])
+            record = {
+                "case_id": case_id,
+                "decision": "rejected",
+                "actor": actor,
+                "recorded_at": self.store.clock(),
+                "session_id": session_id,
+                **source,
+                "accepted_at": receipt["accepted_at"],
+            }
+            self.store.put("opening-decision:" + case_id, "opening-decision", record)
+            self.store.event(
+                "opening-rejected:" + case_id,
+                case_id,
+                "opening.rejected",
+                {"actor": actor, "session_id": session_id, **source},
+            )
+        self.start_direction(case_id)
+        self.finish_direction(case_id)
+        return record
+
+    def metrics(self, case_id):
+        """Lead Time and Process Time of Direction and of the GitHub opening."""
+        recorded = self.store.metrics(case_id)
+        return {
+            "case_id": case_id,
+            "decision": (self.direction_decision(case_id) or {}).get("decision"),
+            "phases": [
+                phase
+                for phase in recorded["phases"]
+                if phase["phase"] in {"stage-2", "project-opening"}
+            ],
+            "handoffs": [
+                handoff
+                for handoff in recorded["handoffs"]
+                if "stage-2" in {handoff["from_phase"], handoff["to_phase"]}
+                or handoff["from_phase"] == "project-opening"
+            ],
+            "coverage": recorded["phases"][0]["coverage"]
+            if recorded["phases"]
+            else "recorded_intervals_only",
+        }
+
+    def accept_preparation(self, record, source):
+        receipt = self._accept_incoming(source["handoff_id"])
         result = self.update(
             record["case_id"],
             incoming_preparation={
@@ -77,14 +173,17 @@ class ProjectOpeningRepository:
         expected = self.preparation_delivery(record["case_id"], record["files"])
         received = record.get("incoming_preparation") or {}
         if (
-            received.get("handoff_id") != expected["handoff_id"]
-            or received.get("files_sha256") != expected["files_sha256"]
+            any(received.get(key) != value for key, value in expected.items())
             or not self.store.handoff(expected["handoff_id"])["accepted_at"]
         ):
             raise ValueError("El agente 2 todavía no recibió la entrega del agente 1.")
 
     def reserve(self, request):
         with self.lock("registry"):
+            if (self.direction_decision(request.case_id) or {}).get(
+                "decision"
+            ) == "rejected":
+                raise ValueError("El proyecto fue rechazado en Dirección.")
             previous = self.store.get(f"opening:{request.case_id}")
             if previous:
                 if previous["request_sha256"] != request.fingerprint():
@@ -111,6 +210,18 @@ class ProjectOpeningRepository:
                 "commit": None,
                 "issue": None,
             }
+            approval = {
+                "kind": "direction_decision",
+                "id": request.case_id,
+                "actor": request.approved_by,
+                "reference": request.approval_reference,
+                "approved_at": record["approved_at"],
+                "request_sha256": request.fingerprint(),
+            }
+            approval["digest"] = hashlib.sha256(
+                json.dumps(approval, sort_keys=True).encode()
+            ).hexdigest()
+            record["approval_certificate"] = approval
             with self.store.engine.begin() as db:
                 self.store.put_in(db, counter_key, "opening-number", {"last": number})
                 self.store.put_in(
@@ -127,6 +238,19 @@ class ProjectOpeningRepository:
             return record
 
     def accept_board(self, case_id, certificate):
+        if certificate.get("kind") == "direction_decision":
+            stored = self.get(case_id).get("approval_certificate") or {}
+            if stored.get("digest") != certificate.get("digest"):
+                raise ValueError(
+                    "La aprobación de dirección no coincide con el expediente."
+                )
+            self.store.event(
+                "opening-direction-accepted:" + case_id,
+                case_id,
+                "opening.direction_approval_accepted",
+                {"digest": certificate["digest"], "actor": certificate["actor"]},
+            )
+            return
         handoff_id = "board:" + certificate["id"] + ":decision"
         handoff = self.store.handoff(handoff_id)
         if not handoff or handoff["artifact_sha256"] != certificate["digest"]:
@@ -182,6 +306,14 @@ class ProjectOpeningRepository:
                 "is_simulated": ballot["is_simulated"],
             }
             if ballot
+            else None,
+            "process": self.store.get(f"process:{case_id}"),
+            "board_workflow_delivery": self.store.job(
+                f"board-rejection:{ballot['id']}:{ballot['certificate']['digest']}"
+            )
+            if ballot
+            and ballot.get("certificate")
+            and ballot["status"] == "not_approved"
             else None,
             "handoffs": self.store.case_handoffs(case_id),
             "events": self.store.case_events(case_id),

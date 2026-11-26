@@ -1,5 +1,9 @@
 # Entrega 1: ingeniería e informe ejecutivo
 
+Esta guía describe el primer incremento. Para el flujo posterior, consultar
+[las pruebas con AWS Emulator](validacion-aws-emulator.md) y
+[la revisión y cierre del informe](revision-informe-ejecutivo.md).
+
 Incremento local de los issues #21 y #22. No cierra sus alcances completos.
 
 Para reproducir el avance desde cero, seguir [Cómo probar la entrega 1](como-probar-entrega-1.md).

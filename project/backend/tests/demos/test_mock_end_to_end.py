@@ -16,7 +16,7 @@ def test_livekit_booking_to_langgraph_collaboration_and_handoff(tmp_path):
     report = run_demo(directory, collaborate=True)
     assert report["external_connections"] == []
     first, second = report["projects"]
-    assert first["status"] == "ready_for_stage_2" and first["revision"] == 2
+    assert first["status"] == "ready_for_stage_2" and first["revision"] == 3
     assert second["status"] == "awaiting_review" and second["revision"] == 1
     assert len(report["slack_outbox"]) == 3
     for project in report["projects"]:
@@ -36,12 +36,14 @@ def test_livekit_booking_to_langgraph_collaboration_and_handoff(tmp_path):
         folder = (
             directory / "artifacts" / project["project_id"] / f"v{project['revision']}"
         )
-        assert {p.name for p in folder.iterdir()} == {
+        expected = {
             "meeting-transcript.md",
             "executive-summary.md",
             "presentation.md",
-            "speaker-notes.md",
         }
+        if project["status"] == "ready_for_stage_2":
+            expected.add("speaker-notes.md")
+        assert {p.name for p in folder.iterdir()} == expected
     metrics = report["metrics"][0]
     assert metrics["stage_1"]["completed_at"] is not None
     assert (

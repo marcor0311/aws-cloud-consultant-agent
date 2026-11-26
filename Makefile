@@ -12,10 +12,13 @@ help:
 	@echo "make backend        Iniciar la API local (puerto 8000)"
 	@echo "make agent          Iniciar la llamada local"
 	@echo "make agent2         MCP de Meeting Assistant (PostgreSQL y GitHub)"
+	@echo "make agent2-http    MCP remoto local para conectar ChatGPT por Secure MCP Tunnel"
 	@echo "make agent2-login   Iniciar sesión con ChatGPT para el agente 2"
 	@echo "make workflow       Iniciar el único worker local de LangGraph"
 	@echo "make frontend       Abrir servidor de la oficina virtual (puerto 8765)"
 	@echo "make preparation-mcp  Iniciar el MCP local de preparación (STDIO)"
+	@echo "make prepare CASE=<id> Consultar documentos y progreso mediante MCP STDIO"
+	@echo "make preparation-http MCP de preparación para el túnel (localhost:8769/mcp)"
 	@echo "make demo           Agendar y preparar dos proyectos con mocks; esperar a Stuart"
 	@echo "make demo-full      Añadir revisión ficticia de Stuart y aceptación del handoff"
 	@echo "make mock-mcp       Abrir el MCP de la última demo (worker: make workflow)"
@@ -52,6 +55,14 @@ agent:
 
 preparation-mcp:
 	@cd "$(BACKEND_DIR)" && $(BACKEND_PYTHON) -m app.mcp_server
+
+.PHONY: prepare
+prepare:
+	@cd "$(BACKEND_DIR)" && $(BACKEND_PYTHON) -m app.cli.workflow prepare --case "$(CASE)"
+
+.PHONY: preparation-http
+preparation-http:
+	@cd "$(BACKEND_DIR)" && $(BACKEND_PYTHON) -m app.mcp_server --transport streamable-http --host 127.0.0.1 --port 8769
 
 demo:
 	@cd "$(BACKEND_DIR)" && $(BACKEND_PYTHON) -m app.cli.demo
@@ -126,9 +137,12 @@ prepare-capture:
 insumos-mock:
 	cd "$(BACKEND_DIR)" && $(BACKEND_PYTHON) -m app.cli.insumos --mock
 
-.PHONY: agent2 agent2-login agent2-logout agent2-register agent2-run agent2-queue agent2-preview
+.PHONY: agent2 agent2-http agent2-login agent2-logout agent2-register agent2-run agent2-queue agent2-preview
 agent2:
 	PYTHONPATH="$(CURDIR)/$(BACKEND_DIR)" "$(BACKEND_DIR)/$(BACKEND_PYTHON)" "project/agents/2. meeting assistant/src/agent.py" mcp
+
+agent2-http:
+	PYTHONPATH="$(CURDIR)/$(BACKEND_DIR)" "$(BACKEND_DIR)/$(BACKEND_PYTHON)" "project/agents/2. meeting assistant/src/agent.py" mcp --transport streamable-http --host 127.0.0.1 --port 8768
 
 agent2-login:
 	cd "$(BACKEND_DIR)" && $(BACKEND_PYTHON) -m app.cli.meeting_assistant login

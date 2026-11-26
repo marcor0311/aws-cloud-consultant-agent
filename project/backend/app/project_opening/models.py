@@ -8,6 +8,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, model_validator
 
+from app.preparation.processing import CORPORATE_FILENAMES
+
 PREFIX = "AWS Cloud Consulting Project"
 TEMPLATE = "marcor0311/aws-cloud-consulting-project-template"
 
@@ -85,28 +87,52 @@ class OpeningRequest(Input):
     approved_by: str = Field(min_length=1, max_length=160)
     approval_reference: str = Field(min_length=1, max_length=1000)
     comments: str = Field(default="", max_length=12000)
-    files: list[ApprovedFile] = Field(min_length=4, max_length=5)
+    files: list[ApprovedFile] = Field(min_length=3, max_length=6)
     is_fictitious: bool = False
 
     @model_validator(mode="after")
     def unique_files(self, info: ValidationInfo):
-        if len(self.files) != 5 and not (info.context or {}).get("stored_legacy"):
+        if len(self.files) == 5 and {f.name for f in self.files} == set(
+            CORPORATE_FILENAMES
+        ):
+            slug(self.company)
+            return self
+        if len(self.files) == 3:
+            if {f.name for f in self.files} != {
+                "resumen-ejecutivo.pdf",
+                "presentacion.pdf",
+                "transcripcion.pdf",
+            }:
+                raise ValueError(
+                    "Se requieren resumen ejecutivo, presentación y transcripción PDF."
+                )
+            slug(self.company)
+            return self
+        if len(self.files) != 6 and not (info.context or {}).get("stored_legacy"):
             raise ValueError(
-                "Las nuevas aperturas requieren cinco archivos, incluida la presentación PDF."
+                "Las nuevas aperturas requieren seis archivos, incluido speaker-notes.md aprobado."
             )
         names = [f.name for f in self.files]
         if len(set(names)) != len(names) or not any(
             name.endswith(".md") for name in names
         ):
             raise ValueError("Se requieren insumos distintos, con transcripción.")
+        if len(names) == 6 and (
+            "speaker-notes.md" not in names
+            or sum(name.endswith(".md") for name in names) != 2
+        ):
+            raise ValueError(
+                "Se requieren transcripción y speaker-notes.md como archivos distintos."
+            )
         if (
-            sum(name.endswith(".pdf") for name in names) != len(names) - 2
+            sum(name.endswith(".pdf") for name in names)
+            != (3 if len(names) == 6 else len(names) - 2)
             or sum(name.endswith(".html") for name in names) != 1
         ):
             raise ValueError(
                 "Se requieren dos PDF, presentación HTML y transcripción; el quinto archivo debe ser la presentación PDF."
             )
-        if len(names) == 5 and not any(
+        if len(names) >= 5 and not any(
             name.endswith(".html") and name[:-5] + ".pdf" in names for name in names
         ):
             raise ValueError("La presentación PDF debe corresponder al archivo HTML.")

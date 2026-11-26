@@ -34,10 +34,11 @@ class PostgresRepository:
         )
 
     def initialize(self):
-        migration = Path(__file__).resolve().parent / "migrations" / "001_delivery.sql"
+        migrations = Path(__file__).resolve().parent / "migrations"
         with self.connect() as conn, conn.transaction():
             conn.execute("SELECT pg_advisory_xact_lock(210022)")
-            conn.execute(migration.read_text(encoding="utf-8"))
+            for name in ("001_delivery.sql", "002_delivery_review.sql"):
+                conn.execute((migrations / name).read_text(encoding="utf-8"))
 
     @contextmanager
     def locked(self, delivery_id: UUID):
@@ -71,6 +72,14 @@ class PostgresRepository:
                 (delivery_id, artifact_id),
             ).fetchone()
 
+    def report_decisions(self, delivery_id):
+        with self.connect() as conn:
+            return conn.execute(
+                "SELECT decision, operator, created_at FROM delivery_report_decisions "
+                "WHERE delivery_id=%s ORDER BY created_at, decision_id",
+                (delivery_id,),
+            ).fetchall()
+
 
 class RunStore:
     def __init__(self, conn, delivery_id):
@@ -97,6 +106,30 @@ class RunStore:
         self.conn.execute(
             "UPDATE delivery_runs SET report=%s, report_timing=%s, status='draft_ready', error=NULL, updated_at=now() WHERE delivery_id=%s",
             (Jsonb(report), Jsonb(timing), self.delivery_id),
+        )
+
+    def decision(self, decision_id):
+        return self.conn.execute(
+            "SELECT decision, operator FROM delivery_report_decisions "
+            "WHERE delivery_id=%s AND decision_id=%s",
+            (self.delivery_id, decision_id),
+        ).fetchone()
+
+    def save_decision(self, decision_id, decision, operator, report, timing):
+        self.conn.execute(
+            "INSERT INTO delivery_report_decisions "
+            "(delivery_id, decision_id, decision, operator) VALUES (%s,%s,%s,%s)",
+            (self.delivery_id, decision_id, Jsonb(decision), operator),
+        )
+        status = (
+            "draft_ready"
+            if report["status"] in ("draft", "changes_requested")
+            else report["status"]
+        )
+        self.conn.execute(
+            "UPDATE delivery_runs SET report=%s, status=%s, report_timing=%s, updated_at=now() "
+            "WHERE delivery_id=%s",
+            (Jsonb(report), status, Jsonb(timing), self.delivery_id),
         )
 
     def blocked(self, detail):

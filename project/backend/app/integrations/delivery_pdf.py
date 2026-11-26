@@ -11,7 +11,14 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import (
+    KeepTogether,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
 
 from app.delivery.models import DemoRequest, EngineeringHandoff
 
@@ -29,7 +36,13 @@ PHASE_NAMES = {
 
 
 def render_pdf(
-    request: DemoRequest, handoff: EngineeringHandoff, metrics: dict
+    request: DemoRequest,
+    handoff: EngineeringHandoff,
+    metrics: dict,
+    *,
+    version: int = 1,
+    revision_text: str | None = None,
+    approval: dict | None = None,
 ) -> bytes:
     font_dir = Path(reportlab.__file__).parent / "fonts"
     for name, filename in (("Delivery", "Vera.ttf"), ("DeliveryBold", "VeraBd.ttf")):
@@ -41,7 +54,7 @@ def render_pdf(
         fontName="Delivery",
         fontSize=9,
         leading=14,
-        spaceAfter=7,
+        spaceAfter=6,
         textColor=NAVY,
         splitLongWords=True,
     )
@@ -51,8 +64,8 @@ def render_pdf(
         fontName="DeliveryBold",
         fontSize=12,
         leading=17,
-        spaceBefore=14,
-        spaceAfter=8,
+        spaceBefore=11,
+        spaceAfter=6,
         keepWithNext=True,
     )
     small = ParagraphStyle("DeliverySmall", parent=body, fontSize=7.5, leading=11)
@@ -79,8 +92,8 @@ def render_pdf(
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
             ("LEFTPADDING", (0, 0), (-1, -1), 8),
             ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-            ("TOPPADDING", (0, 0), (-1, -1), 7),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
             ("LINEBELOW", (0, 0), (-1, -1), 0.4, colors.HexColor("#D9E3EA")),
         ]
         if header:
@@ -96,7 +109,7 @@ def render_pdf(
         leftMargin=18 * mm,
         topMargin=27 * mm,
         bottomMargin=20 * mm,
-        title=f"Borrador ejecutivo - {request.project_name}",
+        title=f"Informe ejecutivo v{version} - {request.project_name}",
         author="PSWE-07 / flujo local",
     )
     width = A4[0] - 36 * mm
@@ -107,7 +120,7 @@ def render_pdf(
             f"Proyecto {request.project_id} | Entrega {request.delivery_id}", small
         ),
         paragraph(
-            f"Fecha de corte: {handoff.created_at.isoformat()} | Versión del informe: 1",
+            f"Fecha de corte: {handoff.created_at.isoformat()} | Versión del informe: {version}",
             small,
         ),
     ]
@@ -115,7 +128,12 @@ def render_pdf(
         [
             [
                 paragraph(
-                    "BORRADOR DE DEMOSTRACIÓN. Arquitectura y costos simulados. Sin despliegue AWS, sin PR técnico ni aprobación del arquitecto. No acredita cierre del proyecto.",
+                    (
+                        "APROBADO PARA DEMOSTRACIÓN. "
+                        if approval
+                        else "BORRADOR DE DEMOSTRACIÓN. "
+                    )
+                    + "Arquitectura y costos simulados. Sin despliegue AWS, PR técnico del proyecto ni aprobación del arquitecto.",
                     small,
                 )
             ]
@@ -141,7 +159,7 @@ def render_pdf(
             paragraph("1. Resultado y alcance", heading),
             paragraph(handoff.summary),
             paragraph(
-                "Se preparó una composición Terraform S3 con referencia fija al catálogo. Las verificaciones de esta entrega cubren la coherencia de los insumos y la generación de archivos; no acreditan seguridad ni funcionamiento de infraestructura desplegada."
+                "Se preparó una composición Terraform S3 con referencia fija al catálogo. La tabla identifica las verificaciones registradas y su alcance en el emulador."
             ),
         ]
     )
@@ -172,7 +190,7 @@ def render_pdf(
                 ],
                 [width * 0.46, width * 0.24, width * 0.30],
             ),
-            paragraph("Supuestos: " + "; ".join(costs.assumptions)),
+            paragraph("Supuestos: " + " ".join(costs.assumptions)),
             paragraph("Calculadora: " + costs.calculator_reference, small),
             paragraph("Excel: " + costs.spreadsheet_reference, small),
         ]
@@ -183,11 +201,23 @@ def render_pdf(
         "failed": "Fallida",
         "not_run": "No ejecutada",
     }
+    category_names = {
+        "terraform": "Terraform",
+        "security": "Análisis estático",
+        "emulator": "Conexión al emulador",
+        "integration": "Integración con AWS Emulator",
+        "policy": "Política como código",
+        "cleanup": "Limpieza del entorno",
+    }
     story.append(
         table(
             [["Comprobación", "Resultado", "Detalle"]]
             + [
-                [check.name, status_names[check.status], check.detail]
+                [
+                    check.name,
+                    status_names[check.status],
+                    category_names.get(check.detail, check.detail),
+                ]
                 for check in handoff.checks
             ],
             [width * 0.26, width * 0.20, width * 0.54],
@@ -198,9 +228,12 @@ def render_pdf(
             "Estado: implementación preparada; revisión técnica pendiente; sin PR ni integración. La aprobación simulada de los insumos no es una aprobación real del arquitecto."
         )
     )
+    if revision_text:
+        story.append(paragraph("Actualización del Engagement Manager", heading))
+        story.append(paragraph(revision_text))
     story.append(paragraph("4. Tiempos observados por fase", heading))
     timing_rows = [
-        ["Fase / origen", "Lead Time", "PT / esfuerzo", "Espera", "Esfuerzo H / A"]
+        ["Fase / origen", "Lead Time", "PT", "Espera", "Retrabajo", "Esfuerzo H / A"]
     ]
     for row in metrics["phases"]:
 
@@ -214,6 +247,7 @@ def render_pdf(
                 seconds(row["lead_time_seconds"]),
                 seconds(row["process_time_seconds"]),
                 seconds(row["wait_seconds"]),
+                seconds(row["rework_effort_seconds"]),
                 seconds(row["human_effort_seconds"])
                 + " / "
                 + seconds(row["agent_effort_seconds"]),
@@ -222,12 +256,19 @@ def render_pdf(
     story.append(
         table(
             timing_rows,
-            [width * 0.27, width * 0.16, width * 0.16, width * 0.16, width * 0.25],
+            [
+                width * 0.23,
+                width * 0.15,
+                width * 0.13,
+                width * 0.13,
+                width * 0.14,
+                width * 0.20,
+            ],
         )
     )
     story.append(
         paragraph(
-            "PT = esfuerzo activo acumulado humano y agente; H / A muestra su desglose. Con paralelismo, PT puede superar el tiempo transcurrido. La duración activa sin solapamiento y el retrabajo se desglosan en la API. La espera se obtiene de intervalos explícitos, no restando PT al Lead Time.",
+            "PT = esfuerzo activo acumulado humano y agente. H / A muestra su desglose. Con paralelismo, PT puede superar el tiempo transcurrido. La espera se obtiene de intervalos explícitos.",
             small,
         )
     )
@@ -261,6 +302,16 @@ def render_pdf(
         ),
     ):
         story.append(paragraph(f"{label}: {value}", small))
+    if evidence := handoff.inputs.get("emulator_evidence"):
+        story.append(paragraph(f"Evidencia AWS Emulator: {evidence['source']}", small))
+        versions = evidence["versions"]
+        if versions.get("aws_emulator") and versions.get("terraform_version"):
+            story.append(
+                paragraph(
+                    f"{versions['aws_emulator']} | Terraform {versions['terraform_version']}",
+                    small,
+                )
+            )
     for artifact in handoff.artifacts:
         story.append(
             paragraph(
@@ -268,12 +319,21 @@ def render_pdf(
                 small,
             )
         )
-    story.append(
-        paragraph(
-            "Aprobación del Engagement Manager: pendiente. Este avance permite revisar el borrador; ajustes versionados, aprobación formal, MCP y cierre son incrementos posteriores.",
-            small,
+    if approval:
+        story.append(
+            KeepTogether(
+                [
+                    paragraph("Aprobación del Engagement Manager", heading),
+                    paragraph(f"{approval['operator']} | {approval['at']}", small),
+                    paragraph(approval["detail"], small),
+                    paragraph(
+                        f"SHA-256 de la revisión aprobada: {approval['sha256']}", small
+                    ),
+                ]
+            )
         )
-    )
+    else:
+        story.append(paragraph("Aprobación del Engagement Manager: pendiente.", small))
 
     def page(canvas, document):
         canvas.saveState()
@@ -285,15 +345,266 @@ def render_pdf(
         canvas.drawString(18 * mm, A4[1] - 14 * mm, "CONSULTORÍA AWS / PSWE-07")
         canvas.setFont("Delivery", 7)
         canvas.drawRightString(
-            A4[0] - 18 * mm, A4[1] - 14 * mm, "ENTREGA 1 / DEMO LOCAL"
+            A4[0] - 18 * mm, A4[1] - 14 * mm, f"INFORME V{version} / DEMO LOCAL"
         )
         canvas.drawString(
             18 * mm,
             12 * mm,
-            "BORRADOR - datos simulados identificados - sin aprobación",
+            "APROBADO / DEMO" if approval else "BORRADOR / DEMO",
         )
         canvas.drawRightString(A4[0] - 18 * mm, 12 * mm, f"Página {document.page}")
         canvas.restoreState()
 
     doc.build(story, onFirstPage=page, onLaterPages=page)
     return content.getvalue()
+
+
+def render_case_pdf(snapshot, sections, *, version, source, approval=None):
+    """Corporate report from recorded facts; missing values stay visible."""
+    from datetime import UTC, datetime
+
+    font_dir = Path(reportlab.__file__).parent / "fonts"
+    for name, filename in (("Delivery", "Vera.ttf"), ("DeliveryBold", "VeraBd.ttf")):
+        if name not in pdfmetrics.getRegisteredFontNames():
+            pdfmetrics.registerFont(TTFont(name, str(font_dir / filename)))
+    body = ParagraphStyle(
+        "CaseBody",
+        fontName="Delivery",
+        fontSize=9,
+        leading=14,
+        spaceAfter=7,
+        textColor=NAVY,
+    )
+    heading = ParagraphStyle(
+        "CaseHeading",
+        parent=body,
+        fontName="DeliveryBold",
+        fontSize=12,
+        leading=17,
+        spaceBefore=12,
+        keepWithNext=True,
+    )
+    small = ParagraphStyle("CaseSmall", parent=body, fontSize=7.5, leading=11)
+
+    def para(value, style=body):
+        return Paragraph(escape(str(value)), style)
+
+    def seconds(value):
+        return "Sin medición" if value is None else f"{value:,.1f} s"
+
+    width = A4[0] - 36 * mm
+
+    def table(rows, ratios):
+        result = Table(
+            [[para(c, small) for c in row] for row in rows],
+            colWidths=[width * r for r in ratios],
+            repeatRows=1,
+            hAlign="LEFT",
+        )
+        result.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), LIGHT),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 7),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 7),
+                    ("TOPPADDING", (0, 0), (-1, -1), 6),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                    ("LINEBELOW", (0, 0), (-1, -1), 0.4, colors.HexColor("#D9E3EA")),
+                ]
+            )
+        )
+        return result
+
+    project, metrics = snapshot["project"], snapshot["metrics"]
+    stamp = datetime.fromtimestamp(snapshot["captured_at"], UTC).isoformat()
+    title = ParagraphStyle("CaseTitle", parent=heading, fontSize=24, leading=30)
+    story = [
+        para("Informe ejecutivo", title),
+        para(project["title"], heading),
+        para(
+            f"Expediente {snapshot['case_id']} | Versión {version} | Corte {stamp}",
+            small,
+        ),
+        para("INFORME PARCIAL APROBADO" if approval else "BORRADOR PARCIAL", heading),
+        para(
+            "Proyecto ficticio. "
+            if project["is_fictitious"]
+            else "Expediente registrado. "
+        ),
+        para(
+            "La aprobación de este documento no acredita aprobación técnica ni cierra el proyecto. Las fuentes faltantes o simuladas se indican expresamente."
+        ),
+        para("1. Resultados", heading),
+        para(sections["results"]),
+        para("2. Presupuesto y costos", heading),
+    ]
+    budget = snapshot["budget"]
+    story.append(
+        para(
+            f"Presupuesto registrado por dirección: {budget['currency']} {budget['total']}. Periodo no especificado en el registro; no se compara con una estimación mensual."
+            if budget
+            else "Presupuesto de dirección: sin información registrada."
+        )
+    )
+    technical = snapshot["technical"]
+    if technical:
+        costs = technical["costs"]
+        check_status = {
+            "passed": "Correcta",
+            "failed": "Fallida",
+            "not_run": "No ejecutada",
+        }
+        story.extend(
+            [
+                para(
+                    f"Estimación FinOps simulada: {costs['currency']} {costs['estimate_monthly']} por mes. Presupuesto mensual del ejemplo: {costs['budget_monthly']}."
+                ),
+                para(f"Calculadora (simulada): {costs['calculator_reference']}", small),
+                para(f"Excel (simulado): {costs['spreadsheet_reference']}", small),
+                para("3. Validaciones y entrega técnica", heading),
+                table(
+                    [["Comprobación", "Estado", "Alcance"]]
+                    + [
+                        [c["name"], check_status[c["status"]], c["detail"]]
+                        for c in technical["checks"]
+                    ],
+                    [0.30, 0.17, 0.53],
+                ),
+                para(
+                    "Revisión técnica pendiente. Sin PR de implementación integrado. Insumos de arquitectura y FinOps simulados."
+                ),
+            ]
+        )
+    else:
+        story.extend(
+            [
+                para("Estimación FinOps, calculadora y Excel: pendientes."),
+                para("3. Validaciones y entrega técnica", heading),
+                para(
+                    "Sin entrega técnica adjunta. No se ejecutó ingeniería para generar este informe."
+                ),
+            ]
+        )
+    story.append(para("Gasto real AWS: no disponible."))
+    story.append(para("4. Tiempos registrados", heading))
+    story.append(
+        table(
+            [["Fase", "LT al corte", "PT esfuerzo", "Activa", "Humano / agente"]]
+            + [
+                [
+                    PHASE_NAMES[p["phase"]]
+                    + (" (en curso)" if p["in_progress"] else ""),
+                    seconds(p["lead_time_seconds"]),
+                    seconds(p["process_time_seconds"]),
+                    seconds(p["active_elapsed_seconds"]),
+                    f"{seconds(p['human_effort_seconds'])} / {seconds(p['agent_effort_seconds'])}",
+                ]
+                for p in metrics["phases"]
+            ],
+            [0.22, 0.17, 0.17, 0.17, 0.27],
+        )
+    )
+    story.extend(
+        [
+            para(metrics["note"], small),
+            para(
+                f"Ciclos de ajustes observados: {metrics['rework_cycles']}; devoluciones del proceso: {metrics['process_rework_cycles']}. Su duración no se infiere del número de eventos.",
+                small,
+            ),
+            para(
+                "La tabla corresponde al corte previo a generar este PDF. El tiempo de generación y revisión del propio informe se consulta por separado.",
+                small,
+            ),
+        ]
+    )
+
+    def phase_label(phase):
+        names = {f"stage-{n}": name for n, name in enumerate(PHASE_NAMES.values(), 1)}
+        return names.get(phase, phase)
+
+    if metrics["handoffs"]:
+        story.append(para("Entregas y espera de recepción", heading))
+        story.append(
+            table(
+                [["Entrega", "Espera de recepción", "Estado"]]
+                + [
+                    [
+                        f"{phase_label(h['from_phase'])} a {phase_label(h['to_phase'])}",
+                        seconds(h["wait_seconds"]),
+                        "Pendiente" if h["pending_acceptance"] else "Recibida",
+                    ]
+                    for h in metrics["handoffs"]
+                ],
+                [0.48, 0.27, 0.25],
+            )
+        )
+    for label, key in (("5. Riesgos", "risks"), ("6. Siguientes pasos", "next_steps")):
+        story.extend([para(label, heading), para(sections[key])])
+    story.append(para("Requisitos pendientes para el cierre", heading))
+    story.extend(para(item) for item in snapshot["closure_blockers"])
+    story.append(para("7. Decisiones y fuentes", heading))
+    for d in snapshot["decisions"]:
+        event = d["payload"]
+        label = {
+            "stage.changes_requested": "Solicitud de cambios",
+            "stage.approved": "Aprobación de etapa",
+            "stage.rejected": "Rechazo de dirección",
+            "deliverable.ready": "Entregable disponible",
+            "opening.approved": "Apertura aprobada",
+            "opening.rejected": "Apertura rechazada",
+            "approval.decided": "Decisión de revisión",
+        }.get(event.get("kind", d["kind"]), "Decisión registrada")
+        story.append(
+            para(
+                f"{label} | Responsable: {event.get('actor', 'Sin registro')} | Referencia: {d['id']}",
+                small,
+            )
+        )
+    for s in snapshot["sources"]:
+        provenance = {
+            "fictitious": "Ficticia",
+            "recorded": "Registrada",
+            "simulated_inputs": "Insumos simulados",
+        }[s["provenance"]]
+        story.append(para(f"{s['reference']} | Procedencia: {provenance}", small))
+    story.extend(
+        [
+            para(f"Respaldo: {source['filename']}", small),
+            para(f"SHA-256: {source['sha256']}", small),
+        ]
+    )
+    if approval:
+        story.extend(
+            [
+                para("Aprobación del informe parcial", heading),
+                para(f"{approval['operator']} | {approval['at']}", small),
+                para(approval["detail"]),
+                para(f"SHA-256 de la revisión aprobada: {approval['sha256']}", small),
+            ]
+        )
+
+    def page(canvas, doc):
+        canvas.saveState()
+        canvas.setStrokeColor(TEAL)
+        canvas.setLineWidth(2)
+        canvas.line(18 * mm, A4[1] - 18 * mm, A4[0] - 18 * mm, A4[1] - 18 * mm)
+        canvas.setFillColor(NAVY)
+        canvas.setFont("DeliveryBold", 8)
+        canvas.drawString(18 * mm, A4[1] - 14 * mm, "CONSULTORÍA AWS / PSWE-07")
+        canvas.setFont("Delivery", 7)
+        canvas.drawString(18 * mm, 12 * mm, f"INFORME PARCIAL V{version}")
+        canvas.drawRightString(A4[0] - 18 * mm, 12 * mm, f"Página {doc.page}")
+        canvas.restoreState()
+
+    output = BytesIO()
+    SimpleDocTemplate(
+        output,
+        pagesize=A4,
+        leftMargin=18 * mm,
+        rightMargin=18 * mm,
+        topMargin=25 * mm,
+        bottomMargin=20 * mm,
+        title=f"Informe ejecutivo - {project['title']}",
+    ).build(story, onFirstPage=page, onLaterPages=page)
+    return output.getvalue()

@@ -14,10 +14,12 @@ from app.delivery.models import (
     Activity,
     Check,
     DemoRequest,
+    EmulatorEvidence,
     EngineeringHandoff,
     PhaseTiming,
     ReportDraft,
 )
+from app.delivery.terraform import terraform_files
 from app.integrations.delivery_pdf import render_pdf
 from app.persistence.delivery import DeliveryConflict, PostgresRepository
 
@@ -48,76 +50,18 @@ def timing(phase, start, end):
     )
 
 
-def terraform_files(request: DemoRequest) -> dict[str, bytes]:
-    architecture = request.architecture
-    source = f"git::{architecture.baseline.repository}//aws/s3?ref={architecture.baseline.commit}"
-    main = f'''# DEMO: baseline pendiente de aprobación. No desplegar sin revisión.
-terraform {{
-  required_version = ">= 1.9.0, < 2.0.0"
-  required_providers {{
-    aws = {{
-      source  = "hashicorp/aws"
-      version = ">= 6.71.0, < 7.0.0"
-    }}
-  }}
-}}
-
-provider "aws" {{
-  region = var.region
-}}
-
-module "documents" {{
-  source = "{source}"
-
-  bucket_name = var.bucket_name
-  kms_key_arn = var.kms_key_arn
-  tags = {{
-    Project     = "{request.project_id}"
-    Environment = "{architecture.environment}"
-    Owner       = "demo"
-    CostCenter  = "PSWE07"
-  }}
-}}
-
-output "bucket_id" {{
-  value = module.documents.bucket_id
-}}
-'''
-    variables = """variable "region" {
-  type = string
-}
-
-variable "bucket_name" {
-  type = string
-}
-
-variable "kms_key_arn" {
-  type = string
-}
-"""
-    values = {
-        "region": architecture.region,
-        "bucket_name": architecture.bucket_name,
-        "kms_key_arn": architecture.kms_key_arn,
-    }
-    example = (
-        "# Valores simulados. No constituyen accesos ni recursos existentes.\n"
-        + "\n".join(f"{key} = {json.dumps(value)}" for key, value in values.items())
-        + "\n"
-    )
-    return {
-        "main.tf": main.encode(),
-        "variables.tf": variables.encode(),
-        "terraform.tfvars.example": example.encode(),
-    }
-
-
 class DeliveryWorkflow:
     def __init__(self, repository: PostgresRepository, pdf_renderer=render_pdf):
         self.repository, self.pdf_renderer = repository, pdf_renderer
 
-    def run(self, request: DemoRequest):
+    def run(self, request: DemoRequest, evidence: EmulatorEvidence | None = None):
         payload = request.model_dump(mode="json")
+        if evidence:
+            if not evidence.matches(request):
+                raise ValueError(
+                    "La evidencia no corresponde al módulo, región y bucket de la entrega"
+                )
+            payload["emulator_evidence"] = evidence.model_dump(mode="json")
         digest = sha256(
             json.dumps(payload, sort_keys=True, ensure_ascii=True).encode()
         ).hexdigest()
@@ -155,6 +99,14 @@ class DeliveryWorkflow:
                         store.put_artifact(name, "text/plain; charset=utf-8", content)
                         for name, content in terraform_files(request).items()
                     ]
+                    if evidence:
+                        artifacts.append(
+                            store.put_artifact(
+                                "evidence.json",
+                                "application/json",
+                                evidence.model_dump_json(indent=2).encode(),
+                            )
+                        )
                     handoff = EngineeringHandoff(
                         handoff_id=uuid5(request.delivery_id, "engineering-v1"),
                         delivery_id=request.delivery_id,
@@ -204,9 +156,28 @@ class DeliveryWorkflow:
                             "Obtener revisión del baseline y confirmar KMS y demás dependencias. Responsable: Arquitectura.",
                             "Ejecutar Terraform, seguridad, políticas y el despliegue local acordado. Responsable: Ingeniería.",
                             "Publicar el PR técnico y obtener revisión e integración autorizadas. Responsable: Ingeniería / Arquitectura.",
-                            "Conectar MCP y completar ajustes, aprobación del informe y cierre. Responsable: Engagement Manager / backend.",
+                            "Completar revisión y presentación del informe. Responsable: Engagement Manager.",
                         ],
                     )
+                    if evidence:
+                        origin = evidence.run_url or "corrida local"
+                        handoff.inputs["emulator_evidence"] = {
+                            "source": origin,
+                            "versions": evidence.versions,
+                        }
+                        handoff.checks[2:] = [
+                            Check(
+                                name=check.name,
+                                status=check.status,
+                                provenance="real",
+                                detail=check.category,
+                            )
+                            for check in evidence.checks
+                        ]
+                        handoff.pending_items[2] = (
+                            "Revisar la corrida importada y resolver los fallos o coberturas pendientes. "
+                            "La prueba emulada no valida los controles efectivos de AWS."
+                        )
                     store.save_handoff(handoff.model_dump(mode="json"))
                 return {"engineering_ready": True}
 
@@ -257,6 +228,10 @@ class DeliveryWorkflow:
 
 
 def public_result(row):
+    if row["request"].get("kind") == "case_report":
+        from app.delivery.report import case_result
+
+        return case_result(row)
     handoff = row["handoff"]
     timings = (
         [PhaseTiming.model_validate(t) for t in handoff["timings"]] if handoff else []

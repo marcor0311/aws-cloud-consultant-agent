@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+import hashlib
 import json
 import os
 import socket
@@ -340,9 +341,35 @@ async def simulate_stuart(runtime):
         comentario="Stuart y el agente reorganizan el planteamiento antes de presentar a dirección.",
     )
     revision = changed["state"]["revision"]
+    # Only this offline journey uses placeholder documents; never real approved inputs.
+    inputs = runtime.settings.mock_dir / "mock-presentation" / case_id / f"v{revision}"
+    inputs.mkdir(parents=True, exist_ok=True)
+    placeholders = {
+        "resumen.pdf": changed["state"]["draft"],
+        "ficha.pdf": json.dumps(changed["state"]["package"], ensure_ascii=False),
+        "presentacion.html": json.dumps(
+            changed["state"]["package"]["presentation"], ensure_ascii=False
+        ),
+        "presentacion.pdf": json.dumps(
+            changed["state"]["package"]["presentation"], ensure_ascii=False
+        ),
+        "transcripcion.md": changed["state"]["transcript"],
+    }
+    files = []
+    for name, text in placeholders.items():
+        data = ("MOCK: documento de prueba offline\n" + text).encode()
+        (inputs / name).write_bytes(data)
+        files.append({"name": name, "sha256": hashlib.sha256(data).hexdigest()})
+    await call(
+        "registrar_archivos_presentacion",
+        expediente_id=case_id,
+        revision=revision,
+        archivos=files,
+        directorio=str(inputs),
+    )
     await call("comenzar_revision", expediente_id=case_id, revision=revision)
     runtime.mock_clock.advance(15)
-    await call(
+    script = await call(
         "revisar_preparacion",
         expediente_id=case_id,
         decision="approve",
@@ -353,6 +380,34 @@ async def simulate_stuart(runtime):
             "actor": "Stuart (mock)",
             "step": "Aprobar revisión exacta",
             "revision": revision,
+        }
+    )
+    revision = script["state"]["revision"]
+    await call("comenzar_revision", expediente_id=case_id, revision=revision)
+    runtime.mock_clock.advance(30)
+    await call(
+        "revisar_preparacion",
+        expediente_id=case_id,
+        decision="approve",
+        revision=revision,
+    )
+    trace.append(
+        {
+            "actor": "Stuart (mock)",
+            "step": "Aprobar guion de la presentación",
+            "revision": revision,
+        }
+    )
+    exported = await call(
+        "exportar_paquete_aprobado",
+        expediente_id=case_id,
+        revision=revision,
+    )
+    trace.append(
+        {
+            "actor": "Agente de preparación (mock)",
+            "step": "Exportar paquete aprobado",
+            "result": exported,
         }
     )
     runtime.mock_clock.advance(120)
@@ -372,10 +427,11 @@ async def simulate_stuart(runtime):
 
 def export_run(runtime, collaboration):
     directory = runtime.settings.mock_dir
+    projects = {project["case_id"]: project for project in runtime.owned_cases()}
     for artifact in runtime.store.list("artifact"):
-        project = next(
-            p for p in runtime.owned_cases() if p["case_id"] == artifact["case_id"]
-        )
+        project = projects.get(artifact["case_id"])
+        if project is None:
+            continue
         folder = (
             directory / "artifacts" / project["project_id"] / f"v{artifact['revision']}"
         )
@@ -383,13 +439,20 @@ def export_run(runtime, collaboration):
         for name, content in artifact["documents"].items():
             (folder / name).write_text(content)
     with runtime.store.engine.connect() as db:
-        schema = (
-            db.exec_driver_sql(
-                "SELECT sql FROM sqlite_master WHERE type='table' AND name LIKE 'workflow_%'"
+        if runtime.store.engine.dialect.name == "sqlite":
+            schema = (
+                db.exec_driver_sql(
+                    "SELECT sql FROM sqlite_master WHERE type='table' AND name LIKE 'workflow_%'"
+                )
+                .scalars()
+                .all()
             )
-            .scalars()
-            .all()
-        )
+        else:
+            schema = [
+                f"PostgreSQL table: {name}"
+                for name in runtime.store.engine.dialect.get_table_names(db)
+                if name.startswith("workflow_")
+            ]
     (directory / "schema.sql").write_text(";\n\n".join(schema) + ";\n")
     report = {
         "mode": "mock",
@@ -408,12 +471,19 @@ def export_run(runtime, collaboration):
     return report
 
 
-def run_demo(directory, *, collaborate=False, activate=False):
+def run_demo(
+    directory,
+    *,
+    collaborate=False,
+    activate=False,
+    database_url=None,
+    checkpoint_url=None,
+):
     directory = Path(directory).resolve()
     directory.mkdir(parents=True, exist_ok=False, mode=0o700)
     settings = WorkflowSettings(
-        database_url=f"sqlite:///{directory / 'workflow.sqlite3'}",
-        checkpoint_url=str(directory / "checkpoints.sqlite3"),
+        database_url=database_url or f"sqlite:///{directory / 'workflow.sqlite3'}",
+        checkpoint_url=checkpoint_url or str(directory / "checkpoints.sqlite3"),
         enabled=True,
         manager_id="stuart",
         mode="mock",

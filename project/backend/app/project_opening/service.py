@@ -1,5 +1,6 @@
 """Validate approvals and execute a recoverable opening without deciding business policy."""
 
+from app.preparation.processing import CORPORATE_FILENAMES
 from app.project_opening.models import OpeningRequest
 from app.project_opening.ports import OpeningRepository
 from app.workflow.ports import WorkflowExecution
@@ -19,8 +20,21 @@ class OpeningService:
         self.validate_board = validate_board
 
     def register(self, value):
-        request = OpeningRequest.model_validate(value)
-        self.validate_files(request.files)
+        request = OpeningRequest.model_validate(value, context={"stored_legacy": True})
+        if len(request.files) not in {3, 6} and {f.name for f in request.files} != set(
+            CORPORATE_FILENAMES
+        ):
+            try:
+                existing = self.repository.get(request.case_id)
+            except ValueError:
+                raise ValueError(
+                    "Las nuevas aperturas requieren seis archivos, incluido el guion aprobado."
+                ) from None
+            if existing["request_sha256"] != request.fingerprint():
+                raise ValueError(
+                    "La apertura anterior tiene otra decisión; conciliar sin reemplazarla."
+                )
+        self.validate_files(request.files, request.case_id)
         source = self.repository.preparation_delivery(
             request.case_id, [f.model_dump() for f in request.files]
         )
@@ -36,8 +50,13 @@ class OpeningService:
     def audit(self, case_id):
         return self.repository.audit(case_id)
 
+    def metrics(self, case_id):
+        return self.repository.metrics(case_id)
+
     def preflight(self, case_id):
         record = self.get(case_id)
+        if record["status"] == "declined":
+            raise ValueError("El proyecto fue rechazado en Dirección.")
         self.repository.validate_preparation(record)
         self.validate_files(
             OpeningRequest.model_validate(
@@ -47,7 +66,8 @@ class OpeningService:
                     if key in record
                 },
                 context={"stored_legacy": True},
-            ).files
+            ).files,
+            case_id,
         )
         certificate = self.validate_board(case_id)
         return {
@@ -66,6 +86,8 @@ class OpeningService:
     def run(self, case_id):
         with self.repository.lock(case_id):
             record = self.get(case_id)
+            if record["status"] == "declined":
+                raise ValueError("El proyecto fue rechazado en Dirección.")
             self.repository.validate_preparation(record)
             self.validate_files(
                 OpeningRequest.model_validate(
@@ -75,7 +97,8 @@ class OpeningService:
                         if key in record
                     },
                     context={"stored_legacy": True},
-                ).files
+                ).files,
+                case_id,
             )
             certificate = self.validate_board(case_id)
             thread = f"opening:{case_id}:board:{certificate['digest']}"
@@ -101,5 +124,7 @@ class OpeningService:
             return self.get(case_id)
 
     def run_next(self):
-        pending = [r for r in self.queue() if r["status"] != "delivered"]
+        pending = [
+            r for r in self.queue() if r["status"] not in {"delivered", "declined"}
+        ]
         return self.run(pending[0]["case_id"]) if pending else {"status": "idle"}

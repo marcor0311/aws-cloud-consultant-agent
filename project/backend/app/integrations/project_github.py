@@ -64,6 +64,11 @@ class ProjectGitHub:
             )
         return response.json() if response.content else {}
 
+    def find_user(self, login):
+        """Read-only lookup so a mistyped architect fails before any GitHub write."""
+        user = self.request("GET", "/users/" + quote(login, safe=""), missing=True)
+        return user["login"] if user and user.get("type") == "User" else None
+
     @staticmethod
     def repo_path(record):
         return f"/repos/{record['owner']}/{record['repository_name']}"

@@ -3,12 +3,16 @@
 from typing import Protocol
 
 from app.preparation.models import ExecutivePackage
+from app.preparation.processing import ProcessedMeeting
 from app.preparation.state import PreparationState
 
 
 class DraftGenerator(Protocol):
-    def __call__(self, state: PreparationState) -> ExecutivePackage: ...
+    """Return a source-validated package using transcript and optional meeting_notes.
 
+    Preserve their separate citation IDs and leave disagreements for manager review.
+    """
 
-class ReferenceSearch(Protocol):
-    def __call__(self, query: str) -> list[dict]: ...
+    def __call__(
+        self, state: PreparationState
+    ) -> ExecutivePackage | ProcessedMeeting: ...

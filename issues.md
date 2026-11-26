@@ -18,7 +18,7 @@ flowchart TB
         codigo -->|Código válido| agenda["Confirmar la reunión inicial"]
         agenda --> reunion["Reunión del cliente<br/>con el Engagement Manager"]
         reunion --> preparacion["Agente de preparación<br/>Trabaja con el Engagement Manager"]
-        preparacion --> entrega["Resumen ejecutivo, presentación<br/>y guion revisados y aprobados<br/>por el Engagement Manager"]
+        preparacion --> entrega["Resumen ejecutivo, presentación<br/>y transcripción PDF revisados y aprobados<br/>por el Engagement Manager"]
         classDef default fill:#eff6ff,stroke:#2563eb,color:#0f172a;
         classDef inicio fill:#fff7ed,stroke:#d97706,color:#7c2d12;
         classDef handoff fill:#ecfdf5,stroke:#059669,color:#064e3b;
@@ -34,34 +34,36 @@ flowchart TB
 - **Preparación:** ChatGPT, Claude o una interfaz web con cliente MCP; GitHub para los repositorios de proyectos.
 - **Orquestación y datos:** LangGraph y PostgreSQL.
 
-**Herramientas recomendadas:** Google Calendar, Gmail API, endpoint de whitelist y MCP del histórico de proyectos.
+**Herramientas recomendadas:** Google Calendar, Gmail API, endpoint de whitelist y MCP del procesador documental.
 
 **Entrada:**
 
 - **Agendamiento:** solicitud del cliente, correo y disponibilidad para la reunión inicial.
-- **Preparación:** transcripción y notas de la reunión, junto con antecedentes de proyectos anteriores.
+- **Preparación:** transcripción y notas de la reunión, sin comparar otros proyectos.
 
-**Entrega:** reunión inicial confirmada; resumen ejecutivo, presentación y guion aprobados por el Engagement Manager para presentar a dirección ejecutiva.
+**Entrega:** reunión inicial confirmada; resumen ejecutivo, presentación y transcripción PDF limpia aprobados por el Engagement Manager para presentar a dirección ejecutiva.
 
 **Funcionalidades:**
 
 - [ ] **Agendamiento:** verificar el registro y el código por correo, consultar disponibilidad y confirmar la reunión; gestionar cancelaciones y reprogramaciones, y remitir al asesor a quienes no estén registrados.
-- [ ] **Histórico de proyectos:** consultar proyectos anteriores para recuperar antecedentes relevantes.
-- [ ] **Preparación ejecutiva:** organizar la transcripción, las notas y los antecedentes; elaborar el resumen con necesidades, requisitos, presupuesto y plazos, junto con la presentación y el guion, para revisión y aprobación del Engagement Manager.
+- [ ] **Preparación ejecutiva:** procesar la transcripción completa de Stuart y generar exactamente tres entregables: resumen ejecutivo, presentación y transcripción PDF limpia. El resumen y la presentación incluyen objetivo, problema, alcance, necesidades, requisitos, integraciones, restricciones, presupuesto, plazos, riesgos y decisiones de la reunión. No añadir descubrimiento, preguntas nuevas, comparaciones ni guion.
 
-## 2. Dirección ejecutiva — Priorización
+## 2. Aprobación y apertura del proyecto
 
 ```mermaid
 %%{init: {"theme":"base","themeVariables":{"darkMode":false,"background":"#ffffff","primaryColor":"#eff6ff","primaryTextColor":"#0f172a","primaryBorderColor":"#2563eb","lineColor":"#64748b","edgeLabelBackground":"#ffffff","clusterBkg":"#ffffff","clusterBorder":"#cbd5e1"},"flowchart":{"diagramPadding":0}}}%%
 flowchart TB
     subgraph lienzo[" "]
         direction TB
-        insumos["Paquete completo del Engagement Manager"] --> agente["Agente presenta en Google Meet<br/>y responde preguntas"]
-        agente --> junta{"¿La junta aprueba<br/>continuar con el proyecto?"}
-        junta -->|No| fin["Fin del flujo<br/>El Engagement Manager se encarga"]
-        junta -->|Sí| decision["Registrar prioridad, presupuesto<br/>y arquitecto asignado"]
-        decision --> repo["Crear repo desde el template<br/>y cargar los insumos aprobados"]
-        repo --> entrega["Asignar el issue<br/>al arquitecto"]
+        insumos["Paquete aprobado por el Engagement Manager"] --> identificar["El MCP pregunta<br/>qué proyecto gestionar"]
+        identificar --> aprobacion{"¿Dirección aprobó<br/>el proyecto?"}
+        aprobacion -->|No| fin["Registrar el rechazo<br/>y cerrar el flujo"]
+        aprobacion -->|Sí| prioridad["Preguntar la prioridad<br/>en la cola actual"]
+        prioridad --> presupuesto["Preguntar el presupuesto<br/>aprobado"]
+        presupuesto --> arquitecto["Preguntar el arquitecto asignado"]
+        arquitecto --> confirmar["Resumir los datos y las acciones;<br/>pedir confirmación a Stuart"]
+        confirmar --> repo["Crear el repo desde el template<br/>y cargar los insumos aprobados"]
+        repo --> entrega["Crear y asignar el issue<br/>de arquitectura"]
         classDef default fill:#eff6ff,stroke:#2563eb,color:#0f172a;
         classDef inicio fill:#fff7ed,stroke:#d97706,color:#7c2d12;
         classDef handoff fill:#ecfdf5,stroke:#059669,color:#064e3b;
@@ -71,18 +73,22 @@ flowchart TB
     style lienzo fill:#ffffff,stroke:#ffffff,stroke-width:128px;
 ```
 
-**Stack recomendado:** OpenClaw, Google Meet, LangGraph y PostgreSQL.
+**Objetivo:** permitir que Stuart registre y gestione la decisión de dirección desde un chat de IA conectado al MCP del proyecto. El chat puede ser ChatGPT, Claude u otro cliente compatible con MCP.
 
-**Herramientas recomendadas:** GitHub y notificaciones por Gmail API o Slack.
+**Entrada:** paquete del proyecto preparado y aprobado por el Engagement Manager, con los tres PDF: resumen ejecutivo, presentación y transcripción limpia. La reunión y la decisión de dirección ocurren fuera del sistema; el agente no presenta, responde preguntas ni organiza votaciones.
 
-**Entrada:** paquete completo preparado por el Engagement Manager para la reunión con dirección ejecutiva: resumen ejecutivo aprobado, transcripción, notas, antecedentes, presupuesto, plazos, presentación y guion.
+**Flujo conversacional:** Stuart inicia la gestión desde un chat de IA conectado al MCP. El MCP le pregunta cuál proyecto quiere gestionar y, para ese proyecto, si dirección aprobó o rechazó su continuación. Si fue rechazado, registra la decisión y termina el flujo. Si fue aprobado, pregunta en orden la prioridad del proyecto en la cola actual, el presupuesto autorizado y el arquitecto asignado. Luego presenta un resumen de la decisión y los datos, explica que creará el repositorio desde el template, cargará los insumos aprobados y abrirá el issue de arquitectura asignado; solo continúa cuando Stuart confirma.
 
-**Entrega:** repo del proyecto creado desde el template, con propuesta, decisión, prioridad, presupuesto e issue de arquitectura cargados.
+**Resultado:** un rechazo queda registrado sin crear recursos en GitHub. Tras la confirmación de Stuart para un proyecto aprobado, el MCP registra la decisión y los datos acordados, crea el repositorio a partir de `aws-cloud-consulting-project-template`, carga los insumos aprobados y crea el issue de arquitectura asignado al arquitecto indicado.
 
-**Funcionalidades:**
+**Criterios de aceptación:**
 
-- [ ] Presentar, responder preguntas y registrar la decisión de la junta.
-- [ ] Crear el repo desde `aws-cloud-consulting-project-template`, cargar los insumos aprobados y notificar al arquitecto.
+- [ ] Al iniciar, el MCP pregunta cuál proyecto preparado quiere gestionar Stuart.
+- [ ] Para el proyecto elegido, el MCP pregunta si dirección aprobó o rechazó su continuación.
+- [ ] Si fue rechazado, registra la decisión y no crea repositorio ni issue.
+- [ ] Si fue aprobado, pregunta la prioridad en la cola actual, el presupuesto aprobado y el arquitecto asignado.
+- [ ] Antes de crear recursos, presenta a Stuart un resumen de los datos y las acciones previstas, y espera su confirmación.
+- [ ] Tras la confirmación, valida y persiste la decisión y los datos; crea el repositorio desde `aws-cloud-consulting-project-template`, carga los insumos aprobados y crea el issue de arquitectura asignado al arquitecto.
 
 ## 3. Cloud Solutions Architect — Diseño
 
@@ -126,6 +132,10 @@ flowchart TB
 - [Agent Toolkit for AWS](https://docs.aws.amazon.com/agent-toolkit/latest/userguide/what-is-agent-toolkit.html)
 - [AWS DevOps Agent](https://docs.aws.amazon.com/devopsagent/latest/userguide/working-with-devops-agent-accessing-devops-agent-index.html)
 - [AWS Security Agent](https://docs.aws.amazon.com/securityagent/latest/userguide/what-is.html)
+
+**Tecnologías recomendadas:**
+
+- [AWS Diagram as Code](https://github.com/awslabs/diagram-as-code): tecnología a tomar en cuenta para generar diagramas de arquitectura AWS como código; evaluar su ajuste al flujo y a los entregables del proyecto.
 
 > Acceso complementario: sesiones de Codex separadas para proyecto y baselines; [GitHub MCP](https://github.com/github/github-mcp-server) para acceso directo a módulos e issues/PRs; MCP del backend para tiempos, handoffs y coordinación con LangGraph. AWS Pricing MCP, AWS MCP y Terraform MCP configurados para el puesto.
 
@@ -230,10 +240,11 @@ flowchart TB
     style lienzo fill:#ffffff,stroke:#ffffff,stroke-width:128px;
 ```
 
-**Stack recomendado:** Codex, Terraform, LangGraph y PostgreSQL.
+**Stack recomendado:** Codex, Terraform, AWS Emulator, GitHub Actions, LangGraph y PostgreSQL.
 
 **Herramientas recomendadas:**
 
+- [AWS Emulator](https://github.com/aws/aws-emulator) y su [skill oficial `aws-emulator`](https://docs.aws.amazon.com/emulator/latest/userguide/getting-started-agent.html): entorno oficial de pruebas locales de Terraform.
 - [Agent Toolkit for AWS](https://docs.aws.amazon.com/agent-toolkit/latest/userguide/what-is-agent-toolkit.html)
 - [AWS DevOps Agent](https://docs.aws.amazon.com/devopsagent/latest/userguide/working-with-devops-agent-accessing-devops-agent-index.html)
 - [AWS Security Agent](https://docs.aws.amazon.com/securityagent/latest/userguide/what-is.html)
@@ -247,10 +258,13 @@ flowchart TB
 **Funcionalidades:**
 
 - [ ] Implementar la infraestructura con Codex en el repo del proyecto, a partir del diseño aprobado.
-- [ ] Consultar baselines por GitHub MCP y reutilizar módulos aprobados.
-- [ ] Probar la solución, validar seguridad y guardar evidencias del despliegue local.
-- [ ] El agente de Codex abre el PR de implementación al terminar las pruebas, con documentación, evidencias y referencias a los insumos de FinOps, y solicita la revisión y aprobación del arquitecto.
+- [ ] Consultar baselines por GitHub MCP y reutilizar módulos aprobados y versionados. Antes de implementar, Codex revisa con `aws-emulator` la compatibilidad de servicios AWS y módulos Terraform, y la confirma con pruebas reales en el emulador.
+- [ ] Automatizar `terraform fmt`, `validate`, `plan`, `apply` y `destroy`, pruebas de integración, análisis de seguridad y políticas como código. Ejecutar las pruebas de integración con AWS Emulator localmente y en GitHub Actions, sin credenciales reales ni costos de infraestructura AWS; asegurar la limpieza incluso ante fallos.
+- [ ] Mantener un catálogo versionado de servicios y recursos Terraform probados, con versiones, éxitos, errores y limitaciones. Guardar evidencias, resultados, Lead Time y Process Time mediante LangGraph/PostgreSQL.
+- [ ] El agente de Codex abre el PR de implementación al terminar las pruebas, con documentación, evidencias y referencias a los insumos de FinOps, y solicita la revisión y aprobación obligatoria del Cloud Solutions Architect.
 - [ ] Notificar al Engagement Manager cuando el PR esté aprobado.
+
+> Distinguir errores de Terraform de limitaciones del emulador. Las pruebas exitosas no garantizan compatibilidad completa con AWS real ni validan sus controles de seguridad; los análisis de seguridad y políticas se ejecutan por separado.
 
 ## 6. Engagement Manager — Informe ejecutivo
 

@@ -82,6 +82,36 @@ conecta los eventos de preparación con el proceso principal y entrega el runtim
 No importa FastAPI. `api/dependencies.py` se ocupa de `Depends`, autenticación,
 instancias HTTP y conversión de fallos a respuestas HTTP.
 
+La preparación usa por defecto `integrations/ai/chatgpt_preparer.py` con la sesión
+renovable Sign in with ChatGPT existente. Usa exclusivamente la transcripción y
+las notas del proyecto como fuentes y envía ese contexto a Responses con OAuth,
+`store=false` y `stream=true`; valida
+el paquete y sus citas antes de persistirlo. `WORKFLOW_PREPARATION_PROVIDER=api`
+selecciona explícitamente el adaptador anterior; nunca es un fallback automático.
+La activación de inferencia continúa siendo expresa. El worker encola desde la
+transcripción y recupera entradas anteriores sin preparación durante mantenimiento.
+La recuperación incluye la pausa interactiva anterior `draft_with_chatgpt`:
+encola una continuación del checkpoint y el servicio la reanuda únicamente cuando
+el worker indica que existe un generador inyectado. Las pausas de revisión humana
+no se reanudan por esta recuperación. Las tareas fallidas conservan el bloqueo
+y requieren reintento explícito tras corregir su causa.
+
+`mcp_server.py` ofrece STDIO y Streamable HTTP privado en localhost:8769/mcp.
+Comparte el guard Bearer `integrations/mcp_http.py` con el MCP de apertura.
+La herramienta de lectura `prepare` consulta cola, ejecución, bloqueos y documentos;
+no inicia inferencia ni promete procesamiento cuando una tarea está fallida.
+La skill del paquete local `plugins/aws-cloud-consultant/` define `/prepare` para
+clientes compatibles y requiere enlace e instalación en la cuenta de ChatGPT.
+
+El backend local expone `GET /health` mediante `api/health.py`. El adaptador
+`integrations/health.py` revisa la configuración de verificación y renueva en
+memoria las autorizaciones OAuth de Google para Calendar, Gmail y workflow.
+Informa todos los resultados y su recuperación en una respuesta sin credenciales,
+con estado HTTP 503 si hay un fallo requerido. Conserva una caché de hasta treinta
+segundos invalidada por cambios de archivo. No compone runtimes, modifica estado,
+envía correo ni ejecuta inferencia. El receptor público de Calendar no expone esta
+ruta; `GET /` sigue siendo una comprobación básica sin llamadas externas.
+
 | Módulo | Responsabilidad actual |
 | --- | --- |
 | `clients/domain.py` | Identidad, código permanente y contrato `ClientRegistry` |
@@ -130,7 +160,7 @@ e `interrupt()`. `preparation/graph.py` construye el flujo posterior a la reuni�
 
 | Etapa | Condición de avance |
 | --- | --- |
-| 1. Engagement Manager | Reunión verificada → transcripción utilizable → preparación → aprobación exacta |
+| 1. Engagement Manager | Transcripción recibida → cinco archivos corporativos → aprobación expresa del conjunto |
 | 2. Dirección | Aprobación expresa; el rechazo termina el proceso |
 | 3. Arquitectura | Entregable versionado y aprobación expresa |
 | 4. FinOps | Aprobación → ingeniería; solicitud de cambios → arquitectura |
@@ -141,6 +171,25 @@ El proceso usa `process:<case_id>` y preparación usa `preparation:<case_id>`.
 Son dos grafos con estados independientes enlazados por eventos; no se convierten
 en un nuevo grafo anidado durante esta reorganización. Agent Server y
 `langgraph.json` no forman parte de este modo de ejecución.
+
+El procesador actual usa `ProcessedMeeting` (`preparation/processing.py`) y la
+transcripción completa como única fuente documental. El proveedor redacta el resumen
+y las diapositivas sin descubrimiento, preguntas nuevas, guion ni comparaciones.
+`integrations/processed_documents.py` adapta ese contenido a `MeetingTranscript` y
+`MeetingInsumos` y llama a `integrations/insumos_export.py`, el generador corporativo
+vigente. Reutiliza ReportLab, Lato y la plantilla HTML; Chromium imprime las mismas
+diapositivas a PDF sin red. Publica resumen de reunión, ficha de proyecto,
+presentación HTML/PDF y transcripción íntegra PDF en `insumos/<case_id>/`.
+No completa datos ausentes para satisfacer la plantilla. El servicio recibe el
+publicador por inyección y notifica `awaiting_review` tras exportar los cinco.
+`prepare` devuelve nombres/rutas, carpeta, revisión y estado, sin checkpoint completo.
+Antes de aprobar se verifican los archivos; la aprobación del conjunto conduce al
+handoff y persiste los mismos bytes para agente 2, sin paso de guion. La reexportación
+local del contenido guardado crea una revisión pendiente sin nueva inferencia.
+Los contratos y nodos anteriores se conservan para expedientes existentes de tres
+archivos y de cuatro/cinco/seis archivos con Markdown y eventual guion. No se
+reescriben manifiestos aprobados. `query`, las notas y la huella previa permanecen
+para no invalidar checkpoints existentes.
 
 Cada evento identifica etapa, iteración y versión. Se valida al encolar y al
 aplicar. Una devolución incrementa la iteración e invalida aprobaciones antiguas.
@@ -168,6 +217,16 @@ de comprensión del lenguaje por un modelo real. La preparación es otro agente
 lógico implementado como grafo del backend y consta en el registro de agentes.
 Las pruebas conservan los mocks y transcripts simulados. No hay escenarios ni
 workflows de simulación cloud; las pruebas no hacen llamadas reales al agente.
+
+Un resultado MCP respaldado por el backend con `not_registered` o `not_enabled`
+cambia a una fase de derivación (`tools/advisor_transfer.py`) sin herramientas de
+calendario ni datos del registro. Conserva la voz de Alisa, ofrece hablar con un
+asesor y requiere aceptación explícita posterior a la oferta reproducida.
+`integrations/sip_transfer.py` envía SIP REFER para el único participante SIP
+remoto de la sala activa, con destino E.164 privado y espera acotada. Un fallo
+conserva la conversación y ofrece contacto alternativo; no habilita el registro
+ni autoriza citas. No se crean llamadas nuevas, trunks ni cuentas de proveedor.
+Ver [configuración y límites](../project/agents/1.%20calendar%20assistant/README.md#transferencia-de-la-llamada-activa).
 
 La sesión de voz conserva una referencia privada de la cita y entrega un recibo
 firmado después de cerrar el audio. El backend persiste la entrega y el worker
@@ -199,7 +258,8 @@ Ver [operación y límites](../project/transcript-capture/README.md).
 `project/agents/2. meeting assistant` contiene identidad, instrucciones, plantilla
 fija del issue y la entrada de ejecución. Su runtime está en
 `backend/app/project_opening/`: modelos y servicio independientes de proveedores,
-grafo LangGraph con dependencias inyectadas y adaptador MCP privado por STDIO.
+grafos LangGraph con dependencias inyectadas y MCP por STDIO o Streamable HTTP
+local protegido con Bearer para el Secure MCP Tunnel.
 `bootstrap.create_opening_runtime` compone el runtime con PostgreSQL obligatorio.
 No se importa la carpeta numerada como paquete Python.
 
@@ -207,19 +267,45 @@ No se importa la carpeta numerada como paquete Python.
 mediciones y handoffs de la base de workflow. Reserva correlativos por compañía y
 ordena la cola de proyectos en una transacción. La prioridad y comentarios de
 dirección permanecen en PostgreSQL. El presupuesto se registra allí como decisión
-y también se presenta en el issue como contexto técnico. El identificador de
-checkpoint es `opening:<case_id>:board:<certificado>` y el saver usa la misma base PostgreSQL.
+y también se presenta en el issue como contexto técnico. Los checkpoints de
+conversación y apertura usan PostgreSQL.
 
 La entrada exige la entrega aprobada de preparación y un manifiesto persistido
-con los hashes de los cinco archivos. El registro del agente 2 acepta esa entrega
+con los hashes de los cinco archivos corporativos. Acepta también contratos
+anteriores, incluido el de seis archivos con `speaker-notes.md` aprobado. El registro del agente 2 acepta esa entrega
 y cada ejecución revalida su revisión. No crea retrospectivamente reuniones.
-El grafo exige unanimidad de junta, genera el repositorio desde template, carga el paquete en `docs/initial-structure`, abre y fusiona un PR hacia la rama
-principal, verifica el merge, asigna el issue y registra la entrega. Un merge
+
+En el flujo anterior con guion, antes de aprobar la presentación, `registrar_archivos_presentacion` vincula sus
+cinco archivos exportados a la revisión; la aprobación incorpora su hash conjunto.
+Si falta ese registro, la aprobación se rechaza y permanece pendiente, sin generar
+guion ni registrar una decisión aprobatoria.
+Tras aprobar el guion, `exportar_paquete_aprobado` copia esos cinco archivos y el
+guion exacto de SQL a `approved/<case_id>/v<revision>/`, bajo el directorio de
+insumos. Registra el manifiesto de seis archivos y nunca sobrescribe otra revisión.
+La ubicación absoluta de origen se conserva desde el registro inicial, solo en SQL, para que otros runtimes puedan
+localizar una exportación hecha fuera del directorio predeterminado. No se publica
+esa ruta. La exportación aprobada también persiste en PostgreSQL los bytes exactos
+de los seis archivos y `manifest.json`; los hashes se verifican antes de publicar.
+Los registros anteriores de cuatro o cinco archivos conservan su ubicación.
+
+El MCP conversa paso a paso: pregunta el proyecto, la decisión sí/no y, si se
+aprueba, la prioridad en la cola, el presupuesto y el arquitecto. Resume lo que
+registrará y creará, y espera confirmación final de Stuart. Un rechazo o
+cancelación no escribe en GitHub. Tras la confirmación, LangGraph crea el repo
+desde template, carga el paquete, abre y fusiona un PR hacia la rama principal,
+verifica el merge, asigna el issue y registra la entrega. Un merge
 bloqueado conserva el PR y pausa el proceso antes del issue. Los nuevos expedientes
 crean repositorios públicos por defecto (`private=false`) en `aws-cloud-consulting-group`; el template permanece en la
 cuenta personal. `issue_assignee` permite un responsable temporal del issue sin
-cambiar el arquitecto destinatario del handoff. El proceso principal de seis etapas no avanza
-automáticamente: la conexión con las reuniones de dirección queda para después.
+cambiar el arquitecto destinatario del handoff. Una aprobación de junta todavía
+no avanza automáticamente el proceso principal. Un resultado `not_approved`
+encola el rechazo en la misma transacción que sella el certificado; el worker
+existente entrega `stage.rejected` y cierra Dirección como `declined`.
+`project_opening/decisions.py` verifica certificado, apertura, manifiesto, entrega
+aceptada y aprobación exacta de preparación en el proceso. Usa revisión y hash
+persistidos, el emisor de la entrega del acta y el resultado certificado como
+motivo; no infiere una opinión humana. Si falta correspondencia, conserva la tarea
+fallida con un recibo de bloqueo para conciliación. No crea otro worker ni avisos.
 
 Los reintentos concilian identidad del repo, blobs y marcador del issue antes de
 escribir. Los PDF se cargan como blobs base64 y el paquete se publica en un único
@@ -230,7 +316,9 @@ hasta verificar la asignación al arquitecto.
 `make agent2-preview` ejecuta el mismo grafo con PostgreSQL real aislado y un
 adaptador GitHub que solo escribe archivos locales en `project/generated/`.
 Nunca consulta ni modifica GitHub. El informe distingue esa simulación de una
-entrega real. `make agent2` expone las herramientas MCP; no publica al arrancar.
+entrega real. `make agent2` expone MCP por STDIO y `make agent2-http` sirve
+Streamable HTTP local para ChatGPT mediante Secure MCP Tunnel; ninguno publica
+al arrancar.
 
 El uso del modelo se separa de los pasos deterministas de apertura. Sign in with
 ChatGPT tiene credenciales privadas, renovación y logout en
@@ -251,18 +339,11 @@ credenciales: requiere `WORKFLOW_INFERENCE_ENABLED=1` para una ejecución activa
 por el usuario. La redacción con ChatGPT exige además autorización en el método
 `draft_work`, antes de renovar credenciales o consultar servicios.
 
-La votación se gestiona en `project_opening/board.py`, con padrones y votos en
-`persistence/board_votes.py`, dentro de la misma base PostgreSQL. La regla es
-unanimidad de cuatro o cinco identidades. El callback `/api/board/slack/actions`
-verifica HMAC y antigüedad antes de abrir la base; no acepta votos por MCP. Cada
-voto se vincula al workspace, aplicación, canal y mensaje de convocatoria.
-El cierre genera acta Markdown y evidencia JSON inmutables. La apertura los
-incorpora a `docs/02-board/` y el issue enlaza el acta del commit exacto.
-
-Por defecto, los votos simulados no habilitan GitHub real. Un envío Slack incierto requiere
-conciliación con el mensaje existente. El backend principal recibe las acciones;
-el receptor público exclusivo de Calendar conserva sus rutas y límites.
-Ver [votación y actas](board-approval.md).
+Los módulos de votación Slack y actas se conservan para expedientes y recorridos
+históricos, pero no forman parte del diálogo nuevo del MCP de agente 2. En este
+flujo Stuart registra la decisión tomada por dirección fuera del sistema; no se
+simulan votos ni se genera un acta de junta. El receptor público exclusivo de
+Calendar conserva sus rutas y límites. Ver [votación histórica y actas](board-approval.md).
 
 La excepción de prueba autorizada por el usuario es `make agent2-live MOCK_BOARD=1`
 para un caso ficticio concreto. `cli/agent2_live.py` compone un grafo exterior
@@ -343,5 +424,21 @@ explícita en `persistence/delivery.py` y `persistence/migrations/`, y ReportLab
 `python -m app.delivery` conserva su entrada. La API separada está en
 `demos/delivery.py`. El fixture y las pruebas pertenecen al backend.
 Este recorrido sigue separado del proceso principal y no avanza sus etapas.
+El informe independiente de #22 usa `delivery/report.py`: su grafo LangGraph
+coordina captura y renderizado, con recuperación desde la etapa persistida, sin
+checkpointer nativo adicional. Consume una instantánea
+del expediente mediante `integrations/report_sources.py` y persiste fuentes,
+PDF y decisiones en las tablas existentes de delivery. `create_report_runtime`
+compone únicamente persistencia PostgreSQL y el lector, sin proveedores ni worker.
+El MCP admite `CaseReportRequest` además de la entrada demo anterior. La API de
+loopback añade generación por expediente dentro de su router privado de revisión.
+Los cambios de secciones crean versiones y las decisiones se vinculan a versión,
+hash y operador. Las métricas distinguen intervalos medidos, esfuerzo y duración
+activa; las esperas de handoff no se confunden con los huecos sin medición de fase.
+El informe puede aprobarse como parcial; su cierre permanece bloqueado hasta
+integrar la entrega real aprobada de ingeniería. No avanza etapas 5 o 6.
+Ver [operación y límites del informe](revision-informe-ejecutivo.md).
+El bloqueo POSIX del worker se importa al adquirirlo; consultar informes no
+requiere `fcntl` ni iniciar ese worker, incluso en Windows.
 Las exportaciones usan `project/generated/delivery-demo`; se conserva la base
 PostgreSQL existente y sus variables `DELIVERY_DATABASE_URL`.

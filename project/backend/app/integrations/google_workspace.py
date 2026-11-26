@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
 import httpx
+from google.auth.exceptions import RefreshError, TransportError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 
@@ -19,13 +20,33 @@ class GoogleWorkspace:
 
     def request(self, method, url, **kwargs):
         if not self.token_file or not self.token_file.is_file():
-            raise ConfigurationError("authorize_workflow_google_account")
-        if self.credentials is None:
-            self.credentials = Credentials.from_authorized_user_file(
-                str(self.token_file)
+            raise ConfigurationError(
+                "authorize_workflow_google_account",
+                detail="Google OAuth: falta el archivo WORKFLOW_GOOGLE_TOKEN_FILE. "
+                "Autorizá la cuenta de Google antes de iniciar el workflow.",
             )
+        if self.credentials is None:
+            try:
+                self.credentials = Credentials.from_authorized_user_file(
+                    str(self.token_file)
+                )
+            except (ValueError, OSError):
+                raise ConfigurationError(
+                    "google_oauth_token_file_invalid",
+                    detail="Google OAuth: no se pudo leer la credencial. Revisá el JSON "
+                    "y los permisos de WORKFLOW_GOOGLE_TOKEN_FILE.",
+                ) from None
         if not self.credentials.valid:
-            self.credentials.refresh(Request())
+            try:
+                self.credentials.refresh(Request())
+            except RefreshError as error:
+                raise self._refresh_failure(error) from None
+            except TransportError:
+                raise ProviderError(
+                    "google_oauth_transport_error",
+                    detail="Google OAuth: no se pudo contactar el servidor para renovar "
+                    "el acceso. Revisá la conexión, DNS o proxy; se puede reintentar.",
+                ) from None
         try:
             response = self.client.request(
                 method,
@@ -40,6 +61,50 @@ class GoogleWorkspace:
                 raise ConfigurationError("google_access_denied")
             raise ProviderError(f"google_http_{response.status_code}")
         return response.json() if response.content else {}
+
+    @staticmethod
+    def _refresh_failure(error):
+        # Google supplies structured OAuth fields in RefreshError.args. Never log
+        # error_description: even an unexpected response must remain private.
+        payload = next((arg for arg in error.args if isinstance(arg, dict)), {})
+        code = payload.get("error")
+        code = code if isinstance(code, str) else ""
+        reasons = {
+            "invalid_grant": "Google rechazó la autorización de renovación "
+            "(invalid_grant). Puede haber caducado o sido revocada, o requerir "
+            "un nuevo consentimiento.",
+            "invalid_client": "Google rechazó el cliente OAuth (invalid_client). "
+            "Revisá las credenciales del cliente con el que se emitió el token.",
+            "unauthorized_client": "El cliente OAuth no está autorizado para renovar "
+            "el acceso (unauthorized_client). Revisá su configuración en Google.",
+            "invalid_scope": "Google rechazó los permisos solicitados (invalid_scope). "
+            "Revisá los scopes de la autorización.",
+            "invalid_request": "Google rechazó la solicitud de renovación "
+            "(invalid_request). Revisá la configuración OAuth.",
+            "temporarily_unavailable": "El servidor OAuth de Google no está "
+            "disponible temporalmente (temporarily_unavailable).",
+            "server_error": "El servidor OAuth de Google falló (server_error).",
+        }
+        reason = reasons.get(code)
+        reason = (
+            reason
+            or "Google no pudo renovar el acceso; no devolvió una causa reconocida."
+        )
+        if payload.get("error_subtype") == "invalid_rapt":
+            reason += " La política de sesión de Google exige autenticarse otra vez (invalid_rapt)."
+        detail = "Google OAuth: " + reason
+        if error.retryable or code in {"temporarily_unavailable", "server_error"}:
+            return ProviderError(
+                "google_oauth_refresh_unavailable", detail=detail + " Se reintentará."
+            )
+        return ConfigurationError(
+            "google_oauth_refresh_rejected",
+            detail=detail
+            + " Volvé a autorizar la cuenta de WORKFLOW_GOOGLE_TOKEN_FILE. "
+            "Si reutiliza el token de Calendar, ejecutá make calendar-auth. "
+            "Después reiniciá make workflow; reintentar sin corregir la autorización "
+            "no resuelve este rechazo.",
+        )
 
     def pages(self, url, field, **params):
         result, seen = [], set()

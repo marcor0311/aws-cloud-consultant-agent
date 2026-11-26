@@ -130,7 +130,11 @@ class MockSlack:
 
     def send(self, notice, notification_id):
         artifact = self.store.get(f"artifact:{notice['case_id']}:{notice['revision']}")
-        if not artifact or len(artifact["documents"]) < 4:
+        if (
+            not artifact
+            or not {"meeting-transcript.md", "executive-summary.md", "presentation.md"}
+            <= artifact["documents"].keys()
+        ):
             raise ValueError("No avisar a Stuart antes de guardar todos los insumos.")
         project = next(
             (
@@ -143,9 +147,13 @@ class MockSlack:
         title = project.get("title", notice["case_id"])
         if notice["status"] == "awaiting_review":
             text = (
-                f"Stuart, ya preparé los insumos de {title}: transcripción, resumen, ideas para "
-                "la presentación y un guion inicial. Cuando te sirva, abrí ChatGPT, invocá "
-                "el agente de preparación y elegí este proyecto. Trabajemos sobre los borradores."
+                f"Stuart, el guion de {title} está listo para revisión, basado en la presentación aprobada."
+                if artifact.get("presentation_approval")
+                else (
+                    f"Stuart, ya preparé los insumos de {title}: transcripción, resumen, ideas para "
+                    "la presentación. Cuando te sirva, abrí ChatGPT, invocá "
+                    "el agente de preparación y elegí este proyecto. Trabajemos sobre los borradores."
+                )
             )
         else:
             text = f"El paquete de {title}, revisión {notice['revision']}, quedó aprobado para la siguiente etapa."
@@ -165,8 +173,8 @@ class MockSlack:
 
 
 class MockPreparer:
-    def __init__(self, references, store, clock):
-        self.references, self.store, self.clock = references, store, clock
+    def __init__(self, store, clock):
+        self.store, self.clock = store, clock
         self.by_hash = {
             hashlib.sha256(p["transcript"].encode()).hexdigest(): p
             for p in load_projects()
@@ -180,17 +188,9 @@ class MockPreparer:
             raise ValueError(
                 "El modelo mock admite las transcripciones ficticias de la demo."
             )
-        matches = self.references.search(project["search_query"])
-        selected = [r for r in matches if r["project_id"] == project["reference_id"]]
-        if not selected:
-            raise ValueError("El antecedente esperado no apareció en la búsqueda SQL.")
-        reference = self.references.read_reference(project["reference_id"])
-        document = next(
-            d for d in reference["documents"] if d["path"].endswith("project-brief.md")
-        )
         sources = {
             "transcript": state["transcript"],
-            **{d["path"]: d["content"] for d in reference["documents"]},
+            "meeting_notes": state.get("meeting_notes", ""),
         }
 
         def finding(item):
@@ -214,23 +214,11 @@ class MockPreparer:
                 }
             ],
             "open_questions": project["questions"],
-            "related_projects": [
-                {
-                    "project_id": project["reference_id"],
-                    "reason": "Antecedente académico ficticio para comparar patrones, no resultados comprobados.",
-                    "citations": [
-                        {
-                            "source_id": document["path"],
-                            "quote": project["reference_quote"],
-                        }
-                    ],
-                }
-            ],
             "presentation": [
                 {"title": f"Idea {n}", "bullets": [idea]}
                 for n, idea in enumerate(project["ideas"], 1)
             ],
-            "speaker_notes": project["script"],
+            "speaker_notes": "",
         }
         payload = json.loads(json.dumps(payload))
         if state.get("feedback"):
@@ -238,21 +226,14 @@ class MockPreparer:
             payload["open_questions"].append(
                 f"Ajuste solicitado por Stuart: {state['feedback']}"
             )
-            payload["speaker_notes"] += (
-                f"\n\nIncorporar en la revisión conjunta: {state['feedback']}"
-            )
         self.store.event(
             f"mock-draft:{state['case_id']}:{state.get('revision', 0) + 1}",
             state["case_id"],
             "mock.preparation.completed",
             {
                 "provider": "scripted_mock",
-                "searched": project["search_query"],
-                "read_reference": project["reference_id"],
                 "is_simulated": True,
             },
         )
         self.clock.advance(5)
-        return ExecutivePackage.model_validate(payload).validate_sources(
-            sources, {project["reference_id"]}
-        )
+        return ExecutivePackage.model_validate(payload).validate_sources(sources)

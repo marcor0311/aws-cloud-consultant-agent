@@ -114,7 +114,36 @@ alternativa de texto, renueva tokens vencidos y exige el identificador de acepta
 de Gmail antes de informar éxito. No reintenta automáticamente un envío ambiguo.
 Se conservan los límites de códigos y reenvíos; también aplican las cuotas de Gmail.
 
+Si la herramienta del agente devuelve `unavailable`, revisar la terminal del
+backend: `OTP email delivery failed` muestra el diagnóstico seguro del proveedor.
+`gmail_oauth_refresh_rejected` con `invalid_grant` indica que Google rechazó
+renovar la autorización de Gmail. Ejecutar de nuevo `make gmail-auth`, completar
+el consentimiento y volver a intentar la verificación respetando la espera entre
+envíos. `make calendar-auth` autoriza otro token y no recupera el envío de correo.
+Los detalles OAuth se conservan fuera de la respuesta pública; los logs no incluyen
+el OTP, el destinatario ni el cuerpo privado de la respuesta de Google.
+
 ## Verificación y pruebas
+
+`GET /health` comprueba juntas las autorizaciones OAuth de Calendar, Gmail si es
+el proveedor seleccionado y Google del workflow real si está habilitado:
+
+```sh
+curl -sS http://127.0.0.1:8000/health
+```
+
+Devuelve `200` con `status=ok`, o `503` con `status=degraded` y un diagnóstico por
+integración: `code`, `message` y `action` con el comando para recuperar la
+autorización. También revisa que las claves locales de verificación estén
+configuradas y sean independientes. Los componentes desactivados figuran como
+`skipped`. Los resultados OAuth se reutilizan por hasta treinta segundos; cambiar
+el archivo de token invalida su resultado anterior. Un token compartido por
+Calendar y workflow se comprueba una sola vez por intervalo.
+
+La prueba renueva el acceso únicamente en memoria. No guarda tokens, envía OTP,
+consulta agendas, crea citas ni ejecuta inferencia. No certifica cuotas ni el
+funcionamiento completo de las API, SMTP o los modelos; el campo `scope` indica su
+alcance. `GET /` conserva su respuesta básica y no realiza comprobaciones externas.
 
 El flujo, los contratos y los límites están en
 [Verificación del cliente](../agents/1.%20calendar%20assistant/VERIFICACION_CORREO.md).
@@ -175,6 +204,74 @@ Consultar [la arquitectura](../../docs/architecture.md) para los contratos entre
 componentes y las reglas de dependencia.
 
 ## Workflow de seis etapas
+
+### Preparación en segundo plano y `/prepare`
+
+El procesador actual reutiliza el generador corporativo y publica `resumen-reunion.pdf`,
+`ficha-proyecto.pdf`, `presentacion.html`, `presentacion.pdf` y `transcripcion.pdf` en `insumos/<case_id>/`, carpeta excluida de Git. La respuesta
+MCP incluye los cinco nombres y rutas para abrirlos. No genera guion ni
+preguntas de descubrimiento. La transcripción es la fuente completa del contenido.
+Ver [contrato y lectura de documentos](../../docs/insumos.md).
+
+Al recibir una transcripción correlacionada, el worker guarda una tarea durable de
+preparación aunque no exista API key. En su mantenimiento recupera también las
+transcripciones anteriores sin preparación, sin duplicar tareas ni revisiones.
+Esto incluye checkpoints del flujo interactivo anterior pausados en
+`draft_with_chatgpt`: el worker los reanuda con el proveedor configurado,
+conservando la transcripción, las notas, la identidad de entrada y la revisión.
+No reanuda automáticamente las pausas de aprobación de presentación o guion.
+`make workflow` debe permanecer ejecutándose: el servidor MCP no arranca el worker.
+
+La generación se basa exclusivamente en la transcripción y las notas del proyecto;
+no importa un catálogo, busca antecedentes ni compara otros proyectos. Los
+proveedores y el contrato de documentos no incluyen proyectos relacionados.
+
+El proveedor predeterminado es `WORKFLOW_PREPARATION_PROVIDER=chatgpt`. Reutiliza
+la sesión privada creada con `make agent2-login`, renueva OAuth y consume el modelo
+seleccionado en `WORKFLOW_OPENAI_MODEL`, sin fallback a API key. La generación real
+permanece desactivada hasta la activación explícita `WORKFLOW_INFERENCE_ENABLED=1`.
+No activar ni ejecutar inferencia real durante comprobaciones rutinarias: cada
+ejecución real requiere autorización del usuario. Para usar el adaptador histórico
+de API de manera deliberada, seleccionar `WORKFLOW_PREPARATION_PROVIDER=api`.
+
+Para el túnel privado, guardar `PREPARATION_MCP_BEARER_TOKEN` (al menos 32 caracteres)
+en `secrets.env` y ejecutar `make preparation-http`. El destino local es
+`http://127.0.0.1:8769/mcp`, separado del agente 2 en el puerto 8768. Configurar el
+Secure MCP Tunnel y la autenticación de la conexión con ese destino; su identidad
+y credenciales se mantienen fuera del repositorio.
+
+La herramienta `prepare(proyecto_id="")` lista proyectos; con ID consulta el
+trabajo existente. Distingue `queued`, `processing`, `blocked`, `paused`, `idle` y los estados
+de revisión/aprobación. Devuelve errores de tarea y documentos persistidos; una
+consulta no invoca el modelo ni encola trabajo. `actualizar_insumos` conserva
+la edición conversacional como una revisión nueva sin aprobarla.
+`paused` identifica una espera de borrador interactivo anterior sin tarea activa;
+el worker recupera esa espera durante mantenimiento.
+
+Se puede invocar el mismo MCP desde terminal sin ChatGPT, plugin ni túnel:
+
+```sh
+make prepare                       # Lista los proyectos
+make prepare CASE=<id-del-proyecto> # Consulta su progreso y documentos
+```
+
+Este cliente abre un servidor MCP STDIO local, inicializa la sesión e invoca la
+herramienta `prepare`; no llama directamente al servicio del backend. Cierra el
+servidor al terminar la consulta. La generación sigue en el worker independiente
+(`make workflow`), con la activación expresa y la sesión OAuth configuradas.
+`make preparation-mcp` solo arranca el servidor STDIO para otros clientes MCP;
+no es una consola interactiva donde escribir `/prepare`.
+
+El paquete local `plugins/aws-cloud-consultant/` incluye la skill `prepare` para
+la invocación `/prepare` en clientes compatibles. No está instalado ni enlazado a
+una cuenta: después de registrar el MCP privado en ChatGPT, enlazar el plugin con
+su ID técnico real (`plugin_asdk_app...`) e instalar el paquete. No confundir ese
+ID con el nombre o el ID del túnel. Una herramienta MCP llamada `prepare` por sí
+sola no registra un comando slash en la interfaz de ChatGPT.
+
+Referencias: [inferencia OAuth](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference),
+[Secure MCP Tunnel](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels),
+[paquete y enlace del plugin](https://developers.openai.com/plugins/build/plugins).
 
 El worker enlaza la reunión confirmada con el cliente existente, espera la
 transcripción de la reunión terminada, prepara los insumos y solicita la revisión.

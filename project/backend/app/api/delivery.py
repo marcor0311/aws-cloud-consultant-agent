@@ -8,11 +8,14 @@ from uuid import UUID
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Response
 
-from app.delivery.models import DemoRequest
+from app.delivery.models import CaseReportRequest, DemoRequest, ReportDecision
+from app.delivery.report import ReportAccessDenied, require_report_owner
+from app.delivery.review import ReportReview, configured_manager
 from app.delivery.workflow import DeliveryWorkflow, public_result
 from app.persistence.delivery import DeliveryBusy, DeliveryConflict, PostgresRepository
 
 router = APIRouter(prefix="/delivery", tags=["Entrega 1 local"])
+review_router = APIRouter(prefix="/delivery", tags=["Revisión ejecutiva local"])
 
 
 @lru_cache
@@ -30,6 +33,40 @@ def repository():
 
 
 Repository = Annotated[PostgresRepository, Depends(repository)]
+
+
+def case_report_service():
+    from app.bootstrap import create_report_runtime
+
+    try:
+        runtime = create_report_runtime(
+            os.getenv("DELIVERY_DATABASE_URL", ""),
+            os.getenv("WORKFLOW_DATABASE_URL"),
+            configured_manager(),
+        )
+        if runtime.service is None:
+            runtime.close()
+            raise ValueError("Configurar WORKFLOW_DATABASE_URL")
+    except ValueError as error:
+        raise HTTPException(503, str(error)) from error
+    try:
+        yield runtime.service
+    finally:
+        runtime.close()
+
+
+@review_router.post("/reports")
+def create_case_report(
+    request: CaseReportRequest, service=Depends(case_report_service)
+):
+    try:
+        return service.generate(request)
+    except (DeliveryConflict, DeliveryBusy) as error:
+        raise HTTPException(409, str(error)) from error
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from error
+    except psycopg.Error as error:
+        raise HTTPException(503, "Persistencia de informe no disponible") from error
 
 
 @router.post("/runs")
@@ -57,13 +94,22 @@ def get_run(delivery_id: UUID, repo: Repository):
         raise HTTPException(503, "Persistencia no disponible") from error
     if not row:
         raise HTTPException(404, "Entrega no encontrada")
+    try:
+        require_report_owner(row, os.getenv("DELIVERY_ENGAGEMENT_MANAGER"))
+    except ValueError as error:
+        raise HTTPException(403, str(error)) from error
     return public_result(row)
 
 
 @router.get("/runs/{delivery_id}/artifacts/{artifact_id}")
 def get_artifact(delivery_id: UUID, artifact_id: UUID, repo: Repository):
     try:
+        row = repo.get(delivery_id)
+        if row:
+            require_report_owner(row, os.getenv("DELIVERY_ENGAGEMENT_MANAGER"))
         artifact = repo.artifact(delivery_id, artifact_id)
+    except ValueError as error:
+        raise HTTPException(403, str(error)) from error
     except psycopg.Error as error:
         raise HTTPException(503, "Persistencia no disponible") from error
     if not artifact:
@@ -77,3 +123,33 @@ def get_artifact(delivery_id: UUID, artifact_id: UUID, repo: Repository):
             "Cache-Control": "no-store",
         },
     )
+
+
+@review_router.get("/runs/{delivery_id}/report")
+def get_report(delivery_id: UUID, repo: Repository):
+    try:
+        return ReportReview(repo, os.getenv("DELIVERY_ENGAGEMENT_MANAGER")).get(
+            delivery_id
+        )
+    except LookupError as error:
+        raise HTTPException(404, str(error)) from error
+    except ValueError as error:
+        raise HTTPException(403, str(error)) from error
+    except psycopg.Error as error:
+        raise HTTPException(503, "Persistencia de revisión no disponible") from error
+
+
+@review_router.post("/runs/{delivery_id}/report/decisions")
+def decide_report(delivery_id: UUID, decision: ReportDecision, repo: Repository):
+    try:
+        return ReportReview(repo).decide(delivery_id, decision, configured_manager())
+    except LookupError as error:
+        raise HTTPException(404, str(error)) from error
+    except (DeliveryConflict, DeliveryBusy) as error:
+        raise HTTPException(409, str(error)) from error
+    except ReportAccessDenied as error:
+        raise HTTPException(403, str(error)) from error
+    except (psycopg.Error, ValueError) as error:
+        raise HTTPException(
+            503, "Configurar operador y persistencia de revisión"
+        ) from error

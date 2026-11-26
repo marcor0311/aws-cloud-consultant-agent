@@ -3,8 +3,10 @@
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
+from collections import Counter
 from pathlib import Path
 
 import pymupdf
@@ -41,8 +43,10 @@ def verify(directory, qa):
     qa.mkdir(parents=True, exist_ok=True)
     pdf_images = []
     pages = {}
-    for name in ("resumen-reunion", "ficha-proyecto"):
+    for name in ("resumen-reunion", "ficha-proyecto", "transcripcion"):
         pdf = directory / f"{name}.pdf"
+        if not pdf.exists():
+            continue
         with pymupdf.open(pdf) as doc:
             pages[name] = len(doc)
             if shutil.which("pdftoppm"):
@@ -107,6 +111,30 @@ def verify(directory, qa):
             page.screenshot(path=str(path), animations="disabled")
             slide_images.append(path)
 
+        page.emulate_media(media="print")
+
+        # Check the actual exported PDF against the original, unedited HTML.
+        def normalized(text):
+            # PDF reading order differs for headers and multi-column layouts.
+            # Require the same words/punctuation on each corresponding slide.
+            return Counter(re.findall(r"\w+|[^\w\s]", text))
+
+        html_text = page.locator(".slide").evaluate_all("""slides => slides.map(slide => {
+            const walker = document.createTreeWalker(slide, NodeFilter.SHOW_TEXT);
+            const parts = [];
+            while (walker.nextNode()) parts.push(walker.currentNode.textContent);
+            return parts.join(' ');
+        })""")
+        with pymupdf.open(directory / "presentacion.pdf") as pdf:
+            assert len(pdf) == count, "El PDF debe tener una página por diapositiva."
+            for index, (text, pdf_page) in enumerate(zip(html_text, pdf), 1):
+                assert normalized(text) == normalized(pdf_page.get_text()), (
+                    f"La diapositiva {index} difiere entre HTML y PDF: "
+                    f"faltan {normalized(text) - normalized(pdf_page.get_text())}; "
+                    f"sobran {normalized(pdf_page.get_text()) - normalized(text)}."
+                )
+        page.emulate_media(media="screen")
+
         page.keyboard.press("Home")
         page.keyboard.press("ArrowRight")
         assert page.locator("#counter").inner_text() == f"02 / {count:02d}"
@@ -134,6 +162,7 @@ def verify(directory, qa):
         page.emulate_media(media="print")
         assert page.locator(".slide:visible").count() == count
         assert not page.locator(".deck-controls").is_visible()
+
         browser.close()
     contact_sheet(slide_images, qa / "slides-contact.png", 480, 3)
     report = {
@@ -143,6 +172,7 @@ def verify(directory, qa):
         "layout_failures": failures,
         "navigation_editing_export": "passed",
         "offline": True,
+        "html_pdf_correspondence": "passed",
     }
     (qa / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2))
     print(json.dumps(report, ensure_ascii=False, indent=2))

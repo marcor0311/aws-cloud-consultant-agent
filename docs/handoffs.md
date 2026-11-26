@@ -5,9 +5,11 @@ El caso mantiene el mismo `case_id` en preparación, proceso principal y apertur
 recepción y actor receptor. `workflow_events` conserva los eventos de entrega y
 aceptación. Los checkpoints de LangGraph viven en el mismo PostgreSQL.
 
-La preparación registra transcripción → preparación → revisión del responsable.
+La preparación registra transcripción → preparación → revisión de presentación →
+generación local del guion → revisión del guion. La primera aprobación no crea
+la entrega: el guion queda en una nueva revisión pendiente de aprobación expresa.
 Su aprobación crea la entrega a etapa 2. Un manifiesto `artifact-files` vincula la
-revisión a los cinco archivos exportados. El agente 2 exige ese manifiesto, acepta
+revisión a los seis archivos exportados, incluido el guion. El agente 2 exige ese manifiesto, acepta
 la entrega y revalida la revisión antes de ejecutar. Una convocatoria publicada
 crea una entrega por miembro; el voto firmado confirma su recepción. Al cerrarse
 la votación se entrega el acta al agente 2. El issue genera la entrega al arquitecto,
@@ -15,6 +17,19 @@ que permanece pendiente hasta una aceptación expresa del destinatario.
 
 El seguimiento de una cita verificada registra Calendar Assistant → responsable
 de reunión. Una importación documental local no fabrica ese paso de voz/Calendar.
+
+La generación registra `preparation.speaker_notes_generated`, revisión origen y
+SHA-256 de presentación. Las decisiones `approval.decided` indican `subject`.
+La conciliación de una aprobación previa de presentación deja el nuevo guion
+pendiente; no reutiliza esa aprobación para autorizar contenido recién generado.
+El guion se consulta como `speaker-notes.md` en el MCP de preparación y viaja como
+sexto archivo del paquete. Antes de aprobar la presentación se vinculan sus cinco
+archivos con `registrar_archivos_presentacion`; después de aprobar el guion se usa
+`exportar_paquete_aprobado`. La exportación conserva los bytes aprobados en
+`approved/<case_id>/v<revision>/`, registra hashes y revisión y añade `manifest.json`.
+El agente 2 publica ese mismo paquete y enlaza el manifiesto en el issue de Arquitectura.
+Los manifiestos antiguos de cuatro o cinco archivos se conservan; no habilitan
+aperturas nuevas incompletas ni se amplían sin una nueva aprobación.
 
 ## Consulta
 
@@ -27,6 +42,14 @@ Desde `project/backend`:
 La herramienta MCP equivalente es `consultar_trazabilidad`. Muestra manifiesto,
 procedencia, revisiones, entregas y eventos. El informe local de Nike queda en
 `project/generated/meeting-assistant/handoff-audit-nike.json`.
+
+El resultado negativo de junta se entrega por la cola al proceso principal:
+Dirección termina como `declined`. El Engagement Manager lo consulta en
+`consultar_proceso` o `GET /api/workflow/cases/<case_id>/process`, con el historial
+`stage.rejected` y sus referencias al acta/certificado. La trazabilidad de agente 2
+incluye `process` y `board_workflow_delivery` (tarea pendiente, recibo de entrega o
+motivo de bloqueo). Estos canales no generan avisos nuevos. Una correspondencia
+no verificable conserva la decisión de junta y bloquea su entrega al proceso.
 
 ## Conciliación del caso existente
 

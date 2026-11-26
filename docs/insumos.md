@@ -1,4 +1,135 @@
-# Generación local de insumos de reunión
+# Procesador documental corporativo
+
+El worker procesa la transcripción completa de Stuart como fuente del proyecto y
+publica exactamente cinco archivos en `insumos/<case_id>/`, en la raíz:
+
+- `resumen-reunion.pdf`: objetivo, problema, alcance, necesidades, requisitos,
+  integraciones, restricciones, presupuesto, plazos, riesgos y decisiones.
+- `ficha-proyecto.pdf`: síntesis ejecutiva del encargo, límites, inversión y plazos.
+- `presentacion.html`: presentación corporativa autónoma, con fuentes locales.
+- `presentacion.pdf`: las mismas diapositivas, impresas desde el HTML con Chromium.
+- `transcripcion.pdf`: texto íntegro, en orden, sin resumir ni sustituir palabras.
+
+Se reutiliza el generador corporativo `integrations/insumos_export.py`, la plantilla
+`insumos_assets/presentation.html` y Lato. La referencia visual vigente está en
+`insumos temporales de agente 1/` y `docs/design/`; no es un exportador retirado.
+`ProcessedMeeting.corporate_insumos` adapta el contenido a `MeetingTranscript` y
+`MeetingInsumos`. No rellena métricas, fechas, participantes, recomendaciones ni
+compromisos ausentes. Las diapositivas extensas se distribuyen en continuaciones
+con las composiciones existentes, conservando todos sus puntos.
+`processed_documents.py` solo publica y registra los archivos del generador
+corporativo; ya no contiene maquetación alternativa.
+
+El procesador no añade descubrimiento, preguntas, entrevistas, recomendaciones,
+comparaciones ni guion. Conserva lo no acordado con ese significado. La fuente
+sintética se identifica como material ficticio y no acredita una reunión real.
+Las notas anteriores permanecen guardadas; el proveedor actual usa la transcripción
+y las instrucciones explícitas de revisión. El renderizado es local, sin inferencia.
+
+`insumos/` está excluida de Git. Cada carpeta contiene únicamente los cinco archivos;
+los hashes y datos de control se guardan en SQL. `prepare` solo consulta y devuelve
+estado, identificador, revisión, nombres, rutas absolutas y carpeta. No inicia ni
+duplica trabajos, y no devuelve por defecto el checkpoint o el paquete interno.
+El MCP funciona desde terminal por STDIO y por HTTP privado sin ChatGPT abierto.
+El worker debe estar ejecutándose para procesar nuevas transcripciones.
+
+```sh
+make prepare CASE=<case_id>
+open "insumos/<case_id>/resumen-reunion.pdf"
+open "insumos/<case_id>/ficha-proyecto.pdf"
+open "insumos/<case_id>/presentacion.html"
+open "insumos/<case_id>/presentacion.pdf"
+open "insumos/<case_id>/transcripcion.pdf"
+```
+
+La publicación termina antes de notificar `awaiting_review`. Antes de aprobar se
+verifican de nuevo los hashes de los archivos; la aprobación expresa acepta los
+cinco como conjunto sin guion ni otra revisión. Los mismos bytes aprobados quedan
+en SQL para la entrega al agente 2, junto con su manifiesto y la revisión.
+Los contratos anteriores de tres archivos y los de cuatro/cinco/seis archivos con
+transcripción Markdown y eventual guion conservan sus manifiestos y aprobaciones.
+No se migran automáticamente expedientes ya aprobados.
+
+Para reexportar una revisión pendiente usando el contenido ya guardado, sin modelo:
+
+```sh
+cd project/backend
+WORKFLOW_INFERENCE_ENABLED=0 .venv/bin/python -m app.cli.workflow preparation-render \
+  --case <case_id> --revision <revision-pendiente>
+```
+
+Crea una revisión nueva para revisión humana, conserva la fuente y los registros
+anteriores y usa el mismo publicador del worker. Cada nueva llamada real al modelo
+requiere autorización expresa por ejecución; reexportar no la realiza.
+
+## Compatibilidad con la preparación anterior
+
+Las secciones siguientes documentan también el flujo previo de citas, notas y guion.
+Ese flujo se conserva para expedientes existentes; no define los entregables del
+procesador actual ni convierte el generador corporativo en un sistema retirado.
+
+## Preparación con notas de reunión
+
+El Engagement Manager puede aportar la transcripción y las notas como textos
+independientes. Las notas son opcionales y distintas de `speaker_notes`, el guion
+que se genera después de aprobar la presentación. La generación usa únicamente
+esas dos fuentes: no busca, cita ni compara proyectos anteriores. El campo
+`consulta`/`--query` se conserva por compatibilidad con la identidad de las entradas
+persistidas; no ejecuta una búsqueda ni aporta fuentes adicionales al modelo.
+
+Desde MCP, `iniciar_preparacion` acepta:
+
+```json
+{
+  "expediente_id": "expediente-existente",
+  "evento_id": "reunion-terminada",
+  "transcripcion": "Cliente: necesitamos ventas en línea; el presupuesto se confirmará.",
+  "notas_reunion": "Stuart propone revisar los costos operativos cada mes.",
+  "consulta": "ventas comercio electrónico"
+}
+```
+
+Desde CLI, los dos archivos son texto UTF-8. El comando encola la preparación
+para el worker; no ejecuta inferencia en la terminal:
+
+```sh
+cd project/backend
+.venv/bin/python -m app.cli.workflow preparation-start \
+  --case expediente-existente --event reunion-terminada \
+  --transcript /ruta/transcripcion.txt \
+  --meeting-notes /ruta/notas-reunion.md \
+  --query 'ventas comercio electrónico'
+```
+
+Se requiere `WORKFLOW_ENABLED=1`, un expediente del responsable configurado y el
+worker habitual (`make workflow`). La inferencia conserva su activación explícita
+por ejecución. En el servicio, el argumento opcional se llama `meeting_notes`.
+Omitir `notas_reunion` o `--meeting-notes` conserva las llamadas existentes.
+
+`consultar_preparacion` devuelve ambas fuentes en el estado persistido; la pausa
+`draft_with_chatgpt`, cuando no se inyecta proveedor, también las entrega por
+separado. Las citas usan `source_id: "transcript"` o
+`source_id: "meeting_notes"`, con una cita literal que debe aparecer en esa fuente.
+Una nota por sí sola no permite marcar un hallazgo `confirmed`: esa condición
+sigue requiriendo evidencia de la transcripción. No se admiten citas del catálogo
+de proyectos ni se incluyen secciones de antecedentes o comparaciones.
+
+Si las fuentes discrepan, el borrador debe conservar ambas citas, marcar el
+hallazgo `unknown` y explicar la discrepancia en el resumen y las preguntas
+pendientes para revisión. Las instrucciones de redacción se aplican tanto al
+proveedor como a la preparación desde el chat; la validación comprueba citas y
+procedencia, y el Engagement Manager revisa su interpretación antes de aprobar.
+
+Las notas se guardan en el checkpoint y como `meeting-notes.md` en los artefactos
+SQL de cada revisión. Se conservan al editar el paquete o generar el guion.
+Cambiar, añadir o retirar notas de una entrada iniciada exige conciliación: se
+rechaza reutilizar el checkpoint con otra entrada. Sin notas se conserva la huella
+histórica. Reanudar usa las fuentes persistidas, incluidas las notas.
+
+La presentación y el guion mantienen sus aprobaciones separadas. La exportación
+aprobada y la entrega al agente 2 conservan el contrato de seis archivos y su
+manifiesto; las notas de entrada permanecen consultables en el expediente y sus
+artefactos, sin añadir un séptimo archivo al manifiesto.
 
 ## Transcripción de Stuart: Nike Lindora
 
@@ -16,8 +147,31 @@ no llama a modelos externos. Los archivos auxiliares se
 producen en un directorio temporal que se elimina; se publican los cuatro documentos y la transcripción completa.
 
 Requiere `WORKFLOW_DATABASE_URL` configurada en el `secrets.env` externo. Cada revisión
-vincula los cinco archivos mediante sus hashes; un reintento valida los archivos
+vincula primero los cinco archivos de presentación mediante sus hashes; un reintento valida los archivos
 existentes sin regenerarlos. Ver [trazabilidad y conciliación](handoffs.md).
+
+La aprobación de presentación genera un guion local por diapositiva, basado en
+la misma lista y orden de diapositivas que el exportador HTML/PDF. Se guarda como
+`speaker-notes.md` en una nueva revisión, todavía pendiente de aprobación del
+gerente. No consume inferencia. Se puede mejorar desde el chat mediante
+`actualizar_insumos` con `speaker_notes`; la aprobación final usa el número de
+esa nueva revisión. Tras aprobarlo, `exportar_paquete_aprobado` copia los cinco
+archivos originales y el guion exacto aprobado a `approved/<case_id>/v<revision>/`
+y registra el manifiesto de seis archivos. No altera el paquete de otra revisión.
+El agente 2 publica los seis archivos y `manifest.json` para Arquitectura.
+
+La generación inicial registra los cinco archivos antes de la aprobación de
+presentación. Desde MCP se puede hacer con `registrar_archivos_presentacion`.
+Una vez aprobado también el guion, la exportación está disponible desde la CLI:
+
+```sh
+cd project/backend
+.venv/bin/python -m app.cli.preparation_documents export --request fixtures/nike-lindora-stuart/opening.json
+```
+
+El fixture histórico de cinco archivos solo describe los insumos de presentación.
+La CLI de apertura toma el sexto archivo del manifiesto aprobado; nunca lo inventa
+ni acepta otra versión del guion. Los expedientes ya persistidos no se actualizan automáticamente.
 
 ```sh
 PYTHONPATH=project/backend project/backend/.venv/bin/python scripts/generate-stuart-insumos.py

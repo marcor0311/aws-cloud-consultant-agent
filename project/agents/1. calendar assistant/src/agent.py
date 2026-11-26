@@ -30,6 +30,8 @@ load_environment()
 
 class Assistant(Agent):
     def __init__(self, *, llm_model=None, receipt_file=None) -> None:
+        from src.tools.advisor_transfer import resolve_calendar_result
+
         async def finish_without_more_tools(event):
             # Speak once through the SDK and wait for playback. A model-generated
             # farewell can be empty or invoke end_call again in long conversations.
@@ -49,10 +51,13 @@ class Assistant(Agent):
             ),
             end_instructions=None,
         )
-        super().__init__(
-            llm=llm_model
+        model = (
+            llm_model
             if llm_model is not None
-            else inference.LLM(**AGENT_CONFIG["models"]["llm"]),
+            else inference.LLM(**AGENT_CONFIG["models"]["llm"])
+        )
+        super().__init__(
+            llm=model,
             tools=[
                 mcp.MCPToolset(
                     id="google-calendar",
@@ -60,6 +65,9 @@ class Assistant(Agent):
                         command=sys.executable,
                         args=["-m", "src.tools.calendar_mcp"],
                         cwd=str(PROJECT_DIR),
+                        tool_result_resolver=lambda result: resolve_calendar_result(
+                            result, llm_model=model, end_tools=end_call.tools
+                        ),
                         env={
                             **(
                                 {"CALENDAR_CALL_RECEIPT_FILE": str(receipt_file)}

@@ -217,14 +217,13 @@ class WorkflowStore:
                 )
 
     def project_list(self, manager_id):
+        query = select(projects)
+        if manager_id is not None:
+            query = query.where(projects.c.manager_id == manager_id)
         with self.engine.connect() as db:
             return [
                 dict(row)
-                for row in db.execute(
-                    select(projects)
-                    .where(projects.c.manager_id == manager_id)
-                    .order_by(projects.c.opened_at)
-                ).mappings()
+                for row in db.execute(query.order_by(projects.c.opened_at)).mappings()
             ]
 
     def create_handoff(
@@ -424,27 +423,35 @@ class WorkflowStore:
         # ACK only after both the event and its pending job commit.
         try:
             with self.engine.begin() as db:
-                db.execute(
-                    insert(events).values(
-                        id=event_id, kind=kind, at=self.clock(), payload=payload
-                    )
-                )
-                db.execute(
-                    insert(jobs).values(
-                        id=event_id,
-                        kind=kind,
-                        payload=payload,
-                        status="pending",
-                        available_at=self.clock(),
-                        lease_until=0,
-                        attempts=0,
-                    )
-                )
+                self.receive_in(db, event_id, kind, payload)
             return True
         except IntegrityError:
             return False
 
-    def claim(self):
+    def receive_in(self, db, event_id, kind, payload, *, case_id=None):
+        """Commit a delivery with its source record in the caller's transaction."""
+        db.execute(
+            insert(events).values(
+                id=event_id,
+                case_id=case_id,
+                kind=kind,
+                at=self.clock(),
+                payload=payload,
+            )
+        )
+        db.execute(
+            insert(jobs).values(
+                id=event_id,
+                kind=kind,
+                payload=payload,
+                status="pending",
+                available_at=self.clock(),
+                lease_until=0,
+                attempts=0,
+            )
+        )
+
+    def claim(self, task_id=None):
         now = self.clock()
         with self.engine.begin() as db:
             # A crashed Slack send is ambiguous. Never blindly replay it.
@@ -462,6 +469,8 @@ class WorkflowStore:
                 & (jobs.c.lease_until <= now)
                 & (jobs.c.kind != "slack")
             )
+            if task_id is not None:
+                eligible = eligible & (jobs.c.id == task_id)
             candidates = (
                 db.execute(
                     select(jobs).where(eligible).order_by(jobs.c.available_at).limit(10)
@@ -846,7 +855,6 @@ class WorkflowStore:
                 if e["kind"] in {"approval.requested", "approval.decided"}
             ],
         }
-
     def import_references(self, root):
         manifest = json.loads((root / "provenance.json").read_text(encoding="utf-8"))
         for file in manifest["files"]:

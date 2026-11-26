@@ -6,8 +6,16 @@ from contextlib import nullcontext
 from datetime import datetime, timezone
 from threading import RLock
 
+from app.preparation.deliveries import PreparationDeliveries
 from app.preparation.models import ExecutivePackage
-from app.preparation.state import input_hash, utc_now
+from app.preparation.processing import CORPORATE_CONTRACT, DOCUMENT_CONTRACTS
+from app.preparation.speaker_notes import presentation_digest
+from app.preparation.state import (
+    input_hash,
+    meeting_documents,
+    meeting_sources,
+    utc_now,
+)
 from app.workflow.ports import WorkflowExecution
 
 
@@ -20,6 +28,8 @@ class PreparationService:
         on_sync=None,
         direction_actor="executive-direction-agent",
         notifications=True,
+        package_model=ExecutivePackage,
+        publisher=None,
     ):
         self.graph = graph
         self.store = store
@@ -28,6 +38,7 @@ class PreparationService:
         self.on_sync = on_sync
         self.direction_actor = direction_actor
         self.notifications = notifications
+        self.package_model, self.publisher = package_model, publisher
 
     def _owned(self, case_id):
         if self.store:
@@ -39,6 +50,12 @@ class PreparationService:
         if not self.store:
             return
         state = self.get(case_id)["state"]
+        if (
+            self.publisher
+            and state.get("status") in {"awaiting_review", "ready_for_stage_2"}
+            and state.get("deliverable_contract") in DOCUMENT_CONTRACTS
+        ):
+            self.publisher(state)
         if state.get("status") in {"awaiting_review", "ready_for_stage_2"}:
             if self.notifications:
                 self.store.notification(
@@ -70,7 +87,11 @@ class PreparationService:
                 f"review-request:{case_id}:{state['revision']}",
                 case_id,
                 "approval.requested",
-                {"revision": state["revision"], "actor": self.manager_id},
+                {
+                    "revision": state["revision"],
+                    "actor": self.manager_id,
+                    "subject": state.get("review_subject", "presentation"),
+                },
             )
         if state.get("status") == "ready_for_stage_2":
             self.store.put(
@@ -168,7 +189,7 @@ class PreparationService:
             if snapshot.state.get("status") == "awaiting_meeting":
                 self.graph.resume(self.thread_id(case_id), {"cancelled": True})
 
-    def start(self, case_id, event_id, transcript, query):
+    def start(self, case_id, event_id, transcript, query, meeting_notes=""):
         if not event_id.strip() or not transcript.strip() or not query.strip():
             raise ValueError("Indicar evento, transcripción y consulta de referencias.")
         with (
@@ -187,7 +208,7 @@ class PreparationService:
                     {"case_id": case_id, "manager_id": self.manager_id},
                 )
                 self.store.phase(case_id, "preparation", self.manager_id)
-            fingerprint = input_hash(transcript, query)
+            fingerprint = input_hash(transcript, query, meeting_notes)
             if previous:
                 if previous.get("status") == "awaiting_meeting":
                     self._receive_transcript(case_id, transcript)
@@ -196,6 +217,7 @@ class PreparationService:
                         {
                             "event_id": event_id,
                             "transcript": transcript,
+                            "meeting_notes": meeting_notes,
                             "query": query,
                             "input_hash": fingerprint,
                             "accepted_at": datetime.fromtimestamp(
@@ -228,6 +250,7 @@ class PreparationService:
                     "event_id": event_id,
                     "input_hash": fingerprint,
                     "transcript": transcript,
+                    "meeting_notes": meeting_notes,
                     "query": query,
                     "accepted_at": datetime.fromtimestamp(
                         self.store.clock(), timezone.utc
@@ -287,6 +310,34 @@ class PreparationService:
                 ):
                     raise ValueError("Indicar los ajustes solicitados.")
                 state = current["state"]
+                if value["decision"] == "approve":
+                    if (
+                        self.publisher
+                        and state.get("deliverable_contract") in DOCUMENT_CONTRACTS
+                    ):
+                        self.publisher(state)
+                    package = self.package_model.model_validate(
+                        state.get("package", {})
+                    )
+                    if not package.presentation or any(
+                        not slide.title.strip() for slide in package.presentation
+                    ):
+                        raise ValueError(
+                            "La aprobación requiere una presentación estructurada."
+                        )
+                    if self.package_model is ExecutivePackage and (
+                        state.get("review_subject") == "speaker_notes"
+                        and not package.speaker_notes.strip()
+                    ):
+                        raise ValueError("El guion no puede estar vacío.")
+                    if (
+                        self.package_model is ExecutivePackage
+                        and state.get("review_subject", "presentation")
+                        == "presentation"
+                    ):
+                        PreparationDeliveries(self.store).presentation_files(
+                            case_id, state["revision"], state["package"]
+                        )
                 digest = hashlib.sha256(
                     json.dumps(
                         state.get("package", state["draft"]), sort_keys=True
@@ -302,6 +353,7 @@ class PreparationService:
                         "revision": state["revision"],
                         "artifact_sha256": digest,
                         "feedback": value.get("feedback", ""),
+                        "subject": state.get("review_subject", "presentation"),
                     },
                 )
                 self.store.pause_human_work(case_id, self.manager_id)
@@ -330,12 +382,32 @@ class PreparationService:
             )
             return result
 
-    def continue_preparation(self, case_id):
+    def continue_preparation(self, case_id, *, automatic_drafting=False):
+        with (
+            self.lock,
+            self.store.lock(f"case:{case_id}") if self.store else nullcontext(),
+        ):
+            self._owned(case_id)
+            snapshot = self.graph.inspect(self.thread_id(case_id))
+            if automatic_drafting and any(
+                p.get("action") == "draft_with_chatgpt" for p in snapshot.pending
+            ):
+                # Older checkpoints paused in the interactive branch of the same
+                # draft node. Resume it with the injected provider; preserve inputs
+                # and keep the subsequent human review interrupt intact.
+                self.graph.resume(self.thread_id(case_id), {"automatic_drafting": True})
+                self._sync(case_id)
+                self._accept_transcript(case_id)
+                return self.get(case_id)
         state = self.get(case_id)["state"]
         if state.get("status") in {"awaiting_meeting", "meeting_cancelled"}:
             return self.get(case_id)
         return self.start(
-            case_id, state["event_id"], state["transcript"], state["query"]
+            case_id,
+            state["event_id"],
+            state["transcript"],
+            state["query"],
+            state.get("meeting_notes", ""),
         )
 
     def begin_review(self, case_id, revision):
@@ -376,7 +448,9 @@ class PreparationService:
             note = self.store.add_note(case_id, revision, self.manager_id, text)
             return {"status": "saved", "note_id": note, "revision": revision}
 
-    def update_package(self, case_id, revision, changes, comment=""):
+    def update_package(
+        self, case_id, revision, changes, comment="", *, republish=False
+    ):
         with self.lock, self.store.lock(f"case:{case_id}"):
             state = self.get(case_id)["state"]
             if (
@@ -384,22 +458,31 @@ class PreparationService:
                 or state.get("revision") != revision
             ):
                 raise ValueError("La revisión cambió o ya fue aprobada.")
-            if not changes or not set(changes) <= set(ExecutivePackage.model_fields):
+            if not changes or not set(changes) <= set(self.package_model.model_fields):
                 raise ValueError("Indicar secciones válidas para cambiar.")
-            sources = {"transcript": state["transcript"]}
-            sources.update(
-                {d["path"]: d["content"] for d in self.store.list("reference")}
-            )
-            project_ids = {
-                p.split("/")[2] for p in sources if p.startswith("references/projects/")
-            }
-            package = ExecutivePackage.model_validate({**state["package"], **changes})
-            package.validate_sources(sources, project_ids)
-            if package.model_dump() == state["package"]:
+            script_only = set(changes) == {"speaker_notes"}
+            if script_only and state.get("review_subject") != "speaker_notes":
+                raise ValueError(
+                    "El guion se genera después de aprobar la presentación."
+                )
+            if script_only and not str(changes["speaker_notes"]).strip():
+                raise ValueError("El guion no puede estar vacío.")
+            sources = meeting_sources(state)
+            package = self.package_model.model_validate({**state["package"], **changes})
+            if self.package_model is ExecutivePackage:
+                package.validate_sources(sources)
+            if package.model_dump() == state["package"] and not republish:
                 return self.get(case_id)
+            if not script_only and self.package_model is ExecutivePackage:
+                package = package.model_copy(update={"speaker_notes": ""})
+            approval = state.get("presentation_approval", {}) if script_only else {}
+            if script_only and approval.get(
+                "presentation_sha256"
+            ) != presentation_digest(package.model_dump()):
+                raise ValueError("La presentación requiere nueva aprobación.")
             new_revision = revision + 1
             documents = {
-                "meeting-transcript.md": state["transcript"],
+                **meeting_documents(state),
                 **package.artifacts(),
             }
             self.store.put(
@@ -410,6 +493,10 @@ class PreparationService:
                     "revision": new_revision,
                     "package": package.model_dump(),
                     "documents": documents,
+                    "presentation_approval": approval,
+                    "deliverable_contract": CORPORATE_CONTRACT
+                    if self.package_model is not ExecutivePackage
+                    else state.get("deliverable_contract", "legacy"),
                 },
             )
             self.graph.update(
@@ -420,6 +507,13 @@ class PreparationService:
                     "revision": new_revision,
                     "status": "awaiting_review",
                     "decision": "",
+                    "review_subject": "speaker_notes"
+                    if script_only
+                    else "presentation",
+                    "presentation_approval": approval,
+                    "deliverable_contract": CORPORATE_CONTRACT
+                    if self.package_model is not ExecutivePackage
+                    else state.get("deliverable_contract", "legacy"),
                 },
                 after_step="draft",
             )
@@ -463,9 +557,9 @@ class PreparationService:
             "accepted_at": state["accepted_at"],
             "handed_off_at": end,
             "lead_seconds": lead,
-            "measured_agent_process_seconds": state.get("search_seconds"),
+            "measured_agent_process_seconds": None,
             "human_process_seconds": None,
             "drafting_process_seconds": None,
             "rework_revisions": max(0, state.get("revision", 0) - 1),
-            "coverage": "partial: retrieval only; no inferred human or drafting time",
+            "coverage": "timing unavailable without persistent instrumentation",
         }

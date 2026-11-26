@@ -7,7 +7,6 @@ from dotenv import dotenv_values
 
 PROJECT_DIR = Path(__file__).resolve().parents[3]
 BACKEND_DIR = PROJECT_DIR / "backend"
-REFERENCE_DIR = PROJECT_DIR.parent / "references"
 ENV_FILE = PROJECT_DIR / ".env"
 DEFAULT_SECRETS_DIR = Path.home() / ".config/aws-cloud-consultant-agent/dev"
 SECRET_FILES = {

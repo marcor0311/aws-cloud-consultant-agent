@@ -38,6 +38,13 @@ Los valores se leen literalmente, sin interpolar `$`. Backend y agente tienen
 cargadores independientes; el agente de calendario solo incorpora las variables
 que necesita. El frontend no carga credenciales.
 
+El destino de transferencia de Calendar Assistant se define con
+`CALENDAR_ADVISOR_TRANSFER_E164` en `secrets.env` privado o en el entorno del
+proceso. Debe estar en formato E.164. No rellenar el ejemplo versionado ni poner
+el destino en `project/.env`: el agente no lo carga desde ese archivo. La espera
+no sensible `CALENDAR_ADVISOR_TRANSFER_TIMEOUT_SECONDS` tiene valor predeterminado
+de 10 segundos. Ver [operación y límites de SIP REFER](../../project/agents/1.%20calendar%20assistant/README.md#transferencia-de-la-llamada-activa).
+
 ## Migrar una instalación existente
 
 Desde la raíz, revisar primero el plan (solo muestra rutas y cantidades):

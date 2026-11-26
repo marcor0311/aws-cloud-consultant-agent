@@ -135,7 +135,7 @@ class AccessClient:
                 self.challenge_id = challenge
             return self._public(result)
 
-    def require(self, operation: str, email: str = "") -> None:
+    def require(self, operation: str, email: str = "") -> dict | None:
         with self._lock:
             target = email.strip().lower() if email else self.email
             if not target or not self.email or target != self.email:
@@ -143,6 +143,10 @@ class AccessClient:
                     "Primero verifica el correo de esta llamada con el código enviado."
                 )
             result = self._request("authorize", email=target, operation=operation)
+            if result.get("status") in {"not_registered", "not_enabled"}:
+                self.email = ""
+                self.challenge_id = ""
+                return self._public(result)
             if result.get("status") == "unavailable":
                 raise RuntimeError(
                     "No pude comprobar la autorización. Intente de nuevo más tarde."

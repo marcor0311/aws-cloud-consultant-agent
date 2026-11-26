@@ -1,9 +1,11 @@
 """Business contract, timing mathematics and a real PostgreSQL-backed API."""
 
+import asyncio
 import copy
 import json
 import os
 from concurrent.futures import ThreadPoolExecutor
+from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
 from uuid import uuid4
@@ -12,16 +14,27 @@ import psycopg
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from mcp.server.mcpserver.exceptions import ToolError
 from psycopg import sql
-from psycopg.conninfo import make_conninfo
+from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from pydantic import ValidationError
 from pypdf import PdfReader
+from sqlalchemy import URL
 
-from app.api.delivery import configured_repository, repository, router
+from app.api.delivery import (
+    case_report_service,
+    configured_repository,
+    repository,
+    review_router,
+    router,
+)
+from app.bootstrap import create_report_runtime
+from app.delivery.mcp import create_server
 from app.delivery.metrics import calculate_metrics
-from app.delivery.models import DemoRequest, PhaseTiming
+from app.delivery.models import DemoRequest, EmulatorEvidence, PhaseTiming
 from app.delivery.workflow import DeliveryWorkflow
 from app.persistence.delivery import DeliveryBusy, PostgresRepository
+from app.persistence.workflow import WorkflowStore
 
 
 @pytest.fixture
@@ -36,6 +49,8 @@ def payload():
 def repo():
     dsn = os.getenv("DELIVERY_TEST_DATABASE_URL")
     if not dsn:
+        if os.getenv("DELIVERY_TEST_REQUIRE_DATABASE") == "true":
+            pytest.fail("CI requiere PostgreSQL; no se permite omitir el recorrido")
         pytest.skip("Requiere DELIVERY_TEST_DATABASE_URL para PostgreSQL de pruebas")
     schema = "delivery_test_" + uuid4().hex
     with psycopg.connect(dsn, autocommit=True) as connection:
@@ -43,8 +58,8 @@ def repo():
     repository = PostgresRepository(
         make_conninfo(dsn, options=f"-c search_path={schema}")
     )
-    repository.initialize()
     try:
+        repository.initialize()
         yield repository
     finally:
         with psycopg.connect(dsn, autocommit=True) as connection:
@@ -57,6 +72,7 @@ def repo():
 def client(repo):
     app = FastAPI()
     app.include_router(router, prefix="/api")
+    app.include_router(review_router, prefix="/api")
     app.dependency_overrides[repository] = lambda: repo
     return TestClient(app)
 
@@ -209,6 +225,387 @@ def test_business_block_does_not_produce_report(client, repo, payload, case):
             ).fetchone()["count"]
             == 0
         )
+
+
+def test_report_revision_approval_and_close(
+    client, repo, payload, monkeypatch, tmp_path
+):
+    # Only this integration journey accepts an alternate fixture. The ordinary
+    # regression keeps delivery-1 and its original timing expectations.
+    if input_path := os.getenv("DELIVERY_TEST_INPUT"):
+        payload = json.loads(Path(input_path).read_text(encoding="utf-8"))
+        payload["delivery_id"] = str(uuid4())
+    request = DemoRequest.model_validate(payload)
+    output = Path(os.getenv("DELIVERY_TEST_OUTPUT", str(tmp_path)))
+    output.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("DELIVERY_ENGAGEMENT_MANAGER", "Operador de demostración")
+    if evidence_path := os.getenv("DELIVERY_TEST_EMULATOR_EVIDENCE"):
+        evidence = EmulatorEvidence.model_validate_json(
+            Path(evidence_path).read_bytes()
+        )
+        if os.getenv("GITHUB_ACTIONS") == "true":
+            assert evidence.run_url
+        assert all(check.status == "passed" for check in evidence.checks)
+        assert evidence.matches(request)
+        assert {check.name for check in evidence.checks} >= {
+            "terraform fmt",
+            "terraform init",
+            "terraform validate",
+            "Trivy",
+            "AWS Emulator TLS",
+            "terraform plan",
+            "Políticas del plan",
+            "terraform apply",
+            "Verificación después de apply",
+            "terraform destroy",
+            "Eliminar contenedor",
+        }
+        result = DeliveryWorkflow(repo).run(request, evidence)
+        assert (
+            DeliveryWorkflow(PostgresRepository(repo.dsn)).run(request, evidence)
+            == result
+        )
+    else:
+        result = client.post("/api/delivery/runs", json=payload).json()
+    assert result["status"] == "draft_ready"
+    handoff = result["handoff"]
+    assert handoff["review_status"] == "pending"
+    assert handoff["integration_status"] == "no_pr"
+    assert result["report"]["handoff_id"] == handoff["handoff_id"]
+    phases = {phase["phase"]: phase for phase in result["metrics"]["phases"]}
+    assert set(phases) == {t.phase for t in request.upstream_timings} | {
+        "engineering",
+        "report",
+    }
+    for phase, metric in phases.items():
+        assert metric["provenance"] == (
+            "real" if phase in {"engineering", "report"} else "simulated"
+        )
+        assert metric["lead_time_seconds"] >= 0
+        assert metric["process_time_seconds"] >= 0
+    if input_path and Path(input_path).name == "issue21-mock.json":
+        architecture = phases["architecture"]
+        assert architecture["lead_time_seconds"] == 2520
+        assert architecture["process_time_seconds"] == 2220
+        assert architecture["active_elapsed_seconds"] == 1860
+        assert architecture["wait_seconds"] == 660
+        assert architecture["rework_effort_seconds"] == 600
+        assert not result["metrics"]["missing_phases"]
+    persisted = PostgresRepository(repo.dsn).get(request.delivery_id)
+    assert persisted["handoff"] == handoff
+    assert persisted["report"] == result["report"]
+    assert persisted["report_timing"]["provenance"] == "real"
+    if evidence_path:
+        assert persisted["request"]["emulator_evidence"] == evidence.model_dump(
+            mode="json"
+        )
+        assert all(check["status"] == "passed" for check in handoff["checks"])
+    for ref in [*handoff["artifacts"], result["report"]["artifact"]]:
+        artifact = repo.artifact(request.delivery_id, ref["artifact_id"])
+        content = bytes(artifact["content"])
+        assert sha256(content).hexdigest() == ref["sha256"]
+        (output / ref["filename"]).write_bytes(content)
+    for name, value in {
+        "input.json": payload,
+        "delivery-draft.json": result,
+        "handoff.json": handoff,
+        "metrics.json": result["metrics"],
+    }.items():
+        (output / name).write_text(
+            json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+    run_url = f"/api/delivery/runs/{result['delivery_id']}"
+    first = result["report"]
+
+    def decision(report, action, detail):
+        return {
+            "decision_id": str(uuid4()),
+            "version": report["version"],
+            "sha256": report["artifact"]["sha256"],
+            "action": action,
+            "detail": detail,
+        }
+
+    def submit(value):
+        return client.post(f"{run_url}/report/decisions", json=value)
+
+    assert (
+        submit(decision(first, "record_presentation", "Sesión de prueba")).status_code
+        == 409
+    )
+    changes = decision(first, "request_changes", "Agregar conclusión ejecutiva")
+    assert submit(changes).json()["report"]["status"] == "changes_requested"
+    revision = decision(first, "revise", "Conclusión revisada para dirección")
+    second = submit(revision).json()["report"]
+    assert second["version"] == 2
+    assert submit(revision).json()["report"] == second
+    assert submit(decision(first, "approve", "Revisión anterior")).status_code == 409
+    assert (
+        client.get(
+            f"{run_url}/artifacts/{first['artifact']['artifact_id']}"
+        ).status_code
+        == 200
+    )
+    approved = submit(decision(second, "approve", "Aprobado en la demostración")).json()
+    assert approved["status"] == "approved"
+    pdf_id = approved["report"]["approved_document"]["artifact_id"]
+    download = client.get(f"{run_url}/artifacts/{pdf_id}")
+    text = "\n".join(
+        page.extract_text() for page in PdfReader(BytesIO(download.content)).pages
+    )
+    assert request.project_name in " ".join(text.split())
+    assert "costos simulados" in text
+    assert "Gasto real" in text
+    assert "No disponible" in text
+    assert "APROBADO" in text
+    assert "Conclusión revisada para dirección" in text
+    assert second["artifact"]["sha256"] in text
+    if evidence_path:
+        if evidence.run_url:
+            assert evidence.run_url in text
+        assert "terraform destroy" in text
+    closed = submit(
+        decision(second, "record_presentation", "Acta de demostración")
+    ).json()
+    assert closed["status"] == "closed"
+    history = client.get(f"{run_url}/report").json()["report_decisions"]
+    assert [entry["decision"]["action"] for entry in history] == [
+        "request_changes",
+        "revise",
+        "approve",
+        "record_presentation",
+    ]
+
+    async def verify_mcp_download():
+        server = create_server(repo, "Operador de demostración")
+        result = await server.call_tool(
+            "consultar_informe", {"entrega_id": payload["delivery_id"]}
+        )
+        report = result.structured_content
+        assert report["status"] == "closed"
+        resources = list(await server.read_resource(report["pdf_uri"]))
+        assert len(resources) == 1
+        assert resources[0].mime_type == "application/pdf"
+        assert resources[0].content == download.content
+
+    asyncio.run(verify_mcp_download())
+    assert (
+        sha256(download.content).hexdigest()
+        == approved["report"]["approved_document"]["sha256"]
+    )
+    (output / "informe-ejecutivo-demostracion.pdf").write_bytes(download.content)
+    (output / "delivery-closed.json").write_text(
+        json.dumps(closed, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    (output / "report-decisions.json").write_text(
+        json.dumps(history, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+
+    # Continue the existing report journey with an independent case and measured
+    # workflow records. No engineering node or cloud simulation may execute here.
+    settings = conninfo_to_dict(repo.dsn)
+    workflow_url = URL.create(
+        "postgresql+psycopg",
+        username=settings.get("user"),
+        password=settings.get("password"),
+        host=settings.get("host"),
+        port=int(settings.get("port", "5432")),
+        database=settings.get("dbname"),
+        query={"options": settings["options"]},
+    ).render_as_string(hide_password=False)
+    clock = [1700000000.0]
+    workflow = WorkflowStore(workflow_url, clock=lambda: clock[0])
+    manager = "Operador de demostración"
+    case_id = "issue22-independent"
+    runtime = create_report_runtime(repo.dsn, workflow_url, manager)
+    runtime.service.sources.store.clock = lambda: clock[0]
+    try:
+        workflow.register_project(
+            case_id,
+            request.project_id,
+            request.project_name,
+            "Empresa ficticia",
+            manager,
+            is_fictitious=True,
+        )
+        workflow.put(
+            f"opening:{case_id}",
+            "opening",
+            {
+                "budget": {"currency": "USD", "total": "100.00"},
+                "is_fictitious": True,
+                "approval_reference": "Decisión ficticia del recorrido de informe",
+            },
+        )
+        workflow.phase(case_id, "stage-1", manager)
+        parent = workflow.start_work(case_id, "stage-1", manager, "human")
+        clock[0] += 5
+        detail = workflow.start_work(case_id, "preparation", manager, "human")
+        clock[0] += 5
+        workflow.stop_work(detail, manager)
+        clock[0] += 5
+        workflow.stop_work(parent, manager)
+        workflow.create_handoff(
+            "report-input",
+            case_id,
+            manager,
+            manager,
+            "stage-1",
+            "stage-2",
+            revision=1,
+            artifact_sha256="a" * 64,
+        )
+        clock[0] += 5
+        workflow.accept_handoff("report-input", manager)
+        workflow.phase(case_id, "stage-3", manager)
+        human = workflow.start_work(case_id, "stage-3", manager, "human")
+        clock[0] += 10
+        agent = workflow.start_work(case_id, "stage-3", "architect-agent", "agent")
+        clock[0] += 10
+        workflow.stop_work(human, manager)
+        clock[0] += 5
+        workflow.stop_work(agent, "architect-agent")
+        clock[0] += 15
+        workflow.complete_phase(case_id, "stage-3")
+        workflow.event(
+            "revision-requested",
+            case_id,
+            "process.transition",
+            {"kind": "stage.changes_requested", "actor": manager},
+        )
+        service = runtime.service
+        client.app.dependency_overrides[case_report_service] = lambda: service
+
+        def forbidden_engineering(*args, **kwargs):
+            pytest.fail("El informe por expediente no debe ejecutar ingeniería")
+
+        monkeypatch.setattr(DeliveryWorkflow, "run", forbidden_engineering)
+        case_input = {"report_id": str(uuid4()), "case_id": case_id}
+        initial = client.post("/api/delivery/reports", json=case_input)
+        assert initial.status_code == 200, initial.text
+        captured = initial.json()
+        assert captured["handoff"] is None
+        assert captured["closure_blockers"]
+        phases = {p["phase"]: p for p in captured["metrics"]["phases"]}
+        assert (
+            phases["discovery"]["process_time_seconds"] == 15
+        )  # No nested double count.
+        assert phases["architecture"]["lead_time_seconds"] == 40
+        assert phases["architecture"]["process_time_seconds"] == 35
+        assert phases["architecture"]["active_elapsed_seconds"] == 25
+        assert phases["architecture"]["unclassified_seconds"] == 15
+        assert phases["architecture"]["wait_seconds"] is None
+        assert phases["architecture"]["rework_effort_seconds"] is None
+        assert phases["finops"]["process_time_seconds"] is None
+        assert captured["metrics"]["handoffs"][0]["wait_seconds"] == 5
+        assert captured["metrics"]["process_rework_cycles"] == 1
+        clock[0] += 100
+        assert client.post("/api/delivery/reports", json=case_input).json() == captured
+
+        case_url = f"/api/delivery/runs/{case_input['report_id']}"
+        draft = captured["report"]
+        changed = client.post(
+            f"{case_url}/report/decisions",
+            json=decision(draft, "request_changes", "Precisar siguientes pasos"),
+        )
+        assert changed.status_code == 200
+        revise = decision(draft, "revise", "Corrección de secciones")
+        revise["sections"] = {
+            "results": "Resultados revisados desde el expediente.",
+            "next_steps": "Esperar la entrega aprobada del issue 21.",
+        }
+        revised = client.post(f"{case_url}/report/decisions", json=revise).json()[
+            "report"
+        ]
+        assert revised["version"] == 2
+        assert revised["sections"]["results"] == revise["sections"]["results"]
+        assert (
+            client.post(
+                f"{case_url}/report/decisions",
+                json=decision(draft, "approve", "Versión antigua"),
+            ).status_code
+            == 409
+        )
+        approved = client.post(
+            f"{case_url}/report/decisions",
+            json=decision(revised, "approve", "Aprobado como informe parcial"),
+        ).json()
+        blocked = client.post(
+            f"{case_url}/report/decisions",
+            json=decision(revised, "record_presentation", "Sesión registrada"),
+        )
+        assert blocked.status_code == 409
+        assert "#21" in blocked.json()["detail"]
+        assert (
+            workflow.get(f"process:{case_id}") is None
+        )  # Never fabricate a completed process.
+        assert len(repo.report_decisions(case_input["report_id"])) == 3
+        file = approved["report"]["approved_document"]
+        data = client.get(f"{case_url}/artifacts/{file['artifact_id']}").content
+        text = "\n".join(p.extract_text() for p in PdfReader(BytesIO(data)).pages)
+        assert "Resultados revisados desde el expediente." in text
+        assert "BORRADOR" not in text
+        assert "INFORME PARCIAL APROBADO" in text
+        assert "Sin medición" in text
+        assert "Entrega técnica pendiente" not in text  # Replaced, not appended.
+        assert (
+            client.get(
+                f"{case_url}/artifacts/{draft['artifact']['artifact_id']}"
+            ).status_code
+            == 200
+        )
+        (output / "informe-expediente-parcial.pdf").write_bytes(data)
+
+        # The same MCP tool consumes a persisted demo handoff, without rerunning it.
+        async def verify_case_mcp():
+            server = create_server(repo, manager, service)
+            linked_input = {
+                **case_input,
+                "report_id": str(uuid4()),
+                "engineering_delivery_id": payload["delivery_id"],
+            }
+            response = await server.call_tool(
+                "generar_informe", {"entrada": linked_input}
+            )
+            linked = response.structured_content
+            assert linked["handoff"]["handoff_id"] == handoff["handoff_id"]
+            assert linked["report"]["handoff_id"] == handoff["handoff_id"]
+            assert len(linked["closure_blockers"]) >= 2
+            ref = linked["report"]["sources"]
+            resource = list(
+                await server.read_resource(
+                    f"delivery://sources/{linked['delivery_id']}/{ref['artifact_id']}"
+                )
+            )[0]
+            raw = (
+                resource.content.encode()
+                if isinstance(resource.content, str)
+                else resource.content
+            )
+            assert sha256(raw).hexdigest() == ref["sha256"]
+            assert json.loads(raw)["technical"]["project_id"] == request.project_id
+            (output / "fuentes-informe-expediente.json").write_bytes(raw)
+            pdf_resource = list(await server.read_resource(linked["pdf_uri"]))[0]
+            (output / "informe-expediente-con-entrega.pdf").write_bytes(
+                pdf_resource.content
+            )
+            other = create_server(repo, "Otro operador")
+            with pytest.raises(ToolError, match="otro responsable"):
+                await other.call_tool(
+                    "consultar_informe", {"entrega_id": linked["delivery_id"]}
+                )
+            return linked
+
+        linked = asyncio.run(verify_case_mcp())
+        assert linked["captured_at"] != captured["captured_at"]
+        monkeypatch.setenv("DELIVERY_ENGAGEMENT_MANAGER", "Otro operador")
+        assert client.get(f"{case_url}/report").status_code == 403
+        assert (
+            client.get(f"{case_url}/artifacts/{file['artifact_id']}").status_code == 403
+        )
+    finally:
+        runtime.close()
+        workflow.engine.dispose()
 
 
 def test_missing_input_is_422(client, payload):
