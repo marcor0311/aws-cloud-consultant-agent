@@ -1,6 +1,7 @@
 """Protected, renewable Sign in with ChatGPT session for the Meeting Assistant."""
 
 import json
+import os
 import time
 from urllib.parse import urlparse
 
@@ -33,7 +34,7 @@ class PlanSession(PlanConnection):
             self.access_token = None
             self.expires_at = 0
             return
-        if self.credentials_file.stat().st_mode & 0o077:
+        if os.name != "nt" and self.credentials_file.stat().st_mode & 0o077:
             raise DemoError("El archivo de sesión debe tener permisos 0600.")
         saved = json.loads(self.credentials_file.read_text())
         if (

@@ -1,6 +1,7 @@
 """Durable business events, jobs, artifacts and measured work, on SQLite or Postgres."""
 
 import hashlib
+import json
 import time
 import uuid
 from contextlib import contextmanager
@@ -168,6 +169,17 @@ class WorkflowStore:
         except IntegrityError:
             return False
 
+    def case_events(self, case_id):
+        with self.engine.connect() as db:
+            return [
+                dict(row)
+                for row in db.execute(
+                    select(events)
+                    .where(events.c.case_id == case_id)
+                    .order_by(events.c.at, events.c.id)
+                ).mappings()
+            ]
+
     def register_project(
         self,
         case_id,
@@ -283,18 +295,14 @@ class WorkflowStore:
                 ).mappings()
             ]
 
-    def case_events(self, case_id):
-        with self.engine.connect() as db:
-            return [
-                dict(row)
-                for row in db.execute(
-                    select(events)
-                    .where(events.c.case_id == case_id)
-                    .order_by(events.c.at)
-                ).mappings()
-            ]
-
-    def accept_handoff(self, handoff_id, actor, *, acting_for=None):
+    def accept_handoff(
+        self,
+        handoff_id,
+        actor,
+        accepted_at=None,
+        *,
+        acting_for=None,
+    ):
         with self.engine.begin() as db:
             row = (
                 db.execute(select(handoffs).where(handoffs.c.id == handoff_id))
@@ -305,17 +313,18 @@ class WorkflowStore:
                 raise ValueError("La entrega no está asignada a este responsable.")
             if row["accepted_at"] is not None:
                 return dict(row)
+            acceptance_time = self.clock() if accepted_at is None else accepted_at
             db.execute(
                 update(handoffs)
                 .where(handoffs.c.id == handoff_id, handoffs.c.accepted_at.is_(None))
-                .values(accepted_at=self.clock(), accepted_by=actor)
+                .values(accepted_at=acceptance_time, accepted_by=actor)
             )
             db.execute(
                 insert(events).values(
                     id="accepted:" + hashlib.sha256(handoff_id.encode()).hexdigest(),
                     case_id=row["case_id"],
                     kind="handoff.accepted",
-                    at=self.clock(),
+                    at=acceptance_time,
                     payload={
                         "handoff_id": handoff_id,
                         "actor": actor,
@@ -739,6 +748,13 @@ class WorkflowStore:
         if current and current["completed_at"] is None:
             self.put(key, "phase", dict(current, completed_at=self.clock()))
 
+    def reopen_phase(self, case_id, phase):
+        """Reopen a completed phase for traceable rework without changing its start."""
+        key = f"phase:{case_id}:{phase}"
+        current = self.get(key)
+        if current and current["completed_at"] is not None:
+            self.put(key, "phase", dict(current, completed_at=None))
+
     def stage_one_metrics(self, case_id, work):
         with self.engine.connect() as db:
             project = (
@@ -884,6 +900,7 @@ class WorkflowStore:
                     e["kind"] == "approval.decided"
                     and e["payload"].get("decision") == "revise"
                     or e["payload"].get("requires_rework", False)
+                    or e["kind"] == "architecture.finops_correction_requested"
                 )
                 for e in history
             ),
@@ -904,3 +921,22 @@ class WorkflowStore:
                 if e["kind"] in {"approval.requested", "approval.decided"}
             ],
         }
+    def import_references(self, root):
+        manifest = json.loads((root / "provenance.json").read_text(encoding="utf-8"))
+        for file in manifest["files"]:
+            path = root.parent / file["path"]
+            content = path.read_text(encoding="utf-8")
+            digest = hashlib.sha256(content.encode()).hexdigest()
+            if digest != file["sha256"]:
+                raise ValueError("Una referencia cambió sin actualizar su procedencia.")
+            self.put(
+                f"reference:{file['path']}",
+                "reference",
+                {
+                    "path": file["path"],
+                    "content": content,
+                    "sha256": digest,
+                    "source_commit": manifest["commit"],
+                    "is_fictitious": True,
+                },
+            )

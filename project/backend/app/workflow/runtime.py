@@ -38,6 +38,8 @@ class WorkflowRuntime:
         drafter,
         worker_lock,
         resources,
+        architecture=None,
+        finops=None,
         mock_clock=None,
         client_lookup=None,
     ):
@@ -46,6 +48,8 @@ class WorkflowRuntime:
         self.board_rejections = board_rejections
         self.google, self.notifier, self.drafter = google, notifier, drafter
         self.worker_lock, self.stack = worker_lock, resources
+        self.architecture = architecture
+        self.finops = finops
         self.mock_clock, self.client_lookup = mock_clock, client_lookup
 
     def close(self):

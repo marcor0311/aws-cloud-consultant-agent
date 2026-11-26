@@ -36,7 +36,7 @@ def run_graph(connection, model, output_dir, progress=None):
         if progress:
             progress("reading", "Leyendo la transcripción de la reunión…")
         fixture = PROJECT_DIR / "backend/fixtures/preparation/tienda-deportiva.txt"
-        return {"transcript": fixture.read_text()}
+        return {"transcript": fixture.read_text(encoding="utf-8")}
 
     def prepare(state):
         if progress:
@@ -60,8 +60,8 @@ def run_graph(connection, model, output_dir, progress=None):
     if progress:
         progress("saving", "Guardando el borrador para la revisión de Stuart…")
     target.mkdir(parents=True)
-    (target / "transcript.md").write_text(state["transcript"])
-    (target / "preparation.md").write_text(result["draft"])
+    (target / "transcript.md").write_text(state["transcript"], encoding="utf-8")
+    (target / "preparation.md").write_text(result["draft"], encoding="utf-8")
     (target / "result.json").write_text(
         json.dumps(result, indent=2, ensure_ascii=False)
     )
@@ -300,7 +300,9 @@ def create_app(connection, output_dir):
         target = output_dir / f"incomplete-{uuid.uuid4().hex[:12]}"
         target.mkdir(parents=True)
         if connection.stream_text:
-            (target / "preparation-partial.md").write_text(connection.stream_text)
+            (target / "preparation-partial.md").write_text(
+                connection.stream_text, encoding="utf-8"
+            )
         (target / "diagnostic.json").write_text(
             json.dumps(
                 {

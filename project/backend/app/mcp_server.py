@@ -7,6 +7,7 @@ from typing import Any
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
+from app.architecture.models import ArchitecturePackage
 from app.bootstrap import create_runtime
 from app.core.config import PROJECT_DIR, load_environment
 from app.integrations.errors import ProviderError
@@ -146,7 +147,7 @@ def create_server(service, runtime=None):
             service.resume, expediente_id, "revise_speaker_notes", guion, revision
         )
 
-    if service.package_model is ExecutivePackage:
+    if service is not None and service.package_model is ExecutivePackage:
         server.tool()(registrar_archivos_presentacion)
         server.tool()(guardar_guion_revisado)
 
@@ -188,6 +189,211 @@ def create_server(service, runtime=None):
         def prepare(proyecto_id: str = "") -> dict:
             """/prepare: consulta progreso o entrega documentos listos para revisar y pulir."""
             return call(runtime.open_preparation, proyecto_id)
+
+        @server.tool()
+        def consultar_catalogo_baselines() -> list[dict]:
+            """Lista módulos Terraform reales, perfiles y estado de aprobación; no genera IaC."""
+            return call(runtime.architecture.catalog_modules)
+
+        @server.tool()
+        def leer_entrega_agente_2(entrega: dict[str, Any]) -> dict:
+            """Lee insumos aprobados desde un commit del repositorio del proyecto."""
+            return call(runtime.architecture.read_project_handoff, entrega)
+
+        @server.tool()
+        def vincular_repositorio_proyecto(
+            expediente_id: str, repositorio_local: str
+        ) -> dict:
+            """Valida el checkout localizado o clonado por Codex."""
+            return call(
+                runtime.architecture.bind_project_repository,
+                expediente_id,
+                repositorio_local,
+            )
+
+        @server.tool()
+        def validar_issue_arquitectura(
+            expediente_id: str, issue_snapshot: dict[str, Any]
+        ) -> dict:
+            """Valida evidencia GitHub del encargo sin aprobar la arquitectura."""
+            return call(
+                runtime.architecture.validate_architecture_issue,
+                expediente_id,
+                issue_snapshot,
+            )
+
+        @server.tool()
+        def validar_evidencias_proyecto(expediente_id: str) -> dict:
+            """Verifica bytes y hashes desde el merge commit aprobado."""
+            return call(runtime.architecture.validate_project_evidence, expediente_id)
+
+        @server.tool()
+        def publicar_arquitectura_local(expediente_id: str) -> dict:
+            """Publica la revisión aprobada localmente sin commit ni push."""
+            return call(runtime.architecture.publish_to_project, expediente_id)
+
+        @server.tool()
+        def preparar_publicacion_github(expediente_id: str) -> dict:
+            """Prepara rama, archivos y PR para ejecución externa mediante GitHub MCP."""
+            return call(runtime.architecture.prepare_github_publication, expediente_id)
+
+        @server.tool()
+        def registrar_pull_request_github(
+            expediente_id: str, recibo: dict[str, Any]
+        ) -> dict:
+            """Registra el commit y PR creados por Codex mediante GitHub MCP."""
+            return call(
+                runtime.architecture.register_github_pull_request,
+                expediente_id,
+                recibo,
+            )
+
+        @server.tool()
+        def registrar_aprobacion_pr_github(
+            expediente_id: str, recibo: dict[str, Any]
+        ) -> dict:
+            """Registra la aprobación y merge exactos del PR de Arquitectura."""
+            return call(
+                runtime.architecture.register_github_approval,
+                expediente_id,
+                recibo,
+            )
+
+        @server.tool()
+        def preparar_issue_finops(expediente_id: str, responsable_github: str) -> dict:
+            """Prepara el issue FinOps después del merge aprobado."""
+            return call(
+                runtime.architecture.prepare_finops_issue,
+                expediente_id,
+                responsable_github,
+            )
+
+        @server.tool()
+        def registrar_issue_finops_github(
+            expediente_id: str, recibo: dict[str, Any]
+        ) -> dict:
+            """Registra el issue FinOps creado externamente por Codex."""
+            return call(
+                runtime.architecture.register_finops_issue,
+                expediente_id,
+                recibo,
+            )
+
+        @server.tool()
+        def iniciar_arquitectura(
+            expediente_id: str, entrada_id: str, propuesta: dict[str, Any]
+        ) -> dict:
+            """Valida una propuesta arquitectónica para revisión humana; no genera Terraform."""
+            try:
+                package = ArchitecturePackage.model_validate(propuesta)
+            except ValueError as error:
+                raise ToolError(str(error)) from None
+            return call(
+                runtime.architecture.start,
+                expediente_id,
+                entrada_id,
+                package.model_dump(mode="json"),
+            )
+
+        @server.tool()
+        def consultar_arquitectura(expediente_id: str) -> dict:
+            """Consulta la revisión, documentos y decisión pendiente del diseño."""
+            return call(runtime.architecture.get, expediente_id)
+
+        @server.tool()
+        def consultar_historial_arquitectura(expediente_id: str) -> dict:
+            """Consulta revisiones, correcciones, aprobaciones y entregas."""
+            return call(runtime.architecture.history, expediente_id)
+
+        @server.tool()
+        def consultar_metricas_arquitectura(expediente_id: str) -> dict:
+            """Consulta tiempos medidos, espera, retrabajo y entregas a FinOps."""
+            return call(runtime.architecture.metrics, expediente_id)
+
+        @server.tool()
+        def obtener_handoff_finops(
+            expediente_id: str, revision: int
+        ) -> dict[str, Any]:
+            """Entrega a Codex el handoff aprobado para invocar posteriormente FinOps."""
+            return call(
+                runtime.architecture.get_finops_handoff,
+                expediente_id,
+                revision,
+            )
+
+        @server.tool()
+        def registrar_aceptacion_handoff_finops(
+            expediente_id: str, recibo: dict[str, Any]
+        ) -> dict[str, Any]:
+            """Registra la aceptación tipada devuelta por FinOps mediante Codex."""
+            return call(
+                runtime.architecture.accept_finops_handoff,
+                expediente_id,
+                recibo,
+            )
+
+        @server.tool()
+        def solicitar_correccion_finops(
+            expediente_id: str, solicitud: dict[str, Any]
+        ) -> dict:
+            """Registra una solicitud estructurada de corrección de FinOps."""
+            return call(
+                runtime.architecture.request_finops_correction,
+                expediente_id,
+                solicitud,
+            )
+
+        @server.tool()
+        def aplicar_correccion_finops(
+            expediente_id: str,
+            solicitud_id: str,
+            propuesta: dict[str, Any],
+        ) -> dict:
+            """Crea una revisión nueva enlazada con la corrección de FinOps."""
+            return call(
+                runtime.architecture.revise_from_finops,
+                expediente_id,
+                solicitud_id,
+                propuesta,
+            )
+
+        @server.tool()
+        def corregir_arquitectura(
+            expediente_id: str, revision: int, propuesta: dict[str, Any]
+        ) -> dict:
+            """Crea una revisión nueva después de cambios solicitados por el arquitecto."""
+            return call(
+                runtime.architecture.replace, expediente_id, revision, propuesta
+            )
+
+        @server.tool()
+        def revisar_arquitectura(
+            expediente_id: str,
+            revision: int,
+            artifact_sha256: str,
+            decision: str,
+            comentarios: str = "",
+        ) -> dict:
+            """Aprueba o devuelve la revisión y hash exactos mediante decisión humana explícita."""
+            return call(
+                runtime.architecture.review,
+                expediente_id,
+                revision,
+                artifact_sha256,
+                decision,
+                comentarios,
+            )
+
+        @server.tool()
+        def registrar_decision_arquitecto(
+            expediente_id: str, recibo: dict[str, Any]
+        ) -> dict:
+            """Registra la confirmación humana tipada de la revisión exacta."""
+            return call(
+                runtime.architecture.record_architect_decision,
+                expediente_id,
+                recibo,
+            )
 
         @server.tool()
         def agente_preparacion(proyecto_id: str = "") -> dict:

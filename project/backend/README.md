@@ -185,6 +185,9 @@ Para el recorrido completo o PostgreSQL aislado, ejecutar bajo demanda
   etapas y servicio compartido por HTTP/MCP.
 - `app/preparation/`: grafo posterior a la reunión, estado, nodos, modelos y
   servicios; sus colaboradores se inyectan desde `app/bootstrap.py`.
+- `app/architecture/`: contrato y grafo del Cloud Architecture Agent; valida
+  recursos, decisiones, seguridad, supuestos de costo y selecciones baseline.
+  Exige aprobación humana y no genera Terraform ni despliega recursos.
 - `app/persistence/`: SQL compartido, savers de checkpoints y bloqueo local.
 - `app/integrations/`: Google, Slack, IA y mocks; OAuth de la demo en `ai/oauth.py`.
 - `app/api/` y `app/mcp_server.py`: entradas sobre los mismos servicios.
@@ -323,6 +326,78 @@ El SQL de OTP está en `app/verification/repository.py`; los servicios reciben
 por `WorkflowExecution` (`app/workflow/ports.py`) y su adaptador está en
 `app/integrations/langgraph.py`. El schema OTP y los thread IDs existentes se conservan.
 
+## Cloud Architecture Agent — issue #19
+
+### Dependencia reproducible de diagramas AWS
+
+El paquete de Arquitectura 1.2 genera el PNG mediante
+`awslabs/diagram-as-code`. El ejecutable no se guarda en Git porque es un binario
+externo específico de cada plataforma. Su versión, nombres de assets y SHA-256
+están fijados en `tools/awsdac/dependencies.json`.
+
+Desde `project/backend/`, instalar o comprobar la dependencia:
+
+```powershell
+.\scripts\install_awsdac.ps1
+```
+
+El script detecta Windows, Linux o macOS y las arquitecturas soportadas, descarga
+exactamente `v0.24`, verifica el hash antes de extraer y comprueba la versión del
+ejecutable. En Linux o macOS requiere PowerShell 7 y se ejecuta con:
+
+```sh
+pwsh ./scripts/install_awsdac.ps1
+```
+
+Después se pueden ejecutar las pruebas del agente:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q tests\architecture_agent
+```
+
+En Linux o macOS, usar el Python del entorno virtual correspondiente. Si el
+binario se administra fuera del repositorio, establecer `AWSDAC_EXECUTABLE` con
+su ruta absoluta. La publicación 1.2 falla de forma explícita cuando falta la
+dependencia o su versión no es `0.24`.
+
+El primer incremento recibe una propuesta estructurada elaborada con el arquitecto,
+consulta los `module.yaml` y `audit-record.yaml` del repositorio hermano de
+baselines y produce requisitos, arquitectura, diagrama Mermaid, ADRs y seguridad.
+Las selecciones conservan repositorio, commit, versión candidata, perfil y estado
+de aprobación. Un módulo pendiente no puede declararse aprobado.
+
+Las herramientas MCP cubren catálogo y entrada del agente 2, creación y revisión
+de arquitectura, correcciones FinOps, publicación GitHub, historial, métricas y
+aceptación del handoff. `revisar_arquitectura` exige la revisión y SHA-256
+pendientes exactos. La lista y los contratos vigentes están documentados en
+[`READMEAGENT3.md`](../../READMEAGENT3.md). Al aprobar, el grafo crea el handoff
+de etapa 3 a etapa 4 y avanza el proceso principal a FinOps. No ejecuta
+`terraform apply`, no genera archivos `.tf` y no necesita credenciales AWS.
+
+La demostración visible y sin conexiones externas se ejecuta desde
+`project/backend/`:
+
+```powershell
+.\.venv\Scripts\python.exe -m app.architecture.demo
+```
+
+Exporta los documentos y `handoff-finops.json` en
+`data/architecture-demo/`. El archivo `demo-result.json` identifica el agente,
+estado final, revisión, hash, baseline seleccionado y confirma que no se generó
+Terraform ni se utilizaron credenciales AWS.
+
+Para conectar Codex se usa el servidor STDIO dedicado:
+
+```powershell
+.\.venv\Scripts\python.exe -m app.architecture.mcp_server
+```
+
+No se inicia manualmente cuando está registrado en Codex: Codex lanza el proceso
+y descubre únicamente herramientas del límite de Arquitectura. El servidor usa
+SQLite local bajo `data/architecture-mcp/` de forma predeterminada y admite
+PostgreSQL mediante `ARCHITECTURE_DATABASE_URL` y
+`ARCHITECTURE_CHECKPOINT_URL`. Consulta el repositorio hermano de baselines y no
+necesita claves de OpenAI o AWS.
 ## Credenciales locales
 
 `project/.env` contiene configuración no sensible. `CLOUD_CONSULTANT_SECRETS_DIR`
