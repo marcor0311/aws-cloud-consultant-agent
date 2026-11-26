@@ -401,6 +401,46 @@ class WorkflowStore:
                 )
             )
 
+    def reconcile_measurements(self, key, record, phases, work, transfers):
+        decision = record["decision"]
+        case_id = decision["case_id"]
+        with self.engine.begin() as db:
+            for phase in phases:
+                self.put_in(db, f"phase:{case_id}:{phase['phase']}", "phase", phase)
+            for session in work:
+                db.execute(
+                    update(sessions)
+                    .where(
+                        sessions.c.id == session["session_id"],
+                        sessions.c.case_id == case_id,
+                    )
+                    .values(ended_at=session["ended_at"])
+                )
+                self.put_in(
+                    db,
+                    f"measurement-session:{session['session_id']}",
+                    "measurement-session",
+                    {
+                        "case_id": case_id,
+                        "session_id": session["session_id"],
+                        "kind": session["kind"],
+                        "reference": decision["reference"],
+                        "reconciliation_id": decision["reconciliation_id"],
+                    },
+                )
+            for transfer in transfers:
+                db.execute(
+                    update(handoffs)
+                    .where(
+                        handoffs.c.id == transfer["id"], handoffs.c.case_id == case_id
+                    )
+                    .values(
+                        accepted_at=transfer["accepted_at"],
+                        accepted_by=transfer["accepted_by"],
+                    )
+                )
+            self.put_in(db, key, "measurement-reconciliation", record)
+
     def enqueue(self, key, kind, payload):
         try:
             with self.engine.begin() as db:
@@ -792,6 +832,12 @@ class WorkflowStore:
                 session.update(
                     kind=annotation["kind"], evidence_reference=annotation["source"]
                 )
+            correction = self.get(f"measurement-session:{session['id']}")
+            if correction and correction["case_id"] == case_id:
+                session.update(
+                    kind=correction["kind"],
+                    measurement_reference=correction["reference"],
+                )
         result = []
         for phase in self.list("phase"):
             if phase["case_id"] != case_id:
@@ -875,6 +921,7 @@ class WorkflowStore:
                 if e["kind"] in {"approval.requested", "approval.decided"}
             ],
         }
+
     def import_references(self, root):
         manifest = json.loads((root / "provenance.json").read_text(encoding="utf-8"))
         for file in manifest["files"]:

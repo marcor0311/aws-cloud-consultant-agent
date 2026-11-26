@@ -128,15 +128,28 @@ class ProcessService:
     def apply(self, case_id, event):
         """Worker-side validation prevents stale queued decisions and replay."""
         with self.store.lock(f"process:{case_id}"):
+            return self._apply_locked(case_id, event)
+
+    def apply_sequence(self, case_id, events, guard):
+        """Apply a recoverable local sequence under one lock and a caller's gate."""
+        with self.store.lock(f"process:{case_id}"):
             self._settle(case_id)
-            state = self.get(case_id)["state"]
-            if not self._replayed(state, event):
-                event = {**event, "at": self.store.clock()}
-                transition(state, event)
-                self.graph.resume(self.thread_id(case_id), event)
-            result = self.get(case_id)
-            self._sync(result["state"])
+            guard(self.get(case_id)["state"])
+            result = None
+            for event in events:
+                result = self._apply_locked(case_id, event)
             return result
+
+    def _apply_locked(self, case_id, event):
+        self._settle(case_id)
+        state = self.get(case_id)["state"]
+        if not self._replayed(state, event):
+            event = {**event, "at": self.store.clock()}
+            transition(state, event)
+            self.graph.resume(self.thread_id(case_id), event)
+        result = self.get(case_id)
+        self._sync(result["state"])
+        return result
 
     def _settle(self, case_id):
         snapshot = self.graph.inspect(self.thread_id(case_id))

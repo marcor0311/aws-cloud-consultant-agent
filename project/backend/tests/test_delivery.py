@@ -6,12 +6,15 @@ import copy
 import json
 import os
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack, nullcontext
 from datetime import UTC, datetime
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
+import httpx
 import psycopg
 import pytest
 from fastapi import FastAPI
@@ -38,9 +41,13 @@ from app.delivery.engineering_models import (
     EngineeringEvidence,
     EngineeringFile,
     EngineeringIntake,
+    EngineeringIntegration,
+    EngineeringPublication,
+    EngineeringRelease,
     package_digest,
 )
-from app.delivery.mcp import create_server
+from app.delivery.engineering_publication import EngineeringPublicationService
+from app.delivery.mcp import create_server, http_app
 from app.delivery.metrics import calculate_metrics
 from app.delivery.models import (
     CaseReportRequest,
@@ -49,10 +56,13 @@ from app.delivery.models import (
     PhaseTiming,
 )
 from app.delivery.workflow import DeliveryWorkflow
+from app.integrations.engineering_github import EngineeringGitHub
 from app.integrations.langgraph import LangGraphExecution
+from app.integrations.slack import SlackNotifier
 from app.persistence.delivery import DeliveryBusy, DeliveryConflict, PostgresRepository
 from app.persistence.workflow import WorkflowStore
 from app.workflow.graph import build_process_graph
+from app.workflow.runtime import WorkflowRuntime
 from app.workflow.service import ProcessService
 from app.workflow.state import initial_state
 
@@ -165,7 +175,9 @@ def test_contract_rejects_ambiguous_or_invalid_inputs(payload, mutation):
         DemoRequest.model_validate(payload)
 
 
-def test_handoff_report_download_and_idempotency(client, repo, payload, tmp_path):
+def test_handoff_report_download_and_idempotency(
+    client, repo, payload, tmp_path, monkeypatch
+):
     response = client.post("/api/delivery/runs", json=payload)
     assert response.status_code == 200, response.text
     result = response.json()
@@ -466,6 +478,10 @@ def test_handoff_report_download_and_idempotency(client, repo, payload, tmp_path
         assert len(store.metrics(case_id)["sessions"]) == 6
         assert store.get(f"process:{case_id}")["stage"] == 5
         assert result["review_status"] == "pending"
+        catalog = service.catalog(intake.intake_id)
+        assert catalog["revision"] == 1
+        assert catalog["entries"][0]["status"] == "failed"
+        assert catalog["entries"][0]["versions"] == evidence_data["versions"]
         assert store.get(f"phase:{case_id}:stage-5")["completed_at"] is None
 
         async def inspect_mcp():
@@ -704,6 +720,582 @@ def test_handoff_report_download_and_idempotency(client, repo, payload, tmp_path
                     {**evidence_data, "run_id": str(uuid4())}
                 )
             )
+
+        # Continue the handoff journey with a separate isolated case exercising
+        # the production metadata branch. All files/approvals/runs remain test
+        # doubles; no GitHub operation, Terraform or cloud provider executes.
+        final_case = case_id + "-final"
+        store.register_project(
+            final_case,
+            "final-pilot",
+            "Datos de prueba del cierre",
+            "Empresa de prueba",
+            "engineer",
+            is_fictitious=False,
+        )
+        store.put(f"owner:{final_case}", "owner", {"manager_id": "engineer"})
+        final_runtime = create_report_runtime(repo.dsn, url, "engineer")
+        try:
+            final_runtime.service.sources.store.clock = lambda: clock[0]
+            final_process = final_runtime.service.process
+            final_process.graph.start(
+                f"process:{final_case}",
+                {
+                    **initial_state(final_case, "engineer"),
+                    "stage": 3,
+                    "status": "awaiting_deliverable",
+                },
+            )
+            final_process.ensure(final_case)
+            final_input = EngineeringIntake.model_validate(
+                {
+                    **input_data,
+                    "intake_id": str(uuid4()),
+                    "case_id": final_case,
+                    "incoming_handoff_id": f"{final_case}:process:2:3",
+                }
+            )
+            for stage, package in (
+                (3, final_input.architecture),
+                (4, final_input.finops),
+            ):
+                final_process.internal(
+                    final_case,
+                    f"ready-{stage}",
+                    "deliverable.ready",
+                    revision=1,
+                    artifact_sha256=final_input.approval_digest(stage),
+                    evidence=[package.approval.reference],
+                )
+                final_process.internal(
+                    final_case,
+                    package.approval.event_id,
+                    "stage.approved",
+                    revision=1,
+                    artifact_sha256=final_input.approval_digest(stage),
+                    evidence=[package.approval.reference],
+                    actor=package.approval.actor,
+                )
+            final_receipt = service.register(final_input)
+            successful = []
+            for run_number in (124, 125):
+                clock[0] += 100
+                value = copy.deepcopy(evidence_data)
+                value.update(
+                    run_id=str(uuid4()),
+                    intake_id=str(final_input.intake_id),
+                    input_sha256=final_receipt["intake"]["input_sha256"],
+                    run_reference=f"https://github.com/{repository_name}/actions/runs/{run_number}",
+                )
+                for check in value["checks"]:
+                    check.update(
+                        status="passed",
+                        failure_origin=None,
+                        started_at=datetime.fromtimestamp(
+                            clock[0] - 20, UTC
+                        ).isoformat(),
+                        ended_at=datetime.fromtimestamp(clock[0] - 10, UTC).isoformat(),
+                    )
+                parsed = EngineeringEvidence.model_validate(value)
+                service.record_evidence(parsed)
+                successful.append(parsed)
+            release = EngineeringRelease(
+                intake_id=final_input.intake_id,
+                input_sha256=final_receipt["intake"]["input_sha256"],
+                revision=1,
+                local_run_id=successful[0].run_id,
+                ci_run_id=successful[1].run_id,
+                implementation_commit=implementation_commit,
+                implementation_tree_sha256=successful[0].implementation_tree_sha256,
+                pull_request=f"https://github.com/{repository_name}/pull/3",
+                base_branch="main",
+                merge_commit="f" * 40,
+                review_commit=implementation_commit,
+                architect="architect",
+                review_reference=f"https://github.com/{repository_name}/pull/3#pullrequestreview-1",
+                baseline_verifications=[
+                    {
+                        "module": m.model_dump(mode="json"),
+                        "verification_reference": m.approval_reference,
+                    }
+                    for m in final_input.modules
+                ],
+                branch_protection_reference=f"https://github.com/{repository_name}/settings/branches",
+                integration_reference=f"https://github.com/{repository_name}/commit/{'f' * 40}",
+                compatibility_limits=[
+                    "Datos ficticios del recorrido; no acredita compatibilidad real."
+                ],
+                approval_event_id="engineering-approved",
+            )
+            with pytest.raises(DeliveryConflict, match="aprobación registrada"):
+                service.record_release(release)
+            remote = {
+                "branch": False,
+                "pull": None,
+                "approved": False,
+                "bad_bytes": True,
+                "merge_calls": 0,
+                "pull_calls": 0,
+                "lost_merge": True,
+                "old_review": False,
+            }
+            protection = {
+                "enforce_admins": {"enabled": True},
+                "required_pull_request_reviews": {
+                    "required_approving_review_count": 1,
+                    "dismiss_stale_reviews": True,
+                },
+                "required_status_checks": {
+                    "strict": True,
+                    "checks": [{"context": "security", "app_id": 7}],
+                },
+            }
+
+            def github_http(request):
+                path, method = request.url.path, request.method
+                project = f"/repos/{repository_name}"
+                baseline = "/repos/example/baselines"
+
+                def response(value, code=200):
+                    return httpx.Response(code, json=copy.deepcopy(value))
+
+                if path == project + "/branches/main/protection":
+                    return response(protection)
+                if path == baseline + "/pulls/1":
+                    return response(
+                        {
+                            "merged": True,
+                            "head": {"sha": "d" * 40},
+                            "merge_commit_sha": "d" * 40,
+                        }
+                    )
+                if path == baseline + "/pulls/1/reviews":
+                    return response(
+                        [
+                            {
+                                "user": {"login": "architect"},
+                                "state": "APPROVED",
+                                "commit_id": "d" * 40,
+                                "html_url": "https://github.com/example/baselines/pull/1#pullrequestreview-1",
+                            }
+                        ]
+                    )
+                if path.startswith(baseline + "/git/trees/"):
+                    return response(
+                        {"tree": [{"path": "aws/s3", "type": "tree", "sha": "d" * 40}]}
+                    )
+                if path.startswith(project + "/git/trees/"):
+                    return response(
+                        {
+                            "tree": [
+                                {
+                                    "path": "main.tf",
+                                    "type": "blob",
+                                    "mode": "100644",
+                                    "sha": "code-blob",
+                                }
+                            ]
+                        }
+                    )
+                if path == project + "/git/blobs/code-blob":
+                    raw = (
+                        b"wrong bytes"
+                        if remote["bad_bytes"]
+                        else (tmp_path / "main.tf").read_bytes()
+                    )
+                    return response(
+                        {
+                            "encoding": "base64",
+                            "content": base64.b64encode(raw).decode(),
+                        }
+                    )
+                if path.startswith(project + "/git/ref/heads/"):
+                    return response(
+                        {"object": {"sha": implementation_commit}},
+                        200 if remote["branch"] else 404,
+                    )
+                if path == project + "/git/refs" and method == "POST":
+                    remote["branch"] = True
+                    return response({"object": {"sha": implementation_commit}}, 201)
+                if path == project + "/pulls":
+                    if method == "GET":
+                        return response([remote["pull"]] if remote["pull"] else [])
+                    body = json.loads(request.content)
+                    remote["pull_calls"] += 1
+                    remote["pull"] = {
+                        "number": 3,
+                        "html_url": release.pull_request,
+                        "body": body["body"],
+                        "head": {
+                            "sha": implementation_commit,
+                            "repo": {"full_name": repository_name},
+                        },
+                        "base": {"ref": "main"},
+                        "requested_reviewers": [],
+                        "merged": False,
+                        "state": "open",
+                        "draft": False,
+                        "changed_files": 1,
+                        "merge_commit_sha": "f" * 40,
+                    }
+                    return response(remote["pull"], 201)
+                if path == project + "/pulls/3":
+                    return response(remote["pull"])
+                if path == project + "/pulls/3/requested_reviewers":
+                    remote["pull"]["requested_reviewers"] = [{"login": "architect"}]
+                    return response(remote["pull"])
+                if path == project + "/pulls/3/reviews":
+                    return response(
+                        [
+                            {
+                                "user": {"login": "architect"},
+                                "state": "APPROVED",
+                                "commit_id": "a" * 40
+                                if remote["old_review"]
+                                else implementation_commit,
+                                "html_url": release.review_reference,
+                            }
+                        ]
+                        if remote["approved"]
+                        else []
+                    )
+                if path == project + "/pulls/3/files":
+                    return response([{"filename": "main.tf", "status": "modified"}])
+                if path == project + "/actions/runs/125":
+                    return response(
+                        {
+                            "id": 125,
+                            "head_sha": implementation_commit,
+                            "status": "completed",
+                            "conclusion": "success",
+                            "repository": {"full_name": repository_name},
+                            "html_url": successful[1].run_reference,
+                        }
+                    )
+                if path.endswith("/check-runs"):
+                    return response(
+                        {
+                            "check_runs": [
+                                {
+                                    "id": 1,
+                                    "name": "security",
+                                    "app": {"id": 7},
+                                    "status": "completed",
+                                    "conclusion": "success",
+                                }
+                            ]
+                        }
+                    )
+                if path.endswith("/statuses"):
+                    return response([])
+                if path == project + "/pulls/3/merge":
+                    remote["merge_calls"] += 1
+                    remote["pull"].update(
+                        merged=True, state="closed", merge_commit_sha="f" * 40
+                    )
+                    if remote["lost_merge"]:
+                        remote["lost_merge"] = False
+                        raise httpx.ReadTimeout("lost response", request=request)
+                    return response({"merged": True})
+                pytest.fail(f"Unexpected simulated GitHub operation: {method} {path}")
+
+            github_client = httpx.Client(transport=httpx.MockTransport(github_http))
+            monkeypatch.setattr(
+                final_runtime,
+                "publication",
+                EngineeringPublicationService(
+                    service,
+                    EngineeringGitHub(
+                        github_client, token_provider=lambda: "test-only"
+                    ),
+                    final_process,
+                ),
+                raising=False,
+            )
+
+            async def final_mcp_journey():
+                engineering_server = create_engineering_server(
+                    service, final_runtime.publication
+                )
+                publish = EngineeringPublication(
+                    intake_id=final_input.intake_id,
+                    local_run_id=successful[0].run_id,
+                    branch="engineering/implementation",
+                )
+                with pytest.raises(ToolError, match="bytes probados"):
+                    await engineering_server.call_tool(
+                        "publicar_pr_ingenieria",
+                        {"solicitud": publish.model_dump(mode="json")},
+                    )
+                assert remote["pull_calls"] == 0
+                remote["bad_bytes"] = False
+                for _ in range(2):
+                    await engineering_server.call_tool(
+                        "publicar_pr_ingenieria",
+                        {"solicitud": publish.model_dump(mode="json")},
+                    )
+                assert remote["pull_calls"] == 1
+                assert remote["pull"]["requested_reviewers"] == [{"login": "architect"}]
+                integrate = EngineeringIntegration(
+                    intake_id=final_input.intake_id,
+                    ci_run_id=successful[1].run_id,
+                    revision=1,
+                    compatibility_limits=release.compatibility_limits,
+                )
+                remote.update(approved=True, old_review=True)
+                with pytest.raises(ToolError, match="commit exacto"):
+                    await engineering_server.call_tool(
+                        "integrar_pr_ingenieria",
+                        {"solicitud": integrate.model_dump(mode="json")},
+                    )
+                assert remote["merge_calls"] == 0
+                remote["old_review"] = False
+                with pytest.raises(ToolError, match="github_transport_error"):
+                    await engineering_server.call_tool(
+                        "integrar_pr_ingenieria",
+                        {"solicitud": integrate.model_dump(mode="json")},
+                    )
+                assert store.get(f"process:{final_case}")["stage"] == 5
+                released = (
+                    await engineering_server.call_tool(
+                        "integrar_pr_ingenieria",
+                        {"solicitud": integrate.model_dump(mode="json")},
+                    )
+                ).structured_content
+                assert remote["merge_calls"] == 1
+                assert not released["blockers"]
+                assert released["catalog"]["revision"] == 2
+                assert "external_verification" in released["release"]
+                await engineering_server.call_tool(
+                    "integrar_pr_ingenieria",
+                    {"solicitud": integrate.model_dump(mode="json")},
+                )
+                notice_id = f"engineering-notice:{final_input.intake_id}"
+                assert store.job(notice_id)["status"] == "pending"
+                slack_messages = []
+
+                def slack_http(request):
+                    if request.url.path.endswith("conversations.open"):
+                        return httpx.Response(
+                            200, json={"ok": True, "channel": {"id": "DTEST"}}
+                        )
+                    body = json.loads(request.content)
+                    slack_messages.append(body)
+                    return httpx.Response(
+                        200, json={"ok": True, "channel": "DTEST", "ts": "1700000000.1"}
+                    )
+
+                with httpx.Client(
+                    transport=httpx.MockTransport(slack_http)
+                ) as slack_client:
+                    worker = WorkflowRuntime(
+                        SimpleNamespace(manager_id="engineer"),
+                        store=store,
+                        process=final_process,
+                        board_rejections=None,
+                        service=None,
+                        google=None,
+                        notifier=SlackNotifier("test", "UTEST", slack_client),
+                        drafter=None,
+                        worker_lock=SimpleNamespace(hold=nullcontext),
+                        resources=ExitStack(),
+                    )
+                    assert worker.run_once(notice_id)
+                    assert not worker.run_once(notice_id)
+                assert len(slack_messages) == 1
+                assert "MCP del informe" in slack_messages[0]["text"]
+                assert store.job(notice_id)["receipt"]["channel"] == "DTEST"
+                server = create_server(repo, "engineer", final_runtime.service)
+                generated = (
+                    await server.call_tool(
+                        "generar_informe",
+                        {
+                            "entrada": {
+                                "report_id": str(uuid4()),
+                                "case_id": final_case,
+                                "intake_id": str(final_input.intake_id),
+                            }
+                        },
+                    )
+                ).structured_content
+                assert not generated["closure_blockers"]
+                # Reconcile an actually recorded open session. Earlier report
+                # sources remain frozen; missing historical work is not invented.
+                initial_quality = (
+                    await server.call_tool(
+                        "consultar_conciliacion_mediciones",
+                        {"expediente_id": final_case},
+                    )
+                ).structured_content
+                waiting = final_runtime.service.sources.store.start_work(
+                    final_case, "stage-6", "engineer", "human"
+                )
+                clock[0] += 10
+                correction = {
+                    "reconciliation_id": str(uuid4()),
+                    "case_id": final_case,
+                    "expected_sha256": initial_quality["state_sha256"],
+                    "reference": "https://example.org/work-log/1",
+                    "detail": "Recepción y espera registradas en la prueba",
+                    "sessions": [
+                        {
+                            "session_id": waiting,
+                            "ended_at": datetime.fromtimestamp(
+                                clock[0], UTC
+                            ).isoformat(),
+                            "kind": "wait",
+                        }
+                    ],
+                }
+                with pytest.raises(ToolError, match="mediciones cambiaron"):
+                    await server.call_tool(
+                        "conciliar_mediciones", {"decision": correction}
+                    )
+                quality = (
+                    await server.call_tool(
+                        "consultar_conciliacion_mediciones",
+                        {"expediente_id": final_case},
+                    )
+                ).structured_content
+                assert any(i["kind"] == "open_session" for i in quality["issues"])
+                correction["expected_sha256"] = quality["state_sha256"]
+                corrected = (
+                    await server.call_tool(
+                        "conciliar_mediciones", {"decision": correction}
+                    )
+                ).structured_content
+                repeated = (
+                    await server.call_tool(
+                        "conciliar_mediciones", {"decision": correction}
+                    )
+                ).structured_content
+                assert corrected["state_sha256"] == repeated["state_sha256"]
+                assert len(repeated["history"]) == 1
+                assert not any(i["kind"] == "open_session" for i in corrected["issues"])
+                fresh = final_runtime.service.generate(
+                    CaseReportRequest(
+                        report_id=uuid4(),
+                        case_id=final_case,
+                        intake_id=final_input.intake_id,
+                    )
+                )
+                report_phase = next(
+                    p for p in fresh["metrics"]["phases"] if p["phase"] == "report"
+                )
+                assert report_phase["wait_seconds"] == 10
+                assert report_phase["process_time_seconds"] == 0
+                assert (
+                    generated["measurement_review"]["state_sha256"]
+                    != fresh["measurement_review"]["state_sha256"]
+                )
+                generated = fresh
+                report = generated["report"]
+                common = {
+                    "version": report["version"],
+                    "sha256": report["artifact"]["sha256"],
+                    "detail": "Confirmación ficticia del recorrido de cierre",
+                }
+                await server.call_tool(
+                    "registrar_decision_informe",
+                    {
+                        "entrega_id": generated["delivery_id"],
+                        "decision": {
+                            **common,
+                            "decision_id": str(uuid4()),
+                            "action": "approve",
+                        },
+                    },
+                )
+                presentation = {
+                    **common,
+                    "decision_id": str(uuid4()),
+                    "action": "record_presentation",
+                }
+                with pytest.raises(ToolError, match="fecha, audiencia"):
+                    await server.call_tool(
+                        "registrar_decision_informe",
+                        {
+                            "entrega_id": generated["delivery_id"],
+                            "decision": presentation,
+                        },
+                    )
+                presentation["presentation"] = {
+                    "presented_at": datetime.now(UTC).isoformat(),
+                    "audience": "Dirección de prueba",
+                    "reference": "https://example.org/presentation/1",
+                }
+                from app.persistence.delivery import RunStore
+
+                save = RunStore.save_decision
+
+                def interrupted_save(self, decision_id, decision, *args):
+                    if decision["action"] == "record_presentation":
+                        raise RuntimeError(
+                            "Interrupción después del checkpoint de cierre"
+                        )
+                    return save(self, decision_id, decision, *args)
+
+                monkeypatch.setattr(RunStore, "save_decision", interrupted_save)
+                with pytest.raises(ToolError):
+                    await server.call_tool(
+                        "registrar_decision_informe",
+                        {
+                            "entrega_id": generated["delivery_id"],
+                            "decision": presentation,
+                        },
+                    )
+                assert store.get(f"process:{final_case}")["status"] == "completed"
+                assert (
+                    repo.get(generated["delivery_id"])["report"]["status"] == "approved"
+                )
+                monkeypatch.setattr(RunStore, "save_decision", save)
+                recovered_runtime = create_report_runtime(repo.dsn, url, "engineer")
+                try:
+                    recovered_runtime.service.sources.store.clock = lambda: clock[0]
+                    recovered = create_server(
+                        repo, "engineer", recovered_runtime.service
+                    )
+                    closed = (
+                        await recovered.call_tool(
+                            "registrar_decision_informe",
+                            {
+                                "entrega_id": generated["delivery_id"],
+                                "decision": presentation,
+                            },
+                        )
+                    ).structured_content
+                    assert closed["report"]["status"] == "closed"
+                    repeated = (
+                        await recovered.call_tool(
+                            "registrar_decision_informe",
+                            {
+                                "entrega_id": generated["delivery_id"],
+                                "decision": presentation,
+                            },
+                        )
+                    ).structured_content
+                    assert repeated["report"] == closed["report"]
+                    assert len(repo.report_decisions(generated["delivery_id"])) == 2
+                    content = list(await recovered.read_resource(closed["pdf_uri"]))[
+                        0
+                    ].content
+                    text = " ".join(
+                        p.extract_text() for p in PdfReader(BytesIO(content)).pages
+                    )
+                    assert "INFORME DEFINITIVO APROBADO" in text
+                    output = Path(
+                        os.getenv(
+                            "DELIVERY_TEST_OUTPUT", str(tmp_path / "report-links")
+                        )
+                    )
+                    output.mkdir(parents=True, exist_ok=True)
+                    (output / "informe-definitivo-prueba.pdf").write_bytes(content)
+                finally:
+                    recovered_runtime.close()
+
+            asyncio.run(final_mcp_journey())
+        finally:
+            final_runtime.close()
     finally:
         runtime.close()
 
@@ -922,6 +1514,7 @@ def test_report_revision_approval_and_close(
     manager = "Operador de demostración"
     case_id = "issue22-independent"
     runtime = create_report_runtime(repo.dsn, workflow_url, manager)
+    monkeypatch.setenv("WORKFLOW_DATABASE_URL", workflow_url)
     runtime.service.sources.store.clock = lambda: clock[0]
     try:
         workflow.register_project(
@@ -1102,6 +1695,114 @@ def test_report_revision_approval_and_close(
 
         linked = asyncio.run(verify_case_mcp())
         assert linked["captured_at"] != captured["captured_at"]
+        # The same journey exercises JSON-RPC over the real Streamable HTTP
+        # transport used by a remote MCP client, with no model or external calls.
+        from mcp.types import LATEST_PROTOCOL_VERSION
+
+        token = "test-only-bearer-" + "x" * 32
+        with TestClient(
+            http_app(create_server(repo, manager, service), token),
+            base_url="http://127.0.0.1:8770",
+        ) as wire:
+            assert wire.post("/mcp", json={}).status_code == 401
+            assert wire.post("/mcp/", json={}).status_code == 401
+            headers = {
+                "Authorization": "Bearer " + token,
+                "Accept": "application/json, text/event-stream",
+            }
+            counter = 0
+
+            def rpc(method, params):
+                nonlocal counter
+                counter += 1
+                response = wire.post(
+                    "/mcp",
+                    headers=headers,
+                    json={
+                        "jsonrpc": "2.0",
+                        "id": counter,
+                        "method": method,
+                        "params": params,
+                    },
+                )
+                assert response.status_code == 200, response.text
+                body = response.json()
+                assert "error" not in body, body
+                return body["result"]
+
+            initialized = rpc(
+                "initialize",
+                {
+                    "protocolVersion": LATEST_PROTOCOL_VERSION,
+                    "capabilities": {},
+                    "clientInfo": {
+                        "name": "engagement-manager-http-integration",
+                        "version": "1.0",
+                    },
+                },
+            )
+            assert initialized["serverInfo"]["name"] == "Informe ejecutivo PSWE-07"
+            listed = rpc("tools/list", {})
+            assert "conciliar_mediciones" in {t["name"] for t in listed["tools"]}
+            request = {"report_id": str(uuid4()), "case_id": case_id}
+            generated = rpc(
+                "tools/call",
+                {"name": "generar_informe", "arguments": {"entrada": request}},
+            )["structuredContent"]
+            report = generated["report"]
+
+            def wire_decide(action, **extra):
+                return rpc(
+                    "tools/call",
+                    {
+                        "name": "registrar_decision_informe",
+                        "arguments": {
+                            "entrega_id": generated["delivery_id"],
+                            "decision": {
+                                **decision(
+                                    report,
+                                    action,
+                                    "Decisión explícita de prueba por HTTP",
+                                ),
+                                **extra,
+                            },
+                        },
+                    },
+                )
+
+            assert not wire_decide("request_changes").get("isError")
+            report = wire_decide(
+                "revise",
+                sections={
+                    "next_steps": "Resolver los faltantes documentados antes del cierre."
+                },
+            )["structuredContent"]["report"]
+            approved_http = wire_decide("approve")["structuredContent"]
+            assert wire_decide("record_presentation").get("isError")
+            downloaded = rpc("resources/read", {"uri": approved_http["pdf_uri"]})[
+                "contents"
+            ][0]
+            raw = base64.b64decode(downloaded["blob"])
+            assert (
+                sha256(raw).hexdigest()
+                == approved_http["report"]["approved_document"]["sha256"]
+            )
+            source = rpc("resources/read", {"uri": approved_http["sources_uri"]})[
+                "contents"
+            ][0]
+            assert (
+                json.loads(source.get("text") or base64.b64decode(source["blob"]))[
+                    "case_id"
+                ]
+                == case_id
+            )
+            assert rpc(
+                "tools/call",
+                {
+                    "name": "consultar_conciliacion_mediciones",
+                    "arguments": {"expediente_id": case_id},
+                },
+            )["structuredContent"]["issues"]
         monkeypatch.setenv("DELIVERY_ENGAGEMENT_MANAGER", "Otro operador")
         assert client.get(f"{case_url}/report").status_code == 403
         assert (

@@ -39,7 +39,7 @@ project/
 │   ├── 3. architecture agent/   # Responsabilidad documentada; runtime pendiente
 │   ├── 4. finops agent/         # Responsabilidad documentada; runtime pendiente
 │   ├── 5. terraform agent/      # Referencia al avance en backend/app/delivery
-│   └── 6. project closure agent/ # Referencia al borrador; cierre pendiente
+│   └── 6. project closure agent/ # Informe versionado y cierre condicionado
 ├── frontend/
 │   ├── office-dashboard.html
 │   ├── src/                    # JavaScript y CSS
@@ -197,8 +197,19 @@ El checkpoint permite recuperar sin repetir transiciones; documentos y avisos
 mantienen sus claves de deduplicación. Un envío Slack incierto exige conciliación.
 
 La apertura de la etapa 2 está implementada por Meeting Assistant. Las etapas
-3–6 coordinan trabajo externo: todavía no implementan sus agentes ni integran PRs.
+3–6 coordinan trabajo externo. Ingeniería automatiza la publicación e integración
+de un commit ya probado mediante operaciones explícitas; Arquitectura y FinOps
+siguen pendientes de sus runtimes propios.
 Los webhooks aportan evidencia; un issue cerrado no aprueba etapas.
+La recepción de ingeniería conserva un catálogo con revisión/hash de las corridas
+importadas. La entrega técnica definitiva exige la aprobación exacta de etapa 5
+y referencias externas confirmadas por el operador o contrastadas con la API de
+GitHub. La publicación solicita revisión; la integración comprueba revisión,
+baselines, CI y protección de rama, conserva recibos y encola el aviso en el
+outbox de Slack existente. El informe captura esa entrega sin modificar fuentes
+anteriores. Su presentación explícita aplica las transiciones de etapa 6 al
+grafo principal y permite recuperar un cierre interrumpido entre checkpoint e
+informe. El runtime de informes no compone proveedores de IA, GitHub o notificaciones.
 El hash de un documento externo es declarado por el operador. La identidad viene
 del MCP STDIO privado o del bearer HTTP configurado; el runtime sigue siendo de
 un único operador, sin añadir autorización empresarial por puesto.
@@ -449,11 +460,13 @@ validación y recepción; `persistence/engineering.py` persiste archivos, recibo
 eventos e intervalos en las tablas de workflow existentes, de forma transaccional.
 `integrations/engineering_files.py` limita la lectura a una raíz explícita y verifica
 los hashes. La composición `create_engineering_runtime` requiere PostgreSQL y no
-crea proveedores, workers ni infraestructura. CLI y MCP STDIO privados delegan en
+ejecuta proveedores al recibir/leer insumos, ni inicia workers o infraestructura.
+El cliente GitHub solo se usa al publicar o integrar explícitamente. CLI y MCP STDIO privados delegan en
 el servicio, sin cambiar las rutas HTTP existentes.
 Las aprobaciones de entrada se contrastan con las transiciones aplicadas de
 Arquitectura/FinOps y su entrega al responsable. Las referencias de revisión de
-baselines siguen declaradas; no se consultan ni autentican revisiones externas.
+baselines del registro manual siguen declaradas. El ciclo automatizado conserva
+la comprobación de sus PRs/revisiones, módulos exactos, CI y merge mediante GitHub.
 Importar resultados existentes no ejecuta comandos ni aprueba ingeniería. Cada
 intervalo técnico conserva su referencia y clasificación; el cálculo por expediente
 une intervalos por actor y distingue retrabajo medido de tiempo desconocido.
@@ -469,3 +482,12 @@ El PDF muestra comprobaciones, versiones, módulos, respaldos y retrabajo medido
 sin convertir una recepción en un handoff aprobado. Los archivos congelados se
 descargan desde un recurso del MCP del informe, con control de operador y hash.
 Las fuentes, aprobaciones y PDFs anteriores no cambian con nuevas corridas.
+
+`delivery/measurements.py` valida la conciliación de límites, sesiones y handoffs;
+`WorkflowStore.reconcile_measurements` persiste cambios y auditoría atómicamente.
+El hash de las mediciones evita sobrescribir cambios concurrentes. Las esperas
+clasificadas no suman PT y no se infieren tiempos ausentes. La captura conserva
+el diagnóstico de mediciones; una corrección posterior exige un informe nuevo
+antes de presentar. El MCP del informe ofrece HTTP privado con el guard Bearer
+compartido, además de STDIO. La aceptación dentro del cliente ChatGPT sigue siendo
+una comprobación manual separada de la integración de protocolo.

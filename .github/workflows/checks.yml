@@ -87,7 +87,8 @@ jobs:
       - run: python -m playwright install --with-deps chromium
       - run: python -m ruff format --check app tests
       - run: python -m ruff check app tests
-      - run: python -m pytest -q
+      - name: Test backend; Architecture runs with its inputs in architecture-agent
+        run: python -m pytest -q --ignore=tests/architecture_agent
 
   calendar-assistant:
     runs-on: ubuntu-latest

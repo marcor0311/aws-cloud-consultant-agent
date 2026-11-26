@@ -46,9 +46,7 @@ class EngineeringIssuePlan(FinOpsModel):
 class EngineeringIssueReceipt(FinOpsModel):
     contract_version: Literal["1.0"] = "1.0"
     plan_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    issue_url: str = Field(
-        pattern=r"^https://github\.com/[^/]+/[^/]+/issues/[0-9]+$"
-    )
+    issue_url: str = Field(pattern=r"^https://github\.com/[^/]+/[^/]+/issues/[0-9]+$")
     issue_number: int = Field(ge=1)
     body_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     assignees: list[str] = Field(min_length=1, max_length=20)

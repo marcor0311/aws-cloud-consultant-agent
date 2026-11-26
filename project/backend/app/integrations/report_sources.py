@@ -7,6 +7,7 @@ from app.delivery.engineering_models import (
     EngineeringIntake,
     digest,
 )
+from app.delivery.measurements import reconciliation_status
 from app.delivery.metrics import case_metrics
 from app.delivery.models import EngineeringHandoff
 
@@ -110,6 +111,8 @@ class CaseReportSources:
             )
         if request.intake_id:
             engineering = self._engineering(request, operator, project)
+            if engineering.get("release") and not engineering["blockers"]:
+                blockers.clear()
             blockers.extend(engineering["blockers"])
             sources.append(
                 {
@@ -127,7 +130,11 @@ class CaseReportSources:
                         "run_id": run["run_id"],
                     }
                 )
-        if project["is_fictitious"]:
+        if (
+            project["is_fictitious"]
+            or engineering
+            and engineering["intake"]["is_fictitious"]
+        ):
             blockers.append("El expediente está identificado como ficticio.")
         decisions = [
             {"id": e["id"], "kind": e["kind"], "at": e["at"], "payload": e["payload"]}
@@ -163,6 +170,7 @@ class CaseReportSources:
             "engineering": engineering,
             "metrics": metrics,
             "measurements": recorded,
+            "measurement_review": reconciliation_status(recorded),
             "decisions": decisions,
             "sources": sources,
             "closure_blockers": list(dict.fromkeys(blockers)),
@@ -258,6 +266,16 @@ class CaseReportSources:
             )
         )
         bundle["summary"] = (
-            f"Recepción de ingeniería registrada {status}. {history} Revisión técnica e integración pendientes. Los resultados se conservan como declarados por el operador."
+            f"Recepción de ingeniería registrada {status}. {history} "
+            + (
+                (
+                    "Entrega técnica aprobada en el proceso, con revisión, baselines, CI e integración contrastados mediante la API de GitHub. "
+                    if bundle["release"].get("external_verification")
+                    else "Entrega técnica aprobada en el proceso, con revisión e integración declaradas por el operador. "
+                )
+                if bundle.get("release") and not bundle["blockers"]
+                else "Revisión técnica e integración pendientes. "
+            )
+            + "Los resultados se conservan como declarados por el operador."
         )
         return bundle

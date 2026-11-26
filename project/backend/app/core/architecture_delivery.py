@@ -28,7 +28,9 @@ class DeliveryManifest(DeliveryContract):
     @model_validator(mode="after")
     def path_and_hash_are_atomic(self):
         if bool(self.path) != bool(self.sha256):
-            raise ValueError("La ruta y el hash del manifiesto deben declararse juntos.")
+            raise ValueError(
+                "La ruta y el hash del manifiesto deben declararse juntos."
+            )
         return self
 
 

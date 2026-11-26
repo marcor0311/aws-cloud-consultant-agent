@@ -27,9 +27,20 @@ Las métricas del expediente y del informe incluyen esos intervalos, sin duplica
 el trabajo paralelo y manteniendo la procedencia declarada de los resultados.
 Ver [entrada, evidencias y métricas](../../../docs/engineering-intake.md).
 
-Faltan el acuerdo del contrato con Arquitectura/FinOps y el piloto con sus insumos
-reales, catálogo versionado de compatibilidad, verificación externa de baselines,
-paquete técnico definitivo para #22 y el ciclo PR/revisión/merge/notificación.
+Existe un catálogo por recepción con revisión/hash, combinaciones, fallos y límites
+de las corridas importadas. La entrega técnica definitiva contrasta su revisión,
+hash y arquitecto con la aprobación de etapa 5, exige corridas local/CI exitosas y
+conserva referencias de PR, merge, protección de rama y baselines confirmadas por
+el operador. Emite disponibilidad en SQL para #22; no autentica GitHub remotamente.
+
+Las operaciones explícitas `publish` e `integrate` publican el commit probado,
+solicitan revisión, verifican baselines/CI/protección y la aprobación exacta mediante
+la API de GitHub, integran y encolan el aviso para Slack. Los recibos externos y
+las operaciones ya completadas se recuperan sin duplicar PR, merge ni aviso.
+Ver [operación GitHub](../../../docs/engineering-github.md).
+
+Faltan el acuerdo del contrato con Arquitectura/FinOps, el piloto con sus insumos
+reales y la acreditación de GitHub/Slack con los permisos del proyecto.
 Recibir o importar una corrida exitosa no equivale a aprobación del arquitecto.
 
 Contrato funcional: [issues.md](../../../issues.md#5-cloud-infrastructure-engineer--implementación).

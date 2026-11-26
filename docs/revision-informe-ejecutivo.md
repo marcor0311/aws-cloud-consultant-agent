@@ -33,6 +33,8 @@ del operador local.
 | `generar_informe` | Consolidar un expediente con `report_id` y `case_id`; la entrada anterior `fixtures/delivery-1.json` conserva el ejemplo |
 | `consultar_informe` | Consultar revisión vigente, tiempos, historial y URI de PDF |
 | `registrar_decision_informe` | Guardar ajustes, revisión, aprobación o presentación |
+| `consultar_conciliacion_mediciones` | Consultar faltantes y hash de las mediciones actuales |
+| `conciliar_mediciones` | Aplicar correcciones explícitas con evidencia y auditoría |
 | Recurso `delivery://pdf/{entrega_id}/{archivo_id}` | Leer el PDF descargable en un cliente MCP que admita recursos |
 
 ## Informe independiente del issue 21
@@ -43,6 +45,56 @@ misma base. Usar como `DELIVERY_ENGAGEMENT_MANAGER` el identificador exacto del
 responsable registrado en `workflow_projects`, no un nombre nuevo para esta sesión.
 El runtime es local y de un único operador; esto no añade autenticación empresarial.
 El MCP no compone proveedores de Google, Slack o IA ni inicia workers.
+
+### Transporte para el cliente del Engagement Manager
+
+STDIO se conserva para clientes locales. Para ChatGPT web se recomienda el
+transporte Streamable HTTP con el mismo guard Bearer privado del resto del backend:
+
+```powershell
+python -m app.delivery.mcp --transport streamable-http --host 127.0.0.1 --port 8770
+```
+
+Configurar `DELIVERY_MCP_BEARER_TOKEN` con al menos 32 caracteres en el directorio
+privado o entorno del proceso. No guardar el token en documentación ni exponer
+PostgreSQL. El servidor se mantiene en loopback; conectar mediante Secure MCP
+Tunnel u otra conexión remota autorizada compatible con la cuenta. Seguir la
+[guía oficial de conexión MCP en ChatGPT](https://help.openai.com/en/articles/12584461-developer-mode-and-full-mcp-connectors-in-chatgpt-beta).
+
+La prueba existente verifica inicialización JSON-RPC, listado de herramientas,
+generación, ajustes, aprobación, bloqueo de cierre parcial y lectura de PDF/JSON
+por HTTP real ASGI. Comprueba el rechazo sin Bearer en `/mcp` y `/mcp/`. No usa
+un modelo ni una cuenta de ChatGPT: esa aceptación se realiza manualmente con
+[este recorrido](validacion-cliente-informe.md).
+
+### Conciliación de mediciones
+
+Consultar `consultar_conciliacion_mediciones(expediente_id)` antes de corregir.
+El resultado identifica fases ausentes/en curso, sesiones abiertas/sin clasificar,
+sesiones fuera de límites y handoffs sin recepción; incluye `state_sha256`.
+
+`conciliar_mediciones` recibe `MeasurementDecision`: `reconciliation_id`, `case_id`,
+`expected_sha256`, `reference` y `detail`, más las correcciones explícitas:
+
+- `phases`: `phase` (`stage-1` a `stage-6`), `accepted_at` y `completed_at` opcional.
+- `sessions`: `session_id`, `ended_at` opcional y `kind` (`work`, `wait` o `rework`).
+- `handoffs`: `handoff_id` y `accepted_at`.
+
+Las fechas requieren zona horaria. Se verifican pertenencia, límites, sesiones
+afectadas, fechas futuras y hash vigente. No se sobrescribe una clasificación
+técnica distinta de su evidencia original. El cambio y su estado anterior se
+guardan atómicamente en SQL; repetir la misma decisión no duplica auditoría.
+Un expediente cerrado no admite correcciones nuevas.
+
+Las esperas clasificadas se excluyen de PT y de duración activa. Se descuenta su
+superposición con trabajo antes de calcular la espera. Los huecos sin registro
+siguen sin clasificar; no se inventan sesiones ni trabajo histórico.
+
+Cada informe congela también `measurement_review`. Una conciliación posterior
+requiere otro informe y aprobación antes de presentar: el cierre rechaza un hash
+de mediciones distinto, salvo la recuperación de su propia presentación aplicada.
+Las fuentes anteriores conservan el estado previo. La conciliación de registros
+no acredita datos que nunca se midieron; esos faltantes requieren evidencia real.
 
 1. Consultar `listar_expedientes_informe` para seleccionar un `case_id` propio.
 2. Llamar `generar_informe` con la nueva entrada:
@@ -152,10 +204,51 @@ recepción conservan su identificación e idempotencia.
   muestra aparte la generación y las revisiones del PDF; no se inventa tiempo de
   lectura humana ni se infiere el LT global sumando fases.
 
-`record_presentation` devuelve conflicto para estos informes parciales. No modifica
-el estado del proceso ni fabrica una entrega aprobada de ingeniería. La selección
-de recepciones y evidencias de #21 ya está conectada; la aprobación e integración
-de la entrega técnica definitiva y el cierre del expediente siguen pendientes.
+`record_presentation` devuelve conflicto para estos informes parciales. Una entrega
+definitiva posterior no modifica sus fuentes: generar otro `report_id` para
+capturarla y someter ese documento a revisión.
+
+### Presentación y cierre del expediente
+
+Cuando la recepción tiene una `EngineeringRelease` vigente, con corridas exitosas
+local/CI y aprobación exacta de etapa 5 registrada, el nuevo informe incorpora
+esa entrega y el catálogo congelado. Si el expediente es real y no hay bloqueos
+técnicos, el PDF se identifica como definitivo. Los datos ausentes de métricas
+siguen mostrando "Sin medición"; definitivo no significa medición completa ni
+autenticación remota de las referencias confirmadas por el operador.
+
+Tras revisar y aprobar la versión/SHA-256 exactos, `record_presentation` requiere
+además de `decision_id`, `version`, `sha256`, `action` y `detail`:
+
+```json
+{
+  "presentation": {
+    "presented_at": "2026-11-25T21:00:00Z",
+    "audience": "Dirección del proyecto",
+    "reference": "https://example.org/actas/presentacion"
+  }
+}
+```
+
+Es un ejemplo de estructura; registrar la fecha y el acta reales. La fecha debe
+ser posterior a la aprobación del informe y no estar en el futuro. El servicio
+verifica los PDFs y las fuentes, vuelve a comprobar la entrega vigente y exige
+que el proceso siga en la misma iteración de etapa 6. No promueve un informe
+parcial, ficticio, desactualizado o aprobado sobre otro hash.
+
+La operación aplica `deliverable.ready` y `stage.approved` al grafo principal con
+referencias a ambos PDFs y a la presentación; completa la fase 6 y deja el proceso
+en `completed`. La entrega de informe queda `closed`. Los eventos y la decisión
+conservan identificadores estables para recuperar una interrupción entre el
+checkpoint y el guardado del informe: reintentar exactamente la misma decisión.
+Las dos bases no comparten una transacción; durante esa recuperación el proceso
+puede estar completado y el informe aún aprobado. Una decisión distinta no puede
+reemplazar la presentación ya aplicada.
+
+El mismo recorrido está disponible por MCP y por la API local de revisión cuando
+se configura `WORKFLOW_DATABASE_URL`. El Engagement Manager no necesita operar
+GitHub. Quedan por validar el cliente MCP elegido y el piloto con entregables,
+mediciones, aprobaciones y presentación reales.
 
 ## Revisar y cerrar la demostración anterior
 

@@ -417,6 +417,7 @@ def render_case_pdf(snapshot, sections, *, version, source, approval=None):
         return result
 
     project, metrics = snapshot["project"], snapshot["metrics"]
+    partial = bool(snapshot["closure_blockers"])
     stamp = datetime.fromtimestamp(snapshot["captured_at"], UTC).isoformat()
     title = ParagraphStyle("CaseTitle", parent=heading, fontSize=24, leading=30)
     story = [
@@ -426,7 +427,12 @@ def render_case_pdf(snapshot, sections, *, version, source, approval=None):
             f"Expediente {snapshot['case_id']} | Versión {version} | Corte {stamp}",
             small,
         ),
-        para("INFORME PARCIAL APROBADO" if approval else "BORRADOR PARCIAL", heading),
+        para(
+            ("INFORME PARCIAL APROBADO" if partial else "INFORME DEFINITIVO APROBADO")
+            if approval
+            else ("BORRADOR PARCIAL" if partial else "BORRADOR DEFINITIVO"),
+            heading,
+        ),
         para(
             "Proyecto ficticio. "
             if project["is_fictitious"]
@@ -546,9 +552,38 @@ def render_case_pdf(snapshot, sections, *, version, source, approval=None):
                 ),
                 para(
                     "Referencias de aprobación de baselines pendientes de verificación externa. Revisión del arquitecto y PR de implementación pendientes."
+                    if not engineering.get("release")
+                    else "Aprobación técnica contrastada con el proceso. Código, revisión, baselines, estado de CI y protección de main verificados mediante la API de GitHub; los logs locales conservan su procedencia declarada."
+                    if engineering["release"].get("external_verification")
+                    else "Aprobación técnica contrastada con el proceso. Referencias de GitHub, protección de main y baselines confirmadas por el operador; sin autenticación remota automática."
                 ),
             ]
         )
+        if release_record := engineering.get("release"):
+            release = release_record["release"]
+            story.extend(
+                [
+                    para("Entrega técnica definitiva", heading),
+                    para(f"PR: {release['pull_request']}", small),
+                    para(
+                        f"Arquitecto: {release['architect']} | Revisión: {release['review_reference']}",
+                        small,
+                    ),
+                    para(f"Commit probado: {release['implementation_commit']}", small),
+                    para(f"Integración: {release['integration_reference']}", small),
+                    para(
+                        f"Corridas local / CI: {release['local_run_id']} / {release['ci_run_id']}",
+                        small,
+                    ),
+                    para(
+                        f"Catálogo de compatibilidad: revisión {release_record['catalog']['revision']} | SHA-256: {release_record['catalog']['sha256']}",
+                        small,
+                    ),
+                ]
+            )
+            story.extend(
+                para(limit, small) for limit in release["compatibility_limits"]
+            )
     elif technical:
         costs = technical["costs"]
         check_status = {
@@ -607,6 +642,7 @@ def render_case_pdf(snapshot, sections, *, version, source, approval=None):
                     "LT al corte",
                     "PT esfuerzo",
                     "Activa",
+                    "Espera",
                     "Retrabajo",
                     "Humano / agente",
                 ]
@@ -618,12 +654,13 @@ def render_case_pdf(snapshot, sections, *, version, source, approval=None):
                     seconds(p["lead_time_seconds"]),
                     seconds(p["process_time_seconds"]),
                     seconds(p["active_elapsed_seconds"]),
+                    seconds(p["wait_seconds"]),
                     rework(p),
                     f"{seconds(p['human_effort_seconds'])} / {seconds(p['agent_effort_seconds'])}",
                 ]
                 for p in metrics["phases"]
             ],
-            [0.20, 0.14, 0.14, 0.14, 0.14, 0.24],
+            [0.18, 0.12, 0.12, 0.12, 0.12, 0.12, 0.22],
         )
     )
     story.extend(
@@ -668,6 +705,12 @@ def render_case_pdf(snapshot, sections, *, version, source, approval=None):
         story.extend([para(label, heading), para(sections[key])])
     story.append(para("Requisitos pendientes para el cierre", heading))
     story.extend(para(item) for item in snapshot["closure_blockers"])
+    if not partial:
+        story.append(
+            para(
+                "Entrega técnica definitiva registrada. El cierre requiere aprobación de esta revisión y registro de su presentación a dirección."
+            )
+        )
     story.append(para("7. Decisiones y fuentes", heading))
     if engineering:
         story.append(
@@ -721,7 +764,12 @@ def render_case_pdf(snapshot, sections, *, version, source, approval=None):
     if approval:
         story.extend(
             [
-                para("Aprobación del informe parcial", heading),
+                para(
+                    "Aprobación del informe parcial"
+                    if partial
+                    else "Aprobación del informe definitivo",
+                    heading,
+                ),
                 para(f"{approval['operator']} | {approval['at']}", small),
                 para(approval["detail"]),
                 para(f"SHA-256 de la revisión aprobada: {approval['sha256']}", small),
@@ -737,7 +785,11 @@ def render_case_pdf(snapshot, sections, *, version, source, approval=None):
         canvas.setFont("DeliveryBold", 8)
         canvas.drawString(18 * mm, A4[1] - 14 * mm, "CONSULTORÍA AWS / PSWE-07")
         canvas.setFont("Delivery", 7)
-        canvas.drawString(18 * mm, 12 * mm, f"INFORME PARCIAL V{version}")
+        canvas.drawString(
+            18 * mm,
+            12 * mm,
+            f"INFORME {'PARCIAL' if partial else 'DEFINITIVO'} V{version}",
+        )
         canvas.drawRightString(A4[0] - 18 * mm, 12 * mm, f"Página {doc.page}")
         canvas.restoreState()
 

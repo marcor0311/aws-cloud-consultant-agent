@@ -88,10 +88,8 @@ class FinOpsEvaluationDecision(FinOpsModel):
                 or self.authorization.project_id != self.project_id
                 or self.authorization.architecture_revision
                 != self.architecture_revision
-                or self.authorization.architecture_sha256
-                != self.architecture_sha256
-                or self.authorization.evaluation_reference
-                != self.evaluation_reference
+                or self.authorization.architecture_sha256 != self.architecture_sha256
+                or self.authorization.evaluation_reference != self.evaluation_reference
             ):
                 raise ValueError("La autorización corresponde a otra evaluación.")
         return self

@@ -3,6 +3,7 @@
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
+from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.checkpoint.sqlite import SqliteSaver
@@ -11,6 +12,12 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 @contextmanager
 def open_checkpointer(url):
     if url.startswith("postgresql://"):
+        # SQLAlchemy serializes spaces in options as '+'. libpq URI parsing
+        # requires %20, including the isolated schema used by integration tests.
+        parts = urlsplit(url)
+        url = urlunsplit(
+            parts._replace(query=urlencode(parse_qsl(parts.query), quote_via=quote))
+        )
         with PostgresSaver.from_conn_string(url) as saver:
             saver.setup()
             yield saver

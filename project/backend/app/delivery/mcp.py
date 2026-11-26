@@ -1,5 +1,6 @@
 """Private STDIO tools and PDF resource for the Engagement Manager."""
 
+import argparse
 import json
 import os
 from uuid import UUID
@@ -9,6 +10,8 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import CallToolResult, TextContent
 
+from app.core.config import load_environment
+from app.delivery.measurements import MeasurementDecision
 from app.delivery.models import CaseReportRequest, DemoRequest, ReportDecision
 from app.delivery.review import ReportReview, configured_manager
 from app.delivery.workflow import DeliveryWorkflow
@@ -31,7 +34,7 @@ def create_server(repository: PostgresRepository, operator: str, case_service=No
             "operador lo confirma expresamente para esa revisión."
         ),
     )
-    service = ReportReview(repository, operator)
+    service = ReportReview(repository, operator, case_service)
 
     def call(method, *args):
         try:
@@ -92,6 +95,20 @@ def create_server(repository: PostgresRepository, operator: str, case_service=No
         """Solicita ajustes, guarda revisión, aprueba o registra una presentación confirmada."""
         return call(service.decide, entrega_id, decision, operator)
 
+    @server.tool()
+    def consultar_conciliacion_mediciones(expediente_id: str) -> CallToolResult:
+        """Consulta faltantes y hash de las mediciones vigentes, sin inferir tiempos."""
+        if case_service is None or case_service.measurements is None:
+            raise ToolError("El servicio de conciliación no está configurado")
+        return call(case_service.measurements.get, expediente_id)
+
+    @server.tool()
+    def conciliar_mediciones(decision: MeasurementDecision) -> CallToolResult:
+        """Con confirmación expresa, corrige registros respaldados por evidencia y conserva auditoría."""
+        if case_service is None or case_service.measurements is None:
+            raise ToolError("El servicio de conciliación no está configurado")
+        return call(case_service.measurements.reconcile, decision)
+
     @server.resource(
         "delivery://pdf/{entrega_id}/{archivo_id}", mime_type="application/pdf"
     )
@@ -134,19 +151,48 @@ def create_server(repository: PostgresRepository, operator: str, case_service=No
     return server
 
 
+def http_app(server, token, host="127.0.0.1"):
+    from app.integrations.mcp_http import BearerProtectedMCP
+
+    return BearerProtectedMCP(
+        server.streamable_http_app(host=host, stateless_http=True, json_response=True),
+        token,
+    )
+
+
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--transport", choices=("stdio", "streamable-http"), default="stdio"
+    )
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8770)
+    args = parser.parse_args()
+    load_environment()
+    token = os.getenv("DELIVERY_MCP_BEARER_TOKEN", "")
+    if args.transport == "streamable-http" and len(token) < 32:
+        parser.error("DELIVERY_MCP_BEARER_TOKEN requiere al menos 32 caracteres")
     dsn = os.getenv("DELIVERY_DATABASE_URL")
     if not dsn:
         raise SystemExit("Configurar DELIVERY_DATABASE_URL")
     from app.bootstrap import create_report_runtime
 
     runtime = create_report_runtime(
-        dsn, os.getenv("WORKFLOW_DATABASE_URL"), configured_manager()
+        dsn,
+        os.getenv("WORKFLOW_DATABASE_URL"),
+        configured_manager(),
+        checkpoint_url=os.getenv("WORKFLOW_CHECKPOINT_URL") or None,
     )
     try:
-        create_server(runtime.repository, runtime.operator, runtime.service).run(
-            transport="stdio"
-        )
+        server = create_server(runtime.repository, runtime.operator, runtime.service)
+        if args.transport == "stdio":
+            server.run(transport="stdio")
+        else:
+            import uvicorn
+
+            uvicorn.run(
+                http_app(server, token, args.host), host=args.host, port=args.port
+            )
     finally:
         runtime.close()
 

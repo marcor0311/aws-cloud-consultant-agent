@@ -66,9 +66,7 @@ class CalculatorPreparation(FinOpsModel):
     operator: Literal["codex-browser"] = "codex-browser"
     source: Literal["aws-pricing-calculator"] = "aws-pricing-calculator"
     status: Literal["ready", "partial", "blocked"]
-    resources: list[CalculatorResourceInstruction] = Field(
-        min_length=1, max_length=100
-    )
+    resources: list[CalculatorResourceInstruction] = Field(min_length=1, max_length=100)
     blocking_reasons: list[str] = Field(default_factory=list, max_length=500)
 
     @model_validator(mode="after")

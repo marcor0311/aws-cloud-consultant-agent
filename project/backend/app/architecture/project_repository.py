@@ -428,7 +428,9 @@ class ProjectRepositoryBridge:
             if item["path"].startswith("docs/01-discovery/")
         ]
         if len(discovery) not in {3, 5, 6}:
-            raise ValueError("La entrega debe conservar tres, cinco o seis insumos discovery.")
+            raise ValueError(
+                "La entrega debe conservar tres, cinco o seis insumos discovery."
+            )
         for approved in context["approved_inputs"]:
             raw = self._git(root, "show", f"{commit}:{approved['path']}")
             if len(raw) > 20_000_000:
@@ -442,7 +444,9 @@ class ProjectRepositoryBridge:
                 try:
                     content = raw.decode("utf-8")
                 except UnicodeDecodeError as error:
-                    raise ValueError("Las evidencias textuales deben ser UTF-8.") from error
+                    raise ValueError(
+                        "Las evidencias textuales deben ser UTF-8."
+                    ) from error
                 if approved["media_type"] == "application/json":
                     try:
                         json.loads(content)
@@ -471,7 +475,9 @@ class ProjectRepositoryBridge:
             try:
                 manifest = json.loads(raw.decode("utf-8"))
             except (UnicodeDecodeError, json.JSONDecodeError) as error:
-                raise ValueError("El manifiesto aprobado no es JSON UTF-8 válido.") from error
+                raise ValueError(
+                    "El manifiesto aprobado no es JSON UTF-8 válido."
+                ) from error
             expected_files = sorted(
                 [
                     {
@@ -490,7 +496,9 @@ class ProjectRepositoryBridge:
                 or not isinstance(item["sha256"], str)
                 for item in manifest_files
             ):
-                raise ValueError("El manifiesto no contiene una lista válida de archivos.")
+                raise ValueError(
+                    "El manifiesto no contiene una lista válida de archivos."
+                )
             actual_files = sorted(manifest_files, key=lambda item: item["name"])
             files_sha256 = hashlib.sha256(
                 json.dumps(actual_files, sort_keys=True).encode()

@@ -118,14 +118,18 @@ class GitHubApprovalReceipt(GitHubContract):
     def evidence_and_times_are_coherent(self):
         if self.evidence_source == "github_webhook":
             if not self.github_delivery_id or not self.webhook_signature_verified:
-                raise ValueError("La evidencia webhook requiere entrega y firma verificadas.")
+                raise ValueError(
+                    "La evidencia webhook requiere entrega y firma verificadas."
+                )
         elif self.github_delivery_id or self.webhook_signature_verified:
             raise ValueError("La consulta GitHub MCP no debe presentarse como webhook.")
         if not (
             self.reviewed_at <= self.merged_at <= self.observed_at
             and self.source_issue_closed_at <= self.observed_at
         ):
-            raise ValueError("Las fechas de revisión, merge y observación no son coherentes.")
+            raise ValueError(
+                "Las fechas de revisión, merge y observación no son coherentes."
+            )
         return self
 
 

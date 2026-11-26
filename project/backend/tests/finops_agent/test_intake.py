@@ -280,9 +280,9 @@ def test_real_s3_export_matches_the_prepared_calculator_input():
     }
 
     changed_ui = deepcopy(json.loads(raw))
-    changed_ui["Groups"]["Services"][0]["Properties"][
-        "S3 Standard storage"
-    ] = "100 TB per month"
+    changed_ui["Groups"]["Services"][0]["Properties"]["S3 Standard storage"] = (
+        "100 TB per month"
+    )
     partial = S3ExportEvidenceBuilder().build(
         preparation,
         "documents",

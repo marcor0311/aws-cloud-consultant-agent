@@ -22,8 +22,15 @@ PDF muestra retrabajo explícito y resultados parciales/fallidos sin aprobarlos.
 Lee fuentes y mediciones existentes del
 workflow, conserva una instantánea con hash, permite corregir secciones, versionar
 y aprobar el PDF parcial. El operador debe corresponder al responsable registrado.
-Los informes parciales no cierran el expediente; faltan la integración de las
-entregas reales de Arquitectura/FinOps/Ingeniería y el cierre del proceso principal.
+Los informes parciales no cierran el expediente. Una entrega técnica definitiva
+vigente permite generar otro informe, aprobar su revisión exacta y registrar la
+presentación con fecha, audiencia y referencia. El servicio verifica las fuentes
+y completa la etapa 6 del grafo principal con recuperación ante interrupciones.
+La conciliación permite corregir límites, cierres de sesiones, clasificaciones y
+recepciones con evidencia, hash vigente y auditoría. El MCP dispone de STDIO y
+Streamable HTTP protegido; el recorrido HTTP de revisión y descarga se prueba
+sin modelo. Faltan el piloto con entregas/mediciones/aprobaciones reales y la
+[aceptación en la cuenta de ChatGPT del Engagement Manager](../../../docs/validacion-cliente-informe.md).
 Ver [revisión, métricas y límites](../../../docs/revision-informe-ejecutivo.md).
 
 Contrato funcional: [issues.md](../../../issues.md#6-engagement-manager--informe-ejecutivo).

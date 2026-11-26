@@ -311,9 +311,7 @@ def create_server(service, runtime=None):
             return call(runtime.architecture.metrics, expediente_id)
 
         @server.tool()
-        def obtener_handoff_finops(
-            expediente_id: str, revision: int
-        ) -> dict[str, Any]:
+        def obtener_handoff_finops(expediente_id: str, revision: int) -> dict[str, Any]:
             """Entrega a Codex el handoff aprobado para invocar posteriormente FinOps."""
             return call(
                 runtime.architecture.get_finops_handoff,

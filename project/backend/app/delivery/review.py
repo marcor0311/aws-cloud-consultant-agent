@@ -1,5 +1,6 @@
 """Review and close a demo delivery with explicit, version-bound decisions."""
 
+import json
 import os
 from datetime import UTC, datetime
 from hashlib import sha256
@@ -37,8 +38,11 @@ def configured_manager() -> str:
 
 
 class ReportReview:
-    def __init__(self, repository: PostgresRepository, operator=None):
+    def __init__(
+        self, repository: PostgresRepository, operator=None, case_service=None
+    ):
         self.repository, self.operator = repository, operator
+        self.case_service = case_service
 
     def get(self, delivery_id):
         row = self.repository.get(delivery_id)
@@ -87,15 +91,30 @@ class ReportReview:
                 )
 
             is_case = row["request"].get("kind") == "case_report"
+            if (
+                is_case
+                and not row["request"]["snapshot"]["closure_blockers"]
+                and self.case_service is None
+            ):
+                raise DeliveryConflict(
+                    "Configurar el servicio del proceso para decidir sobre un informe definitivo"
+                )
             if not is_case and decision.sections:
                 raise DeliveryConflict(
                     "La corrección por secciones requiere un informe por expediente"
                 )
             if is_case and decision.action == "record_presentation":
-                raise DeliveryConflict(
-                    "No se puede cerrar el expediente: "
-                    + "; ".join(row["request"]["snapshot"]["closure_blockers"])
-                )
+                blockers = row["request"]["snapshot"]["closure_blockers"]
+                if blockers or self.case_service is None:
+                    raise DeliveryConflict(
+                        "No se puede cerrar el expediente: "
+                        + "; ".join(
+                            blockers
+                            or [
+                                "Configurar el servicio del proceso para registrar la presentación."
+                            ]
+                        )
+                    )
             if is_case and decision.action == "revise" and not decision.sections:
                 raise DeliveryConflict("Indicar las secciones corregidas en sections")
             if is_case:
@@ -106,9 +125,26 @@ class ReportReview:
                     not source
                     or sha256(bytes(source["content"])).hexdigest()
                     != report.sources.sha256
+                    or json.loads(bytes(source["content"]))
+                    != row["request"]["snapshot"]
                 ):
                     raise DeliveryConflict(
                         "El respaldo de fuentes no coincide con la revisión"
+                    )
+                if decision.action == "record_presentation":
+                    self.case_service.record_presentation(row, decision, operator)
+                elif (
+                    self.case_service
+                    and (
+                        self.case_service.sources.store.get(
+                            f"process:{row['request']['snapshot']['case_id']}"
+                        )
+                        or {}
+                    ).get("status")
+                    == "completed"
+                ):
+                    raise DeliveryConflict(
+                        "El expediente ya está cerrado; no admite nuevas decisiones del informe"
                     )
             started = datetime.now(UTC)
             review_timing = PhaseTiming.model_validate(row["report_timing"])

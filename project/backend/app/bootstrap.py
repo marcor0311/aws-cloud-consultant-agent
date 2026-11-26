@@ -45,11 +45,12 @@ def create_access_service():
     )
 
 
-def create_report_runtime(delivery_url, workflow_url, operator):
+def create_report_runtime(delivery_url, workflow_url, operator, *, checkpoint_url=None):
     """Reports read local workflow records without composing providers or workers."""
     from types import SimpleNamespace
 
     from app.delivery.engineering import EngineeringService
+    from app.delivery.measurements import MeasurementService
     from app.delivery.report import CaseReportService
     from app.integrations.engineering_files import EngineeringFiles
     from app.integrations.report_sources import CaseReportSources
@@ -69,6 +70,12 @@ def create_report_runtime(delivery_url, workflow_url, operator):
                 workflow_url.replace("postgresql://", "postgresql+psycopg://", 1)
             )
             resources.callback(store.engine.dispose)
+            saver = resources.enter_context(
+                open_checkpointer(
+                    checkpoint_url
+                    or workflow_url.replace("postgresql+psycopg://", "postgresql://", 1)
+                )
+            )
             service = CaseReportService(
                 repository,
                 CaseReportSources(
@@ -81,6 +88,10 @@ def create_report_runtime(delivery_url, workflow_url, operator):
                     ),
                 ),
                 operator,
+                ProcessService(
+                    LangGraphExecution(build_process_graph(saver)), store, operator
+                ),
+                MeasurementService(store, operator),
             )
         return SimpleNamespace(
             repository=repository,
@@ -93,26 +104,50 @@ def create_report_runtime(delivery_url, workflow_url, operator):
         raise
 
 
-def create_engineering_runtime(workflow_url, artifact_root, operator):
+def create_engineering_runtime(
+    workflow_url, artifact_root, operator, *, github=None, checkpoint_url=None
+):
     """Compose local intake/evidence tracking; no infrastructure or provider execution."""
     from types import SimpleNamespace
 
     from app.delivery.engineering import EngineeringService
+    from app.delivery.engineering_publication import EngineeringPublicationService
     from app.integrations.engineering_files import EngineeringFiles
+    from app.integrations.engineering_github import EngineeringGitHub
     from app.persistence.engineering import EngineeringRepository
 
     if not workflow_url.startswith(("postgresql://", "postgresql+psycopg://")):
         raise ValueError("Ingeniería requiere WORKFLOW_DATABASE_URL de PostgreSQL")
-    store = WorkflowStore(
-        workflow_url.replace("postgresql://", "postgresql+psycopg://", 1)
-    )
+    resources = ExitStack()
     try:
+        store = WorkflowStore(
+            workflow_url.replace("postgresql://", "postgresql+psycopg://", 1)
+        )
+        resources.callback(store.engine.dispose)
+        saver = resources.enter_context(
+            open_checkpointer(
+                checkpoint_url
+                or workflow_url.replace("postgresql+psycopg://", "postgresql://", 1)
+            )
+        )
+        provider = github or EngineeringGitHub()
+        if github is None:
+            resources.callback(provider.client.close)
         service = EngineeringService(
             EngineeringRepository(store), EngineeringFiles(artifact_root), operator
         )
-        return SimpleNamespace(service=service, store=store, close=store.engine.dispose)
+        publication = EngineeringPublicationService(
+            service,
+            provider,
+            ProcessService(
+                LangGraphExecution(build_process_graph(saver)), store, operator
+            ),
+        )
+        return SimpleNamespace(
+            service=service, publication=publication, store=store, close=resources.close
+        )
     except BaseException:
-        store.engine.dispose()
+        resources.close()
         raise
 
 

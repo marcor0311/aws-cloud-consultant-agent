@@ -37,6 +37,7 @@ def case_result(row):
         "metrics": snapshot["metrics"],
         "closure_blockers": snapshot["closure_blockers"],
         "captured_at": snapshot["captured_at"],
+        "measurement_review": snapshot.get("measurement_review"),
         "report_activity_metrics": calculate_metrics(
             [PhaseTiming.model_validate(row["report_timing"])]
             if row["report_timing"]
@@ -54,10 +55,12 @@ def require_report_owner(row, operator):
 
 
 class CaseReportService:
-    def __init__(self, repository, sources, operator):
+    def __init__(self, repository, sources, operator, process=None, measurements=None):
         if not operator or not operator.strip():
             raise ValueError("Configurar el responsable del informe")
         self.repository, self.sources, self.operator = repository, sources, operator
+        self.process = process
+        self.measurements = measurements
 
     def generate(self, request):
         identity = {
@@ -97,8 +100,13 @@ class CaseReportService:
                     else "Entrega técnica pendiente. Este informe consolida los registros disponibles del expediente.",
                     "risks": " ".join(snapshot["engineering"]["blockers"])
                     if snapshot.get("engineering")
+                    and snapshot["engineering"]["blockers"]
+                    else "Revisar los límites de compatibilidad y las mediciones sin clasificar indicadas en las fuentes."
+                    if not snapshot["closure_blockers"]
                     else "El informe es parcial. Los faltantes y las fuentes simuladas requieren conciliación antes del cierre.",
-                    "next_steps": "Revisar los resultados importados, resolver fallos o pendientes, verificar baselines y obtener revisión e integración del PR de ingeniería."
+                    "next_steps": "Revisar y aprobar el informe definitivo; registrar su presentación a dirección para cerrar el expediente."
+                    if not snapshot["closure_blockers"]
+                    else "Revisar los resultados importados, resolver fallos o pendientes, verificar baselines y obtener revisión e integración del PR de ingeniería."
                     if snapshot.get("engineering")
                     else "Completar arquitectura, FinOps y entrega técnica aprobada; revisar las mediciones y presentar el informe definitivo a dirección.",
                 }
@@ -168,3 +176,112 @@ class CaseReportService:
         return self.sources.engineering.read_file(
             engineering["intake"]["intake_id"], file_sha256
         )
+
+    def record_presentation(self, row, decision, operator):
+        """Close the real process first, with deterministic events for crash recovery."""
+        from app.delivery.models import CaseReportRequest
+
+        require_report_owner(row, operator)
+        if operator != self.operator or self.process is None:
+            raise DeliveryConflict(
+                "El cierre del proceso no está configurado para este responsable"
+            )
+        snapshot = row["request"]["snapshot"]
+        if snapshot["closure_blockers"]:
+            raise DeliveryConflict(
+                "No se puede cerrar el expediente: "
+                + "; ".join(snapshot["closure_blockers"])
+            )
+        if decision.presentation is None:
+            raise DeliveryConflict(
+                "Registrar fecha, audiencia y referencia de la presentación a dirección"
+            )
+        approvals = [
+            d
+            for d in self.repository.report_decisions(row["delivery_id"])
+            if d["decision"]["action"] == "approve"
+        ]
+        if not approvals or not approvals[-1][
+            "created_at"
+        ] <= decision.presentation.presented_at <= datetime.now(UTC):
+            raise DeliveryConflict(
+                "La presentación debe ser posterior a la aprobación y no estar en el futuro"
+            )
+        request = CaseReportRequest.model_validate(row["request"]["input"])
+        engineering = snapshot.get("engineering")
+        if (
+            not engineering
+            or not engineering.get("release")
+            or snapshot["project"]["is_fictitious"]
+        ):
+            raise DeliveryConflict(
+                "El cierre requiere una entrega técnica definitiva de un expediente real"
+            )
+        report = row["report"]
+        if not report.get("approved_document"):
+            raise DeliveryConflict("Falta el PDF aprobado de esta revisión")
+        for ref in (report["artifact"], report["approved_document"]):
+            artifact = self.repository.artifact(row["delivery_id"], ref["artifact_id"])
+            if (
+                not artifact
+                or sha256(bytes(artifact["content"])).hexdigest() != ref["sha256"]
+            ):
+                raise DeliveryConflict("El PDF no coincide con la revisión aprobada")
+        case_id = snapshot["case_id"]
+        token = f"report:{row['delivery_id']}:{decision.decision_id}"
+        base = {
+            "stage": 6,
+            "iteration": snapshot["process"]["iteration"],
+            "actor": operator,
+            "origin": "operator",
+            "revision": report["version"],
+            "artifact_sha256": report["artifact"]["sha256"],
+            "evidence": [
+                f"delivery://pdf/{row['delivery_id']}/{report['artifact']['artifact_id']}",
+                f"delivery://pdf/{row['delivery_id']}/{report['approved_document']['artifact_id']}",
+                decision.presentation.reference,
+            ],
+            "presentation": decision.presentation.model_dump(mode="json"),
+            "comment": decision.detail,
+        }
+        events = [
+            {**base, "event_id": token + ":ready", "kind": "deliverable.ready"},
+            {**base, "event_id": token + ":presented", "kind": "stage.approved"},
+        ]
+
+        def guard(state):
+            replay = any(e["event_id"] == token + ":ready" for e in state["history"])
+            if (
+                state["stage"] != 6
+                or state["iteration"] != base["iteration"]
+                or (not replay and state["status"] != "awaiting_deliverable")
+            ):
+                raise DeliveryConflict(
+                    "El proceso cambió o ya existe otra presentación; conciliar antes del cierre"
+                )
+            current = self.sources._capture(request, operator)
+            if (
+                not replay
+                and snapshot.get("measurement_review")
+                and (
+                    current["measurement_review"]["state_sha256"]
+                    != snapshot["measurement_review"]["state_sha256"]
+                )
+            ):
+                raise DeliveryConflict(
+                    "Las mediciones cambiaron; generar y aprobar un informe nuevo"
+                )
+            if current["closure_blockers"] or (
+                current["engineering"]["release"]["release_sha256"]
+                != engineering["release"]["release_sha256"]
+                or current["engineering"]["catalog"]["sha256"]
+                != engineering["catalog"]["sha256"]
+            ):
+                raise DeliveryConflict(
+                    "La entrega técnica cambió; generar y aprobar un informe nuevo"
+                )
+
+        # Same lock ordering as imports/capture; the process service owns its lock.
+        with self.sources.store.lock(f"engineering:{request.intake_id}"):
+            self.process.apply_sequence(case_id, events, guard)
+            self.sources.store.complete_phase(case_id, "stage-6")

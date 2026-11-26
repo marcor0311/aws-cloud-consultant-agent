@@ -52,6 +52,11 @@ class SlackNotifier:
             f"{status}. Expediente {notice['case_id']} · versión {notice['revision']}. "
             "Abre ChatGPT y consulta el expediente mediante el MCP de preparación."
         )
+        if notice.get("topic") == "engineering":
+            text = (
+                f"Entrega técnica aprobada e integrada registrada. Expediente {notice['case_id']} · versión {notice['revision']}. "
+                f"PR: {notice['pull_request']}. Solicita el informe ejecutivo mediante el MCP del informe en ChatGPT."
+            )
         result = self._post(
             "chat.postMessage",
             {
