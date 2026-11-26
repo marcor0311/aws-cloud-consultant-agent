@@ -24,8 +24,7 @@ from app.persistence.workflow import WorkflowStore
 BACKEND = Path(__file__).resolve().parents[2]
 REPOSITORY = Path(__file__).resolve().parents[4]
 EVIDENCE = (
-    REPOSITORY
-    / "docs/evidence/agent4/block-c-s3/pricing-calculator-evidence.json"
+    REPOSITORY / "docs/evidence/agent4/block-c-s3/pricing-calculator-evidence.json"
 )
 
 
@@ -59,7 +58,12 @@ def service_at(tmp_path):
         revision=1,
         artifact_sha256=handoff["artifact_sha256"],
     )
-    return database, store, FinOpsService(store, output_dir=tmp_path / "artifacts"), handoff
+    return (
+        database,
+        store,
+        FinOpsService(store, output_dir=tmp_path / "artifacts"),
+        handoff,
+    )
 
 
 def seed_finops_issue(store, service, handoff):
@@ -319,16 +323,19 @@ def test_finops_generates_one_versioned_workbook_and_comment_draft(tmp_path):
         assert comment["comment"]["publication_status"] == "draft"
         assert comment["comment"]["body"].startswith("@cloud-architect")
         assert analysis["reference"] in comment["comment"]["body"]
-        assert service.prepare_comment(
-            "block-c-s3",
-            1,
-            {
-                "comment_id": "comment-kms-question",
-                "comment_type": "question",
-                "message": "Confirme los consumos mensuales de AWS KMS.",
-                "architect_github_username": "cloud-architect",
-            },
-        )["duplicate"] is True
+        assert (
+            service.prepare_comment(
+                "block-c-s3",
+                1,
+                {
+                    "comment_id": "comment-kms-question",
+                    "comment_type": "question",
+                    "message": "Confirme los consumos mensuales de AWS KMS.",
+                    "architect_github_username": "cloud-architect",
+                },
+            )["duplicate"]
+            is True
+        )
     finally:
         store.engine.dispose()
 
@@ -372,18 +379,14 @@ def test_finops_prepares_and_registers_github_correction_without_duplicates(tmp_
             "block-c-s3", 1, "correction-github-kms", "cloud-architect"
         )
         assert prepared["plan"]["close_with_label"] == "requiere-ajustes"
-        assert prepared["plan"]["correction_issue_assignees"] == [
-            "cloud-architect"
-        ]
+        assert prepared["plan"]["correction_issue_assignees"] == ["cloud-architect"]
         assert handoff["source_issue"] in prepared["plan"]["correction_issue_body"]
         receipt = {
             "plan_sha256": prepared["plan_sha256"],
             "finops_issue_url": prepared["plan"]["finops_issue_url"],
             "finops_issue_state": "closed",
             "finops_issue_labels": ["finops", "requiere-ajustes"],
-            "finops_closing_comment_sha256": prepared["plan"][
-                "closing_comment_sha256"
-            ],
+            "finops_closing_comment_sha256": prepared["plan"]["closing_comment_sha256"],
             "correction_issue_url": "https://github.com/example/project/issues/21",
             "correction_issue_number": 21,
             "correction_issue_body_sha256": prepared["plan"][
@@ -392,12 +395,18 @@ def test_finops_prepares_and_registers_github_correction_without_duplicates(tmp_
             "correction_issue_assignees": ["cloud-architect"],
             "executed_at": datetime.now(timezone.utc).isoformat(),
         }
-        assert service.register_correction_github(
-            "block-c-s3", 1, "correction-github-kms", receipt
-        )["duplicate"] is False
-        assert service.register_correction_github(
-            "block-c-s3", 1, "correction-github-kms", receipt
-        )["duplicate"] is True
+        assert (
+            service.register_correction_github(
+                "block-c-s3", 1, "correction-github-kms", receipt
+            )["duplicate"]
+            is False
+        )
+        assert (
+            service.register_correction_github(
+                "block-c-s3", 1, "correction-github-kms", receipt
+            )["duplicate"]
+            is True
+        )
     finally:
         store.engine.dispose()
 
@@ -534,9 +543,10 @@ def test_finops_delivers_merged_costs_to_engineering_and_measures_work(tmp_path)
         registered = service.register_engineering_issue("block-c-s3", 1, receipt)
         assert registered["duplicate"] is False
         assert registered["handoff"]["forecast_path"] == workbook["relative_path"]
-        assert service.register_engineering_issue("block-c-s3", 1, receipt)[
-            "duplicate"
-        ] is True
+        assert (
+            service.register_engineering_issue("block-c-s3", 1, receipt)["duplicate"]
+            is True
+        )
         acceptance = {
             "case_id": "block-c-s3",
             "architecture_revision": 1,
@@ -545,24 +555,24 @@ def test_finops_delivers_merged_costs_to_engineering_and_measures_work(tmp_path)
             "accepted_at": datetime.now(timezone.utc).isoformat(),
             "engineering_reference": "engineering://block-c-s3/intakes/1",
         }
-        assert service.accept_engineering_handoff(
-            "block-c-s3", 1, acceptance
-        )["duplicate"] is False
-        assert service.accept_engineering_handoff(
-            "block-c-s3", 1, acceptance
-        )["duplicate"] is True
+        assert (
+            service.accept_engineering_handoff("block-c-s3", 1, acceptance)["duplicate"]
+            is False
+        )
+        assert (
+            service.accept_engineering_handoff("block-c-s3", 1, acceptance)["duplicate"]
+            is True
+        )
         metrics = service.metrics("block-c-s3")
         assert metrics["in_progress"] is False
         assert metrics["process_time_seconds"]["agent"] >= 0
         assert metrics["engineering_handoffs"][0]["pending_acceptance"] is False
         store.engine.dispose()
         restarted_store = WorkflowStore(database)
-        restarted = FinOpsService(
-            restarted_store, output_dir=tmp_path / "artifacts"
+        restarted = FinOpsService(restarted_store, output_dir=tmp_path / "artifacts")
+        assert (
+            restarted.get_engineering_handoff("block-c-s3", 1) == registered["handoff"]
         )
-        assert restarted.get_engineering_handoff("block-c-s3", 1) == registered[
-            "handoff"
-        ]
         assert restarted.metrics("block-c-s3")["in_progress"] is False
         restarted_store.engine.dispose()
     finally:
@@ -715,9 +725,7 @@ def test_real_stdio_protocol_generates_workbook_and_comment(tmp_path):
     database, store, service, handoff = service_at(tmp_path)
     service.receive_handoff("block-c-s3", handoff)
     seed_finops_issue(store, service, handoff)
-    service.register_evidence(
-        "block-c-s3", 1, json.loads(EVIDENCE.read_text("utf-8"))
-    )
+    service.register_evidence("block-c-s3", 1, json.loads(EVIDENCE.read_text("utf-8")))
     service.run_analysis("block-c-s3", 1)
     store.engine.dispose()
 

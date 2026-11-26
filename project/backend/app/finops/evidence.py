@@ -130,7 +130,9 @@ class S3ExportEvidenceBuilder:
         services = export_payload.get("Groups", {}).get("Services", [])
         if metadata.get("Currency") != "USD" or "monthly" not in total:
             raise ValueError("Cambió la estructura monetaria de la exportación AWS.")
-        if not services or any(item.get("Region") != expected_region for item in services):
+        if not services or any(
+            item.get("Region") != expected_region for item in services
+        ):
             raise ValueError("La exportación AWS no conserva la región esperada.")
 
         properties = {

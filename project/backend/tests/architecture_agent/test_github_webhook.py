@@ -41,9 +41,7 @@ class ObservedFinOps:
 
 def signed_headers(secret, payload, event, delivery="delivery-1"):
     raw = json.dumps(payload, separators=(",", ":")).encode()
-    signature = "sha256=" + hmac.new(
-        secret.encode(), raw, hashlib.sha256
-    ).hexdigest()
+    signature = "sha256=" + hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
     return raw, {
         "x-hub-signature-256": signature,
         "x-github-delivery": delivery,
@@ -90,7 +88,10 @@ def test_signed_review_and_check_webhooks_are_observed_without_approval():
         },
     }
     raw, headers = signed_headers(secret, checks, "check_suite", "delivery-2")
-    assert client.post("/workflow/events/github", content=raw, headers=headers).status_code == 202
+    assert (
+        client.post("/workflow/events/github", content=raw, headers=headers).status_code
+        == 202
+    )
 
     assert [call[2] for call in process.calls] == [
         "pull_request_review",

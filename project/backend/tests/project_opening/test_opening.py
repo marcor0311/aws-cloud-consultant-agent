@@ -831,9 +831,10 @@ def test_guided_mcp_opens_approved_preparation_from_postgres_records(tmp_path, s
         assert handoff["contract_version"] == "1.3"
         assert handoff["request_sha256"] == result["request_sha256"]
         assert handoff["initial_pull_request"]["merged"] is True
-        assert handoff["architecture_issue"]["body_sha256"] == hashlib.sha256(
-            github.body.encode()
-        ).hexdigest()
+        assert (
+            handoff["architecture_issue"]["body_sha256"]
+            == hashlib.sha256(github.body.encode()).hexdigest()
+        )
         assert handoff["approval"]["kind"] == "direction_decision"
         assert handoff["handoff"]["to_phase"] == "architecture"
         opening = service.get(source["case_id"])

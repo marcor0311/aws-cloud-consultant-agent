@@ -75,7 +75,10 @@ class FinOpsIntakeService:
             previous_intake = FinOpsIntake.model_validate(previous)
             if previous_intake.handoff != handoff:
                 raise ValueError("La revisión ya tiene otra recepción FinOps.")
-            return {"duplicate": True, "intake": previous_intake.model_dump(mode="json")}
+            return {
+                "duplicate": True,
+                "intake": previous_intake.model_dump(mode="json"),
+            }
 
         accepted_at = datetime.fromtimestamp(self.store.clock(), timezone.utc)
         acceptance = FinOpsHandoffAcceptance(
@@ -129,8 +132,7 @@ class FinOpsService:
         self.analyzer = FinOpsEconomicAnalyzer()
         self.actor_id = actor_id
         self.output_dir = Path(
-            output_dir
-            or Path(__file__).resolve().parents[2] / "data" / "finops"
+            output_dir or Path(__file__).resolve().parents[2] / "data" / "finops"
         )
         self.workbooks = ForecastWorkbookGenerator()
 
@@ -145,13 +147,9 @@ class FinOpsService:
     def register_issue(self, case_id, revision, snapshot_payload):
         intake = FinOpsIntake.model_validate(self.intakes.get(case_id, revision))
         snapshot = FinOpsIssueSnapshot.model_validate(snapshot_payload)
-        draft = self.store.get(
-            f"architecture-finops-issue-draft:{case_id}:{revision}"
-        )
+        draft = self.store.get(f"architecture-finops-issue-draft:{case_id}:{revision}")
         receipt = self.store.get(f"architecture-finops-issue:{case_id}:{revision}")
-        approval = self.store.get(
-            f"architecture-github-approval:{case_id}:{revision}"
-        )
+        approval = self.store.get(f"architecture-github-approval:{case_id}:{revision}")
         if not draft or not receipt or not approval:
             raise ValueError(
                 "Faltan el borrador, recibo o aprobación GitHub de Arquitectura."
@@ -167,10 +165,8 @@ class FinOpsService:
             or snapshot.architecture_revision != revision
             or snapshot.architecture_sha256 != intake.handoff.artifact_sha256
             or snapshot.architecture_issue_url != intake.handoff.source_issue
-            or snapshot.architecture_pull_request_url
-            != approval["pull_request_url"]
-            or snapshot.architecture_merge_commit_sha
-            != approval["merge_commit_sha"]
+            or snapshot.architecture_pull_request_url != approval["pull_request_url"]
+            or snapshot.architecture_merge_commit_sha != approval["merge_commit_sha"]
         ):
             raise ValueError("El issue FinOps no coincide con la entrega aprobada.")
         required_links = {
@@ -235,7 +231,9 @@ class FinOpsService:
             "intake": intake,
             "persisted_handoff": self.store.handoff(handoff_id),
             "evidence_count": len(self._evidences(case_id, revision)),
-            "has_analysis": bool(self.store.get(self._analysis_pointer(case_id, revision))),
+            "has_analysis": bool(
+                self.store.get(self._analysis_pointer(case_id, revision))
+            ),
             "issue": self.store.get(f"finops-issue:{case_id}:{revision}"),
         }
 
@@ -271,9 +269,7 @@ class FinOpsService:
         )
         if not resource or resource["status"] != "ready":
             raise ValueError("La evidencia corresponde a un recurso no preparado.")
-        expected = {
-            item["dimension_id"]: item for item in resource["dimensions"]
-        }
+        expected = {item["dimension_id"]: item for item in resource["dimensions"]}
         received = {item.dimension_id: item for item in evidence.parameters}
         if set(expected) != set(received):
             raise ValueError("La evidencia no cubre las dimensiones preparadas.")
@@ -333,7 +329,9 @@ class FinOpsService:
                     "status": analysis["operational_status"],
                 },
             )
-        self.store.put(self._analysis_pointer(case_id, revision), "finops_current", record)
+        self.store.put(
+            self._analysis_pointer(case_id, revision), "finops_current", record
+        )
         return {"duplicate": bool(previous), **record}
 
     def generate_workbook(self, case_id, revision):
@@ -476,10 +474,14 @@ class FinOpsService:
             for pricing in intake.handoff.economic_contract.pricing_inputs
             for dimension in pricing.dimensions
         }
-        if not set(request.affected_resources) <= resources or not {
-            (item.resource_id, item.dimension_id)
-            for item in request.affected_dimensions
-        } <= dimensions:
+        if (
+            not set(request.affected_resources) <= resources
+            or not {
+                (item.resource_id, item.dimension_id)
+                for item in request.affected_dimensions
+            }
+            <= dimensions
+        ):
             raise ValueError("La corrección referencia recursos o dimensiones ajenos.")
         decisions = [
             item
@@ -576,8 +578,7 @@ class FinOpsService:
             validated.plan_sha256 != record["plan_sha256"]
             or validated.finops_issue_url != plan["finops_issue_url"]
             or "requiere-ajustes" not in validated.finops_issue_labels
-            or validated.finops_closing_comment_sha256
-            != plan["closing_comment_sha256"]
+            or validated.finops_closing_comment_sha256 != plan["closing_comment_sha256"]
             or validated.correction_issue_body_sha256
             != plan["correction_issue_body_sha256"]
             or validated.correction_issue_assignees
@@ -641,7 +642,9 @@ class FinOpsService:
         workbook_raw = workbook_path.read_bytes()
         if hashlib.sha256(workbook_raw).hexdigest() != workbook["file_sha256"]:
             raise ValueError("forecast.xlsx no coincide con su registro persistido.")
-        analysis_raw = (json.dumps(analysis_record, ensure_ascii=False, indent=2) + "\n").encode()
+        analysis_raw = (
+            json.dumps(analysis_record, ensure_ascii=False, indent=2) + "\n"
+        ).encode()
         evidence_raw = (
             json.dumps(self._evidences(case_id, revision), ensure_ascii=False, indent=2)
             + "\n"
@@ -782,9 +785,13 @@ class FinOpsService:
             }
         )
         if not estimate_urls:
-            raise ValueError("La entrega a Ingeniería requiere estimaciones verificadas.")
+            raise ValueError(
+                "La entrega a Ingeniería requiere estimaciones verificadas."
+            )
         manifest = next(
-            item for item in publication["files"] if item["path"].endswith("manifest.json")
+            item
+            for item in publication["files"]
+            if item["path"].endswith("manifest.json")
         )
         body = (
             f"FinOps completó la revisión {revision} del proyecto "
@@ -955,9 +962,7 @@ class FinOpsService:
     def start_work(self, case_id, actor, actor_type):
         self.intakes.get(case_id, self._current_revision(case_id))
         return {
-            "session_id": self.store.start_work(
-                case_id, "stage-4", actor, actor_type
-            )
+            "session_id": self.store.start_work(case_id, "stage-4", actor, actor_type)
         }
 
     def stop_work(self, session_id, actor):
@@ -1015,7 +1020,9 @@ class FinOpsService:
 
     def _current_revision(self, case_id):
         intakes = [
-            item for item in self.store.list("finops_intake") if item["case_id"] == case_id
+            item
+            for item in self.store.list("finops_intake")
+            if item["case_id"] == case_id
         ]
         if not intakes:
             raise ValueError("El expediente no tiene recepción FinOps.")
@@ -1059,9 +1066,7 @@ class FinOpsService:
             "current_analysis": self.store.get(
                 self._analysis_pointer(case_id, revision)
             ),
-            "workbook": self.store.get(
-                f"finops-workbook-current:{case_id}:{revision}"
-            ),
+            "workbook": self.store.get(f"finops-workbook-current:{case_id}:{revision}"),
             "comment_drafts": [
                 item
                 for item in self.store.list("finops_comment_draft")
@@ -1088,9 +1093,7 @@ class FinOpsService:
             "github_pull_request": self.store.get(
                 f"finops-github-pr:{case_id}:{revision}"
             ),
-            "github_merge": self.store.get(
-                f"finops-github-merge:{case_id}:{revision}"
-            ),
+            "github_merge": self.store.get(f"finops-github-merge:{case_id}:{revision}"),
         }
 
     @staticmethod

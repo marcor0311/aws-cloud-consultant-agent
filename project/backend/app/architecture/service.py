@@ -112,7 +112,9 @@ class ArchitectureService:
             "approved_artifact_sha256",
         )
         if any(previous.get(field) != updated.get(field) for field in immutable):
-            raise ValueError("La validación intentó cambiar la identidad de la entrega.")
+            raise ValueError(
+                "La validación intentó cambiar la identidad de la entrega."
+            )
         if self.store:
             self.store.put(key, "architecture_project_context", updated)
         else:
@@ -583,8 +585,13 @@ class ArchitectureService:
             if not self.store.get(f"architecture-finops-issue:{case_id}:{revision}"):
                 raise ValueError("El handoff espera la creación del issue FinOps.")
             persisted = self.store.handoff(f"{case_id}:stage-3:stage-4:v{revision}")
-            if not persisted or persisted["artifact_sha256"] != handoff["artifact_sha256"]:
-                raise ValueError("El handoff durable a FinOps todavía no está disponible.")
+            if (
+                not persisted
+                or persisted["artifact_sha256"] != handoff["artifact_sha256"]
+            ):
+                raise ValueError(
+                    "El handoff durable a FinOps todavía no está disponible."
+                )
         return handoff
 
     def start(self, case_id, input_id, package):
@@ -818,9 +825,13 @@ class ArchitectureService:
             return {"duplicate": False, **self.get(case_id)}
 
     def review(self, case_id, revision, artifact_sha256, decision, feedback=""):
-        _, context = self._project_context(case_id) if (
-            self.store and self.store.get(f"architecture-project-context:{case_id}")
-        ) else (None, None)
+        _, context = (
+            self._project_context(case_id)
+            if (
+                self.store and self.store.get(f"architecture-project-context:{case_id}")
+            )
+            else (None, None)
+        )
         if context and context.get("contract_version") == "1.3":
             raise ValueError(
                 "La entrega 1.3 requiere un recibo tipado de decisión del arquitecto."
@@ -898,7 +909,9 @@ class ArchitectureService:
                 or state["revision"] != decision.revision
                 or state["artifact_sha256"] != decision.artifact_sha256
             ):
-                raise ValueError("Decidir únicamente sobre la revisión pendiente exacta.")
+                raise ValueError(
+                    "Decidir únicamente sobre la revisión pendiente exacta."
+                )
             self.graph.resume(self.thread_id(case_id), payload)
             self._sync(case_id)
             return {"duplicate": False, **self.get(case_id)}

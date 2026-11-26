@@ -271,9 +271,12 @@ def test_agent2_handoff_13_validates_transport_and_legacy_contracts(tmp_path):
     assert context["budget"]["total"] == "75.00"
     assert context["input_status"] == "awaiting_repository_validation"
     assert context["documents"] == []
-    assert ProjectRepositoryBridge().read(handoff(tmp_path, commit, inputs))[
-        "contract_version"
-    ] == "1.1"
+    assert (
+        ProjectRepositoryBridge().read(handoff(tmp_path, commit, inputs))[
+            "contract_version"
+        ]
+        == "1.1"
+    )
 
 
 def test_agent2_handoff_13_rejects_wrong_issue_and_handoff_traceability(tmp_path):
@@ -326,7 +329,9 @@ def test_agent2_handoff_13_distinguishes_simulated_board_record(tmp_path):
 
 def test_agent2_handoff_13_binds_checkout_and_validates_issue_snapshot(tmp_path):
     commit, _ = project_repository(tmp_path)
-    git(tmp_path, "remote", "add", "origin", "git@github.com:example/agent2-project.git")
+    git(
+        tmp_path, "remote", "add", "origin", "git@github.com:example/agent2-project.git"
+    )
     delivery, snapshot = handoff_v13(tmp_path, commit)
     context = ProjectRepositoryBridge().read(delivery)
 
@@ -361,7 +366,9 @@ def test_agent2_handoff_13_rejects_wrong_checkout_and_issue_evidence(tmp_path):
 
 def test_closed_issue_is_evidence_but_not_architecture_approval(tmp_path):
     commit, _ = project_repository(tmp_path)
-    git(tmp_path, "remote", "add", "origin", "https://github.com/example/agent2-project")
+    git(
+        tmp_path, "remote", "add", "origin", "https://github.com/example/agent2-project"
+    )
     delivery, snapshot = handoff_v13(tmp_path, commit)
     bridge = ProjectRepositoryBridge()
     bound = bridge.bind_repository(bridge.read(delivery), str(tmp_path))
@@ -396,9 +403,10 @@ def test_service_persists_repository_and_issue_validation_steps(tmp_path):
         assert service.read_project_handoff(delivery)["input_status"] == (
             "awaiting_repository_validation"
         )
-        assert service.bind_project_repository("project-case", str(repo))[
-            "input_status"
-        ] == "awaiting_issue_validation"
+        assert (
+            service.bind_project_repository("project-case", str(repo))["input_status"]
+            == "awaiting_issue_validation"
+        )
         validated = service.validate_architecture_issue("project-case", snapshot)
         assert validated["input_status"] == "ready_for_evidence_validation"
         assert store.get("architecture-project-context:project-case") == validated
@@ -431,7 +439,9 @@ def test_contract_13_reads_supported_evidence_counts_from_exact_commit(
     assert validated["evidence_manifest"]["discovery_count"] == discovery_count
     assert len(validated["documents"]) == discovery_count
     pdf = next(
-        item for item in validated["documents"] if item["media_type"] == "application/pdf"
+        item
+        for item in validated["documents"]
+        if item["media_type"] == "application/pdf"
     )
     assert pdf["content"] is None and pdf["binary_omitted"] is True
     assert pdf["size_bytes"] > 0
@@ -446,7 +456,9 @@ def test_contract_13_reads_supported_evidence_counts_from_exact_commit(
 
 def test_contract_13_rejects_evidence_hash_mismatch(tmp_path):
     commit, _ = project_repository(tmp_path)
-    git(tmp_path, "remote", "add", "origin", "https://github.com/example/agent2-project")
+    git(
+        tmp_path, "remote", "add", "origin", "https://github.com/example/agent2-project"
+    )
     delivery, snapshot = handoff_v13(tmp_path, commit)
     delivery["inputs"][0]["sha256"] = "0" * 64
     bridge = ProjectRepositoryBridge()
@@ -479,7 +491,9 @@ def test_contract_13_validates_delivery_manifest(tmp_path):
     git(tmp_path, "add", ".")
     git(tmp_path, "commit", "-m", "Add approved manifest")
     commit = git(tmp_path, "rev-parse", "HEAD")
-    git(tmp_path, "remote", "add", "origin", "https://github.com/example/agent2-project")
+    git(
+        tmp_path, "remote", "add", "origin", "https://github.com/example/agent2-project"
+    )
     delivery, snapshot = handoff_v13(tmp_path, commit)
     raw = git_bytes(tmp_path, "show", f"{commit}:docs/01-discovery/manifest.json")
     delivery["approved_package"].update(
@@ -487,7 +501,9 @@ def test_contract_13_validates_delivery_manifest(tmp_path):
             "path": "docs/01-discovery/manifest.json",
             "sha256": hashlib.sha256(raw).hexdigest(),
             "files_sha256": hashlib.sha256(
-                json.dumps(sorted(files, key=lambda item: item["name"]), sort_keys=True).encode()
+                json.dumps(
+                    sorted(files, key=lambda item: item["name"]), sort_keys=True
+                ).encode()
             ).hexdigest(),
         }
     )
@@ -563,9 +579,7 @@ def test_contract_13_records_human_decision_and_prepares_codex_pr_plan(tmp_path)
             "confirmation_reference": "codex-thread-step-9-message-1",
         }
         with pytest.raises(ValueError, match="recibo tipado"):
-            service.review(
-                "project-case", 1, started["artifact_sha256"], "approve"
-            )
+            service.review("project-case", 1, started["artifact_sha256"], "approve")
         wrong_actor = {**receipt, "architect": "another-user"}
         with pytest.raises(ValueError, match="arquitecto asignado"):
             service.record_architect_decision("project-case", wrong_actor)
@@ -576,9 +590,10 @@ def test_contract_13_records_human_decision_and_prepares_codex_pr_plan(tmp_path)
         recorded = service.record_architect_decision("project-case", receipt)
         assert recorded["duplicate"] is False
         assert recorded["state"]["status"] == "ready_for_finops"
-        assert service.record_architect_decision("project-case", receipt)[
-            "duplicate"
-        ] is True
+        assert (
+            service.record_architect_decision("project-case", receipt)["duplicate"]
+            is True
+        )
         changed_decision = {**receipt, "confirmation_reference": "another-message"}
         with pytest.raises(ValueError, match="otra decisión humana"):
             service.record_architect_decision("project-case", changed_decision)
@@ -616,12 +631,18 @@ def test_contract_13_records_human_decision_and_prepares_codex_pr_plan(tmp_path)
         wrong_reviewer = {**pr_receipt, "requested_reviewers": ["another-user"]}
         with pytest.raises(ValueError, match="repositorio y rama planificados"):
             service.register_github_pull_request("project-case", wrong_reviewer)
-        assert service.register_github_pull_request("project-case", pr_receipt)[
-            "duplicate"
-        ] is False
-        assert service.register_github_pull_request("project-case", pr_receipt)[
-            "duplicate"
-        ] is True
+        assert (
+            service.register_github_pull_request("project-case", pr_receipt)[
+                "duplicate"
+            ]
+            is False
+        )
+        assert (
+            service.register_github_pull_request("project-case", pr_receipt)[
+                "duplicate"
+            ]
+            is True
+        )
         with pytest.raises(ValueError, match="espera aprobación"):
             service.get_finops_handoff("project-case", 1)
     finally:
@@ -1084,12 +1105,12 @@ def test_codex_github_boundary_requires_exact_pr_before_finops(tmp_path):
     finops_handoff = service.get_finops_handoff("project-case", 1)
     received = FinOpsService(store).receive_handoff("project-case", finops_handoff)
     acceptance = received["intake"]["acceptance"]
-    assert service.accept_finops_handoff("project-case", acceptance)[
-        "duplicate"
-    ] is False
-    assert service.accept_finops_handoff("project-case", acceptance)[
-        "duplicate"
-    ] is True
+    assert (
+        service.accept_finops_handoff("project-case", acceptance)["duplicate"] is False
+    )
+    assert (
+        service.accept_finops_handoff("project-case", acceptance)["duplicate"] is True
+    )
     assert store.handoff("project-case:stage-3:stage-4:v1")["accepted_by"] == (
         "finops-agent"
     )

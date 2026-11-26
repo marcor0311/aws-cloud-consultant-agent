@@ -36,8 +36,9 @@ def test_dedicated_mcp_has_only_architecture_tools(tmp_path):
             "aplicar_correccion_finops",
         }
         assert registered["obtener_handoff_finops"].output_schema["type"] == "object"
-        assert registered["registrar_aceptacion_handoff_finops"].output_schema[
-            "type"
-        ] == "object"
+        assert (
+            registered["registrar_aceptacion_handoff_finops"].output_schema["type"]
+            == "object"
+        )
     finally:
         resources.close()

@@ -921,6 +921,7 @@ class WorkflowStore:
                 if e["kind"] in {"approval.requested", "approval.decided"}
             ],
         }
+
     def import_references(self, root):
         manifest = json.loads((root / "provenance.json").read_text(encoding="utf-8"))
         for file in manifest["files"]:

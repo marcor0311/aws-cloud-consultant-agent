@@ -32,7 +32,9 @@ class BudgetReference(FinOpsModel):
     def values_match_status(self):
         values = (self.amount, self.currency, self.period)
         if self.status == "known" and any(value is None for value in values):
-            raise ValueError("Un presupuesto conocido requiere monto, moneda y período.")
+            raise ValueError(
+                "Un presupuesto conocido requiere monto, moneda y período."
+            )
         if self.status == "unknown" and any(value is not None for value in values):
             raise ValueError("Un presupuesto desconocido no puede contener valores.")
         return self
@@ -140,12 +142,8 @@ class FinOpsEconomicAnalysis(FinOpsModel):
         "within_budget", "near_limit", "over_budget", "not_evaluable"
     ]
     currency: str = Field(pattern=r"^[A-Z]{3}$")
-    verified_monthly_subtotal: Decimal = Field(
-        ge=0, max_digits=18, decimal_places=6
-    )
-    verified_annual_subtotal: Decimal = Field(
-        ge=0, max_digits=18, decimal_places=6
-    )
+    verified_monthly_subtotal: Decimal = Field(ge=0, max_digits=18, decimal_places=6)
+    verified_annual_subtotal: Decimal = Field(ge=0, max_digits=18, decimal_places=6)
     breakdown: list[CostBreakdown] = Field(default_factory=list, max_length=100)
     coverage: CoverageSummary
     budget_comparison: BudgetComparison
@@ -203,7 +201,9 @@ class FinOpsEconomicAnalyzer:
             project_id=intake.project_id,
             architecture_revision=intake.handoff.revision,
             architecture_sha256=intake.handoff.artifact_sha256,
-            operational_status=("ready_for_decision" if coverage.complete else "partial"),
+            operational_status=(
+                "ready_for_decision" if coverage.complete else "partial"
+            ),
             budget_result=budget_result,
             currency=currency,
             verified_monthly_subtotal=monthly,
@@ -319,9 +319,7 @@ class FinOpsEconomicAnalyzer:
                 ],
             )
         monthly_budget = money(
-            budget.amount
-            if budget.period == "month"
-            else budget.amount / Decimal("12")
+            budget.amount if budget.period == "month" else budget.amount / Decimal("12")
         )
         difference = money(monthly_budget - monthly_cost)
         spent_percent = (
@@ -346,7 +344,9 @@ class FinOpsEconomicAnalyzer:
             difference_percent=difference_percent,
             verified_subtotal_percent_of_budget=spent_percent,
             provisional=not coverage_complete,
-            blocking_reasons=([] if coverage_complete else ["cost_coverage_incomplete"]),
+            blocking_reasons=(
+                [] if coverage_complete else ["cost_coverage_incomplete"]
+            ),
         )
 
     @staticmethod
