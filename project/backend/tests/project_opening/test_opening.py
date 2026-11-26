@@ -159,9 +159,12 @@ class GitHub:
         issue = self.issues.setdefault(
             record["case_id"],
             {
-                "url": "https://github.com/example/repo/issues/1",
+                "url": record["repository"]["url"] + "/issues/1",
                 "number": 1,
                 "assignee": record.get("issue_assignee") or record["architect"],
+                "assignment_pending": False,
+                "template_sha256": hashlib.sha256(template.encode()).hexdigest(),
+                "body_sha256": hashlib.sha256(body.encode()).hexdigest(),
             },
         )
         return issue
@@ -729,7 +732,12 @@ def test_guided_mcp_opens_approved_preparation_from_postgres_records(tmp_path, s
 
         def merge_initial_structure(self, record):
             self.merged = True
-            return {"number": 1, "merged": True, "merge_sha": "b" * 40}
+            return {
+                "number": 1,
+                "url": record["repository"]["url"] + "/pull/1",
+                "merged": True,
+                "merge_sha": "b" * 40,
+            }
 
     github = ImmediateGitHub()
     repository = ProjectOpeningRepository(store)
@@ -811,6 +819,20 @@ def test_guided_mcp_opens_approved_preparation_from_postgres_records(tmp_path, s
 
         result = answer("sí")
         assert result["status"] == "delivered"
+        handoff = asyncio.run(
+            call(
+                "obtener_handoff_arquitectura",
+                {"expediente_id": source["case_id"]},
+            )
+        )
+        assert handoff["contract_version"] == "1.3"
+        assert handoff["request_sha256"] == result["request_sha256"]
+        assert handoff["initial_pull_request"]["merged"] is True
+        assert handoff["architecture_issue"]["body_sha256"] == hashlib.sha256(
+            github.body.encode()
+        ).hexdigest()
+        assert handoff["approval"]["kind"] == "direction_decision"
+        assert handoff["handoff"]["to_phase"] == "architecture"
         opening = service.get(source["case_id"])
         assert summary["repository"].endswith("/" + opening["repository_name"])
         metrics = asyncio.run(

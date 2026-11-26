@@ -9,6 +9,8 @@ from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
+from app.core.architecture_delivery import ArchitectureProjectDelivery
+
 
 class RepositoryContract(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -286,6 +288,34 @@ class ProjectRepositoryBridge:
         return root
 
     def read(self, handoff):
+        if handoff.get("contract_version") == "1.3":
+            delivery = ArchitectureProjectDelivery.model_validate(handoff)
+            return {
+                "contract_version": delivery.contract_version,
+                "case_id": delivery.case_id,
+                "project_id": delivery.project_id,
+                "repository_url": delivery.repository.url,
+                "source_commit": delivery.initial_pull_request.merge_sha,
+                "published_commit": delivery.published_commit.sha,
+                "architecture_issue_url": delivery.architecture_issue.url,
+                "architecture_issue": delivery.architecture_issue.model_dump(
+                    mode="json"
+                ),
+                "approved_revision": delivery.approved_package.revision,
+                "approved_artifact_sha256": delivery.approved_package.artifact_sha256,
+                "request_sha256": delivery.request_sha256,
+                "architect": delivery.architect,
+                "approval": delivery.approval.model_dump(mode="json"),
+                "board_validation": None,
+                "budget": delivery.budget.model_dump(mode="json"),
+                "handoff": delivery.handoff.model_dump(mode="json"),
+                "approved_inputs": [
+                    item.model_dump(mode="json") for item in delivery.inputs
+                ],
+                "documents": [],
+                "input_status": "awaiting_repository_validation",
+                "input_id": delivery.initial_pull_request.merge_sha,
+            }
         delivery = ArchitectureProjectHandoff.model_validate(handoff)
         root = self._root(delivery.repository_path)
         self._git(root, "cat-file", "-e", f"{delivery.source_commit}^{{commit}}")

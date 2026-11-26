@@ -90,7 +90,7 @@ def create_server(service):
 
     @server.tool()
     def leer_entrega_agente_2(entrega: dict[str, Any]) -> dict:
-        """Lee insumos aprobados desde un commit de un repo creado del template."""
+        """Valida el contrato; checkout, issue y bytes se comprueban después."""
         return call(service.read_project_handoff, entrega)
 
     @server.tool()

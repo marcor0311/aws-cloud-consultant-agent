@@ -135,6 +135,7 @@ class PreviewGitHub:
             "assignee": record.get("issue_assignee") or record["architect"],
             "assignment_pending": False,
             "template_sha256": hashlib.sha256(template.encode()).hexdigest(),
+            "body_sha256": hashlib.sha256(body.encode()).hexdigest(),
         }
         self.save("issue-preview.json", {"mode": "preview", **result})
         return result

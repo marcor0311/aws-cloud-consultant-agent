@@ -200,6 +200,20 @@ y conciliada:
 
 El agente 2 no llamará al agente 3. Codex transportará el resultado exacto.
 
+### Resultado del Paso 3
+
+Implementado el contrato de transporte `ArchitectureProjectDelivery 1.3` y la
+herramienta MCP de solo lectura `obtener_handoff_arquitectura`. La salida se arma
+exclusivamente desde el registro de apertura y los recibos persistidos: repositorio,
+commit publicado, PR inicial integrado, issue, arquitecto, paquete aprobado,
+presupuesto, decisión y handoff. La ruta de un checkout local no forma parte del
+transporte porque depende del entorno donde Codex ejecuta el agente 3.
+
+El recibo del issue ahora conserva también el SHA-256 de su cuerpo. Esto permitirá
+comparar en el Paso 6 el snapshot recuperado de GitHub sin confiar únicamente en la
+URL o en la asignación. La herramienta no llama al MCP de Arquitectura ni acepta el
+handoff en nombre del arquitecto.
+
 ## Paso 4 — Ajustar el contrato de entrada del agente 3
 
 Después de observar la salida real del paso anterior se decidirá si corresponde
@@ -213,6 +227,20 @@ El contrato distinguirá explícitamente:
 También conservará repositorio, commit, PR inicial, issue, arquitecto, revisión del
 paquete, manifiesto, presupuesto, `request_sha256`, condición simulada y recibo del
 handoff. Una decisión del agente 2 nunca aprobará automáticamente la arquitectura.
+
+### Resultado del Paso 4
+
+Implementada la recepción compatible del contrato 1.3, conservando sin cambios la
+lectura de `ArchitectureProjectHandoff` 1.1 y 1.2. La decisión usa una unión
+discriminada entre `direction_decision` y `board_record`; una simulación de junta y
+una declaración de firmas verificadas por la fuente quedan explícitas y no se
+convierten en verificación criptográfica independiente.
+
+En este paso el agente 3 valida coherencia interna de repositorio, issue, arquitecto,
+`request_sha256`, presupuesto, decisión y recibo del handoff. El contexto queda en
+`awaiting_repository_validation`, sin documentos cargados y sin aprobación
+arquitectónica. La adquisición del checkout, el snapshot remoto del issue y la
+verificación de bytes/hash se mantienen deliberadamente para los Pasos 5, 6 y 7.
 
 ## Paso 5 — Adquirir el repositorio mediante Codex
 

@@ -347,4 +347,5 @@ class ProjectGitHub:
             "assignee": None if pending else assignee_login,
             "assignment_pending": pending,
             "template_sha256": hashlib.sha256(template.encode()).hexdigest(),
+            "body_sha256": hashlib.sha256(issue_body.encode()).hexdigest(),
         }

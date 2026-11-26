@@ -22,6 +22,7 @@ from app.architecture.project_repository import (
     approved_input_digest,
 )
 from app.architecture.service import ArchitectureService
+from app.core.architecture_delivery import ArchitectureProjectDelivery
 from app.integrations.langgraph import LangGraphExecution
 from app.persistence.workflow import WorkflowStore
 
@@ -122,6 +123,169 @@ def handoff(root, commit, inputs):
             "approved_at": "2026-11-08T15:00:00-06:00",
         },
     }
+
+
+def handoff_v13(root, commit):
+    repository_url = "https://github.com/example/agent2-project"
+    document_path = "docs/01-discovery/requirements.md"
+    document_sha256 = hashlib.sha256(
+        git_bytes(root, "show", f"{commit}:{document_path}")
+    ).hexdigest()
+    request_sha256 = "1" * 64
+    decision_digest = "2" * 64
+    body = (
+        "# Encargo de Arquitectura\n\n"
+        f"USD 75.00\n\n[{document_path}]({repository_url}/blob/{commit}/{document_path})\n\n"
+        f"<!-- meeting-assistant:project-case:{request_sha256} -->"
+    )
+    delivery = {
+        "contract_version": "1.3",
+        "source_stage": 2,
+        "case_id": "project-case",
+        "project_id": "agent2-project",
+        "request_sha256": request_sha256,
+        "architect": "cloud-architect",
+        "repository": {
+            "url": repository_url,
+            "full_name": "example/agent2-project",
+            "default_branch": "main",
+            "id": 10,
+        },
+        "published_commit": {
+            "sha": commit,
+            "url": f"{repository_url}/commit/{commit}",
+        },
+        "initial_pull_request": {
+            "number": 1,
+            "url": f"{repository_url}/pull/1",
+            "merged": True,
+            "merge_sha": commit,
+        },
+        "architecture_issue": {
+            "number": 2,
+            "url": f"{repository_url}/issues/2",
+            "assignee": "cloud-architect",
+            "assignment_pending": False,
+            "template_sha256": "3" * 64,
+            "body_sha256": hashlib.sha256(body.encode()).hexdigest(),
+        },
+        "approved_package": {
+            "revision": 5,
+            "artifact_sha256": "4" * 64,
+            "files_sha256": "5" * 64,
+        },
+        "inputs": [
+            {
+                "path": document_path,
+                "sha256": document_sha256,
+                "media_type": "text/markdown",
+            }
+        ],
+        "budget": {
+            "currency": "USD",
+            "total": "75.00",
+            "accepted": True,
+            "lines": [{"name": "AWS", "amount": "75.00"}],
+            "conditions": "Límite aprobado por Dirección.",
+        },
+        "approval": {
+            "kind": "direction_decision",
+            "id": "project-case",
+            "actor": "Stuart",
+            "reference": "direction-session-1",
+            "approved_at": 1.0,
+            "request_sha256": request_sha256,
+            "digest": decision_digest,
+            "simulated": False,
+        },
+        "handoff": {
+            "id": "opening:project-case:architecture",
+            "from_actor": "meeting-assistant",
+            "to_actor": "cloud-architect",
+            "from_phase": "project-opening",
+            "to_phase": "architecture",
+            "revision": 1,
+            "artifact_sha256": decision_digest,
+            "created_at": 2.0,
+            "accepted_at": None,
+            "accepted_by": None,
+        },
+        "is_fictitious": False,
+    }
+    snapshot = {
+        "repository_url": repository_url,
+        "number": 2,
+        "url": f"{repository_url}/issues/2",
+        "state": "open",
+        "assignees": ["cloud-architect"],
+        "body": body,
+    }
+    return delivery, snapshot
+
+
+def test_agent2_handoff_13_validates_transport_and_legacy_contracts(tmp_path):
+    commit, inputs = project_repository(tmp_path)
+    delivery, _ = handoff_v13(tmp_path, commit)
+
+    context = ProjectRepositoryBridge().read(delivery)
+
+    assert context["contract_version"] == "1.3"
+    assert context["source_commit"] == commit
+    assert context["request_sha256"] == delivery["request_sha256"]
+    assert context["budget"]["total"] == "75.00"
+    assert context["input_status"] == "awaiting_repository_validation"
+    assert context["documents"] == []
+    assert ProjectRepositoryBridge().read(handoff(tmp_path, commit, inputs))[
+        "contract_version"
+    ] == "1.1"
+
+
+def test_agent2_handoff_13_rejects_wrong_issue_and_handoff_traceability(tmp_path):
+    commit, _ = project_repository(tmp_path)
+    delivery, _ = handoff_v13(tmp_path, commit)
+    other = deepcopy(delivery)
+    other["architecture_issue"]["url"] = (
+        "https://github.com/example/other-project/issues/2"
+    )
+    with pytest.raises(ValidationError, match="issue pertenece a otro repositorio"):
+        ProjectRepositoryBridge().read(other)
+    wrong_handoff = deepcopy(delivery)
+    wrong_handoff["handoff"]["artifact_sha256"] = "9" * 64
+    with pytest.raises(ValidationError, match="handoff no corresponde"):
+        ProjectRepositoryBridge().read(wrong_handoff)
+
+
+def test_agent2_handoff_13_distinguishes_simulated_board_record(tmp_path):
+    commit, _ = project_repository(tmp_path)
+    delivery, _ = handoff_v13(tmp_path, commit)
+    decision_digest = "8" * 64
+    delivery["approval"] = {
+        "kind": "board_record",
+        "id": "board-1",
+        "request_sha256": delivery["request_sha256"],
+        "digest": decision_digest,
+        "status": "approved",
+        "closed_at": "2026-11-25T12:00:00-06:00",
+        "review_url": "https://example.invalid/board/1",
+        "simulated": True,
+        "document_path": "docs/02-board/acta-junta-board-1.json",
+        "document_sha256": "7" * 64,
+        "signature_verification": "declared_by_source",
+    }
+    delivery["inputs"].append(
+        {
+            "path": "docs/02-board/acta-junta-board-1.json",
+            "sha256": "7" * 64,
+            "media_type": "application/json",
+        }
+    )
+    delivery["handoff"]["artifact_sha256"] = decision_digest
+
+    validated = ArchitectureProjectDelivery.model_validate(delivery)
+
+    assert validated.approval.kind == "board_record"
+    assert validated.approval.simulated is True
+    assert validated.approval.signature_verification == "declared_by_source"
 
 
 def service_at(root):

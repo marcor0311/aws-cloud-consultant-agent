@@ -57,6 +57,11 @@ def create_server(service, instructions=None, *, conversation=None, board=None):
         return call(service.audit, expediente_id)
 
     @server.tool()
+    def obtener_handoff_arquitectura(expediente_id: str) -> dict:
+        """Devuelve el contrato 1.3 persistido para que Codex lo entregue a Arquitectura."""
+        return call(service.architecture_handoff, expediente_id)
+
+    @server.tool()
     def consultar_metricas_apertura(expediente_id: str) -> dict:
         """Lead Time y Process Time registrados de Dirección y de la apertura en GitHub."""
         return call(service.metrics, expediente_id)
