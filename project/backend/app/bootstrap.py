@@ -49,9 +49,12 @@ def create_report_runtime(delivery_url, workflow_url, operator):
     """Reports read local workflow records without composing providers or workers."""
     from types import SimpleNamespace
 
+    from app.delivery.engineering import EngineeringService
     from app.delivery.report import CaseReportService
+    from app.integrations.engineering_files import EngineeringFiles
     from app.integrations.report_sources import CaseReportSources
     from app.persistence.delivery import PostgresRepository
+    from app.persistence.engineering import EngineeringRepository
 
     resources = ExitStack()
     try:
@@ -67,7 +70,17 @@ def create_report_runtime(delivery_url, workflow_url, operator):
             )
             resources.callback(store.engine.dispose)
             service = CaseReportService(
-                repository, CaseReportSources(store, repository), operator
+                repository,
+                CaseReportSources(
+                    store,
+                    repository,
+                    EngineeringService(
+                        EngineeringRepository(store),
+                        EngineeringFiles(project_path("generated/engineering-inputs")),
+                        operator,
+                    ),
+                ),
+                operator,
             )
         return SimpleNamespace(
             repository=repository,
@@ -77,6 +90,29 @@ def create_report_runtime(delivery_url, workflow_url, operator):
         )
     except BaseException:
         resources.close()
+        raise
+
+
+def create_engineering_runtime(workflow_url, artifact_root, operator):
+    """Compose local intake/evidence tracking; no infrastructure or provider execution."""
+    from types import SimpleNamespace
+
+    from app.delivery.engineering import EngineeringService
+    from app.integrations.engineering_files import EngineeringFiles
+    from app.persistence.engineering import EngineeringRepository
+
+    if not workflow_url.startswith(("postgresql://", "postgresql+psycopg://")):
+        raise ValueError("Ingeniería requiere WORKFLOW_DATABASE_URL de PostgreSQL")
+    store = WorkflowStore(
+        workflow_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    )
+    try:
+        service = EngineeringService(
+            EngineeringRepository(store), EngineeringFiles(artifact_root), operator
+        )
+        return SimpleNamespace(service=service, store=store, close=store.engine.dispose)
+    except BaseException:
+        store.engine.dispose()
         raise
 
 

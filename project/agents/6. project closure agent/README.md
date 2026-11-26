@@ -16,7 +16,10 @@ borrador desde la entrega de ingeniería y datos simulados, con métricas y
 respaldos persistidos. Su código permanece en el backend.
 
 El MCP de `app.delivery.mcp` también genera un informe por expediente sin ejecutar
-ingeniería, con entrada técnica opcional. Lee fuentes y mediciones existentes del
+ingeniería, con entrada técnica opcional. `intake_id` selecciona una recepción de
+#21, con corridas, comprobaciones, versiones y archivos verificados por hash. El
+PDF muestra retrabajo explícito y resultados parciales/fallidos sin aprobarlos.
+Lee fuentes y mediciones existentes del
 workflow, conserva una instantánea con hash, permite corregir secciones, versionar
 y aprobar el PDF parcial. El operador debe corresponder al responsable registrado.
 Los informes parciales no cierran el expediente; faltan la integración de las

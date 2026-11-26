@@ -203,6 +203,7 @@ class ReportDraft(Contract):
     schema_version: Literal["1.0"] = "1.0"
     report_id: UUID
     handoff_id: UUID | None = None
+    intake_id: UUID | None = None
     version: int = Field(default=1, ge=1)
     status: Literal["draft", "changes_requested", "approved", "closed"] = "draft"
     artifact: ArtifactRef
@@ -237,3 +238,10 @@ class CaseReportRequest(Contract):
     report_id: UUID
     case_id: str = Field(pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,119}$")
     engineering_delivery_id: UUID | None = None
+    intake_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def one_engineering_source(self):
+        if self.intake_id is not None and self.engineering_delivery_id is not None:
+            raise ValueError("Elegir intake_id o engineering_delivery_id, no ambos")
+        return self

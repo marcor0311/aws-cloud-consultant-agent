@@ -1,10 +1,12 @@
 """Business contract, timing mathematics and a real PostgreSQL-backed API."""
 
 import asyncio
+import base64
 import copy
 import json
 import os
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
@@ -14,6 +16,7 @@ import psycopg
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from langgraph.checkpoint.memory import InMemorySaver
 from mcp.server.mcpserver.exceptions import ToolError
 from psycopg import sql
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
@@ -28,13 +31,30 @@ from app.api.delivery import (
     review_router,
     router,
 )
-from app.bootstrap import create_report_runtime
+from app.bootstrap import create_engineering_runtime, create_report_runtime
+from app.delivery.engineering_mcp import create_server as create_engineering_server
+from app.delivery.engineering_models import (
+    CHECKS,
+    EngineeringEvidence,
+    EngineeringFile,
+    EngineeringIntake,
+    package_digest,
+)
 from app.delivery.mcp import create_server
 from app.delivery.metrics import calculate_metrics
-from app.delivery.models import DemoRequest, EmulatorEvidence, PhaseTiming
+from app.delivery.models import (
+    CaseReportRequest,
+    DemoRequest,
+    EmulatorEvidence,
+    PhaseTiming,
+)
 from app.delivery.workflow import DeliveryWorkflow
-from app.persistence.delivery import DeliveryBusy, PostgresRepository
+from app.integrations.langgraph import LangGraphExecution
+from app.persistence.delivery import DeliveryBusy, DeliveryConflict, PostgresRepository
 from app.persistence.workflow import WorkflowStore
+from app.workflow.graph import build_process_graph
+from app.workflow.service import ProcessService
+from app.workflow.state import initial_state
 
 
 @pytest.fixture
@@ -145,7 +165,7 @@ def test_contract_rejects_ambiguous_or_invalid_inputs(payload, mutation):
         DemoRequest.model_validate(payload)
 
 
-def test_handoff_report_download_and_idempotency(client, repo, payload):
+def test_handoff_report_download_and_idempotency(client, repo, payload, tmp_path):
     response = client.post("/api/delivery/runs", json=payload)
     assert response.status_code == 200, response.text
     result = response.json()
@@ -202,6 +222,490 @@ def test_handoff_report_download_and_idempotency(client, repo, payload):
     ).text
     assert "?ref=" + payload["architecture"]["baseline"]["commit"] in source
     assert "bucket_name = var.bucket_name" in source
+
+    # Extend this handoff journey with intake of recorded upstream decisions and
+    # already-produced evidence. No Terraform/emulator or external API executes.
+    settings = conninfo_to_dict(repo.dsn)
+    url = URL.create(
+        "postgresql+psycopg",
+        username=settings.get("user"),
+        password=settings.get("password"),
+        host=settings.get("host"),
+        port=int(settings.get("port", "5432")),
+        database=settings.get("dbname"),
+        query={"options": settings["options"]},
+    ).render_as_string(hide_password=False)
+    runtime = create_engineering_runtime(url, tmp_path, "engineer")
+    store, service = runtime.store, runtime.service
+    clock = [1700000000.0]
+    store.clock = lambda: clock[0]
+    case_id, repository_name = "engineering-pilot", "example/engineering-pilot"
+    architecture_commit, finops_commit, implementation_commit = (
+        "a" * 40,
+        "b" * 40,
+        "c" * 40,
+    )
+
+    def file(role, name, commit):
+        content = ("Fictitious approved/exported bytes: " + name).encode()
+        (tmp_path / name).write_bytes(content)
+        return {
+            "role": role,
+            "path": name,
+            "sha256": sha256(content).hexdigest(),
+            "reference": f"https://github.com/{repository_name}/blob/{commit}/{name}",
+        }
+
+    try:
+        store.register_project(
+            case_id,
+            "engineering-pilot",
+            "Piloto ficticio de ingeniería",
+            "Empresa ficticia",
+            "engineer",
+            is_fictitious=True,
+        )
+        store.put(f"owner:{case_id}", "owner", {"manager_id": "engineer"})
+        execution = LangGraphExecution(build_process_graph(InMemorySaver()))
+        # The fixture starts at architecture; it does not invent a real meeting.
+        execution.start(
+            f"process:{case_id}",
+            {
+                **initial_state(case_id, "engineer"),
+                "stage": 3,
+                "status": "awaiting_deliverable",
+            },
+        )
+        process = ProcessService(execution, store, "engineer")
+        process.ensure(case_id)
+        input_data = {
+            "intake_id": str(uuid4()),
+            "case_id": case_id,
+            "incoming_handoff_id": f"{case_id}:process:2:3",
+            "repository": repository_name,
+            "architecture": {
+                "commit": architecture_commit,
+                "revision": 1,
+                "files": [
+                    file("requirements", "requirements.md", architecture_commit),
+                    file("design", "design.md", architecture_commit),
+                    file("policies", "policies.json", architecture_commit),
+                ],
+                "approval": {
+                    "event_id": "architecture-approved",
+                    "actor": "architect",
+                    "reference": f"https://github.com/{repository_name}/pull/1#review",
+                },
+            },
+            "finops": {
+                "commit": finops_commit,
+                "revision": 1,
+                "files": [
+                    file("calculator_export", "estimate.csv", finops_commit),
+                    file("cost_workbook", "forecast.xlsx", finops_commit),
+                ],
+                "approval": {
+                    "event_id": "finops-approved",
+                    "actor": "finops",
+                    "reference": f"https://github.com/{repository_name}/pull/2#review",
+                },
+            },
+            "finops_architecture_commit": architecture_commit,
+            "finops_architecture_sha256": "0" * 64,
+            "modules": [
+                {
+                    "repository": "example/baselines",
+                    "path": "aws/s3",
+                    "commit": "d" * 40,
+                    "approval_reference": "https://github.com/example/baselines/pull/1",
+                    "approved_by": "architect",
+                }
+            ],
+            "region": "us-east-1",
+            "budget": "100.00",
+            "estimate": "24.50",
+            "currency": "USD",
+            "period": "month",
+            "calculator_url": "https://calculator.aws/#/estimate/fictitious",
+        }
+        draft = EngineeringIntake.model_validate(input_data)
+        input_data["finops_architecture_sha256"] = draft.approval_digest(3)
+        intake = EngineeringIntake.model_validate(input_data)
+        with pytest.raises(DeliveryConflict, match="proceso"):
+            service.register(intake)
+        assert service.repository.get(intake.intake_id) is None
+        for stage, package in ((3, intake.architecture), (4, intake.finops)):
+            process.internal(
+                case_id,
+                f"ready-{stage}",
+                "deliverable.ready",
+                revision=1,
+                artifact_sha256=intake.approval_digest(stage),
+                evidence=[package.approval.reference],
+            )
+            process.internal(
+                case_id,
+                package.approval.event_id,
+                "stage.approved",
+                revision=1,
+                artifact_sha256=intake.approval_digest(stage),
+                evidence=[package.approval.reference],
+                actor=package.approval.actor,
+            )
+        original = (tmp_path / "design.md").read_bytes()
+        (tmp_path / "design.md").write_bytes(b"tampered after approval")
+        with pytest.raises(ValueError, match="SHA-256"):
+            service.register(intake)
+        assert store.handoff(intake.incoming_handoff_id)["accepted_at"] is None
+        (tmp_path / "design.md").write_bytes(original)
+        receipt = service.register(intake)
+        assert receipt["intake"]["approval_validation"] == "matched_workflow_decisions"
+        assert receipt["intake"]["is_fictitious"]
+        assert receipt["evidence_status"] == "not_received"
+        assert store.handoff(intake.incoming_handoff_id)["accepted_by"] == "engineer"
+        assert service.register(intake)["intake"] == receipt["intake"]
+        altered = {**input_data, "budget": "150.00"}
+        with pytest.raises(DeliveryConflict, match="otra entrada"):
+            service.register(EngineeringIntake.model_validate(altered))
+        archived = service.repository.file(
+            intake.intake_id, intake.architecture.files[1].sha256
+        )
+        assert base64.b64decode(archived["content_base64"]) == original
+
+        early_report_runtime = create_report_runtime(repo.dsn, url, "engineer")
+        early_request = CaseReportRequest(
+            report_id=uuid4(), case_id=case_id, intake_id=intake.intake_id
+        )
+        try:
+            early_report_runtime.service.sources.store.clock = lambda: clock[0]
+            early_report = early_report_runtime.service.generate(early_request)
+            assert early_report["engineering"]["evidence_status"] == "not_received"
+            assert early_report["report"]["intake_id"] == str(intake.intake_id)
+        finally:
+            early_report_runtime.close()
+
+        start = clock[0]
+        code = file("implementation", "main.tf", implementation_commit)
+        logs = [
+            file("log", "run.log", implementation_commit),
+            file("security_report", "security.json", implementation_commit),
+            file("policy_report", "policy.json", implementation_commit),
+        ]
+        check_intervals = {
+            "terraform fmt": (10, 20),
+            "terraform plan": (20, 40),
+            "Trivy": (25, 45),
+            "terraform validate": (50, 60),
+            "Eliminar contenedor": (60, 65),
+        }
+        checks = []
+        for name in CHECKS:
+            check = {
+                "name": name,
+                "status": "not_run",
+                "detail": "Fictitious recorded check; no command executed by this test",
+            }
+            if name in check_intervals:
+                a, b = check_intervals[name]
+                check.update(
+                    status="passed",
+                    started_at=datetime.fromtimestamp(start + a, UTC).isoformat(),
+                    ended_at=datetime.fromtimestamp(start + b, UTC).isoformat(),
+                )
+            if name == "terraform validate":
+                check["kind"] = "rework"
+            if name == "Eliminar contenedor":
+                check.update(status="failed", failure_origin="cleanup")
+            checks.append(check)
+        evidence_data = {
+            "scope": "local_emulator",
+            "run_id": str(uuid4()),
+            "intake_id": str(intake.intake_id),
+            "input_sha256": receipt["intake"]["input_sha256"],
+            "implementation_commit": implementation_commit,
+            "implementation_tree_sha256": package_digest(
+                [EngineeringFile.model_validate(code)]
+            ),
+            "plan_sha256": "e" * 64,
+            "run_reference": f"https://github.com/{repository_name}/actions/runs/123",
+            "modules": input_data["modules"],
+            "versions": {
+                "terraform": "recorded-test",
+                "aws_provider": "recorded-test",
+                "aws_emulator": "recorded-test",
+                "trivy": "recorded-test",
+            },
+            "resources": ["aws_s3_bucket.documents"],
+            "actor": "engineering-runner",
+            "checks": checks,
+            "files": [code, *logs],
+        }
+        clock[0] = start + 30
+        human = store.start_work(case_id, "stage-5", "engineer", "human")
+        clock[0] = start + 50
+        store.stop_work(human, "engineer")
+        clock[0] = start + 100
+        wrong = {**evidence_data, "input_sha256": "0" * 64}
+        with pytest.raises(DeliveryConflict, match="otra entrada"):
+            service.record_evidence(EngineeringEvidence.model_validate(wrong))
+        assert not service.repository.runs(intake.intake_id)
+        evidence = EngineeringEvidence.model_validate(evidence_data)
+        result = service.record_evidence(evidence)
+        assert result["evidence_status"] == "failed"
+        phase = result["phase_metrics"]
+        assert phase["lead_time_seconds"] == 100
+        assert phase["in_progress"]
+        assert phase["process_time_seconds"] == 70
+        assert phase["active_elapsed_seconds"] == 55
+        assert phase["human_effort_seconds"] == 20
+        assert phase["agent_effort_seconds"] == 50
+        assert phase["recorded_rework_effort_seconds"] == 10
+        assert phase["wait_seconds"] is None
+        assert phase["unclassified_seconds"] == 45
+        assert service.record_evidence(evidence)["evidence"] == result["evidence"]
+        assert len(store.metrics(case_id)["sessions"]) == 6
+        assert store.get(f"process:{case_id}")["stage"] == 5
+        assert result["review_status"] == "pending"
+        assert store.get(f"phase:{case_id}:stage-5")["completed_at"] is None
+
+        async def inspect_mcp():
+            server = create_engineering_server(service)
+            assert (
+                await server.call_tool(
+                    "registrar_entrada_ingenieria", {"entrada": input_data}
+                )
+            ).structured_content["intake"] == receipt["intake"]
+            assert (
+                await server.call_tool(
+                    "registrar_evidencias_ingenieria", {"evidencia": evidence_data}
+                )
+            ).structured_content["evidence"] == result["evidence"]
+            response = await server.call_tool(
+                "consultar_ingenieria", {"intake_id": str(intake.intake_id)}
+            )
+            assert response.structured_content["evidence_status"] == "failed"
+            resource = list(
+                await server.read_resource(
+                    f"engineering://artifact/{intake.intake_id}/{intake.architecture.files[1].sha256}"
+                )
+            )[0]
+            assert resource.content == original
+
+        asyncio.run(inspect_mcp())
+        reopened = create_engineering_runtime(url, tmp_path, "engineer")
+        report_runtime = create_report_runtime(repo.dsn, url, "engineer")
+        try:
+            reopened.store.clock = report_runtime.service.sources.store.clock = lambda: (
+                clock[0]
+            )
+            assert (
+                reopened.service.get(intake.intake_id)["evidence"] == result["evidence"]
+            )
+            snapshot = report_runtime.service.sources.capture(
+                CaseReportRequest(report_id=uuid4(), case_id=case_id), "engineer"
+            )
+            assert (
+                next(
+                    p
+                    for p in snapshot["metrics"]["phases"]
+                    if p["phase"] == "engineering"
+                )["process_time_seconds"]
+                == 70
+            )
+            assert (
+                snapshot["measurements"]["technical_evidence"][0]["evidence_sha256"]
+                == result["evidence"][0]["evidence_sha256"]
+            )
+
+            # Continue the same journey: receipts -> report -> partial approval,
+            # preserving the earlier report even after evidence has arrived.
+            preserved = report_runtime.service.generate(early_request)
+            assert preserved["report"]["artifact"] == early_report["report"]["artifact"]
+            assert preserved["engineering"]["selected_run_id"] is None
+            with pytest.raises(LookupError, match="no incluido"):
+                report_runtime.service.read_engineering_file(
+                    early_request.report_id, code["sha256"]
+                )
+            store.register_project(
+                "other-case",
+                "other-project",
+                "Otro expediente ficticio",
+                "Empresa ficticia",
+                "engineer",
+                is_fictitious=True,
+            )
+            with pytest.raises(ValueError, match="otro expediente"):
+                report_runtime.service.generate(
+                    CaseReportRequest(
+                        report_id=uuid4(),
+                        case_id="other-case",
+                        intake_id=intake.intake_id,
+                    )
+                )
+            source_key = f"engineering-file:{intake.intake_id}:{intake.architecture.files[1].sha256}"
+            store.put(
+                source_key,
+                "engineering-file",
+                {
+                    **archived,
+                    "content_base64": base64.b64encode(b"corrupted archive").decode(),
+                },
+            )
+            try:
+                with pytest.raises(DeliveryConflict, match="hash"):
+                    report_runtime.service.generate(
+                        CaseReportRequest(
+                            report_id=uuid4(),
+                            case_id=case_id,
+                            intake_id=intake.intake_id,
+                        )
+                    )
+            finally:
+                store.put(source_key, "engineering-file", archived)
+
+            async def verify_report_from_intake():
+                server = create_server(repo, "engineer", report_runtime.service)
+                request_data = {
+                    "report_id": str(uuid4()),
+                    "case_id": case_id,
+                    "intake_id": str(intake.intake_id),
+                }
+                response = await server.call_tool(
+                    "generar_informe", {"entrada": request_data}
+                )
+                generated = response.structured_content
+                assert generated["engineering"]["selected_run_id"] == str(
+                    evidence.run_id
+                )
+                assert generated["engineering"]["evidence_status"] == "failed"
+                assert (
+                    generated["handoff"] is None
+                )  # A receipt is not an approved handoff.
+                phase = next(
+                    p
+                    for p in generated["metrics"]["phases"]
+                    if p["phase"] == "engineering"
+                )
+                assert phase["process_time_seconds"] == 70
+                assert phase["recorded_rework_effort_seconds"] == 10
+                report = generated["report"]
+
+                def decision(action):
+                    return {
+                        "decision_id": str(uuid4()),
+                        "version": report["version"],
+                        "sha256": report["artifact"]["sha256"],
+                        "action": action,
+                        "detail": "Confirmado para el informe parcial ficticio",
+                    }
+
+                approved = (
+                    await server.call_tool(
+                        "registrar_decision_informe",
+                        {
+                            "entrega_id": generated["delivery_id"],
+                            "decision": decision("approve"),
+                        },
+                    )
+                ).structured_content
+                with pytest.raises(ToolError, match="cerrar"):
+                    await server.call_tool(
+                        "registrar_decision_informe",
+                        {
+                            "entrega_id": generated["delivery_id"],
+                            "decision": decision("record_presentation"),
+                        },
+                    )
+                content = list(await server.read_resource(approved["pdf_uri"]))[
+                    0
+                ].content
+                text = " ".join(
+                    " ".join(
+                        p.extract_text() for p in PdfReader(BytesIO(content)).pages
+                    ).split()
+                )
+                for expected in (
+                    "INFORME PARCIAL APROBADO",
+                    "Fallida informada",
+                    "No ejecutada",
+                    "Retrabajo",
+                    "10.0 s (parcial)",
+                    implementation_commit,
+                    str(evidence.run_id),
+                ):
+                    assert expected in text
+                source = list(await server.read_resource(approved["sources_uri"]))[
+                    0
+                ].content
+                source = source.encode() if isinstance(source, str) else source
+                assert (
+                    sha256(source).hexdigest()
+                    == approved["report"]["sources"]["sha256"]
+                )
+                captured = json.loads(source)
+                assert (
+                    captured["engineering"]["intake"]["input_sha256"]
+                    == receipt["intake"]["input_sha256"]
+                )
+                assert (
+                    captured["engineering"]["evidence"][0]["evidence_sha256"]
+                    == result["evidence"][0]["evidence_sha256"]
+                )
+                backup = next(
+                    f
+                    for f in captured["engineering"]["files"]
+                    if f["path"] == "design.md"
+                )
+                assert (
+                    list(await server.read_resource(backup["uri"]))[0].content
+                    == original
+                )
+                output = Path(
+                    os.getenv("DELIVERY_TEST_OUTPUT", str(tmp_path / "report-links"))
+                )
+                output.mkdir(parents=True, exist_ok=True)
+                (output / "informe-con-recepcion.pdf").write_bytes(content)
+                (output / "fuentes-con-recepcion.json").write_bytes(source)
+                early_pdf = repo.artifact(
+                    early_request.report_id,
+                    early_report["report"]["artifact"]["artifact_id"],
+                )
+                (output / "informe-sin-corridas.pdf").write_bytes(
+                    bytes(early_pdf["content"])
+                )
+                assert store.get(f"process:{case_id}")["stage"] == 5
+                return generated
+
+            generated = asyncio.run(verify_report_from_intake())
+            assert generated["engineering"]["upstream_current"]
+        finally:
+            reopened.close()
+            report_runtime.close()
+        process.internal(
+            case_id,
+            "engineering-ready",
+            "deliverable.ready",
+            revision=1,
+            artifact_sha256="f" * 64,
+            evidence=["local:fictitious"],
+        )
+        process.internal(
+            case_id,
+            "engineering-adjustments",
+            "stage.changes_requested",
+            revision=1,
+            artifact_sha256="f" * 64,
+            comment="Cambiar implementación",
+        )
+        assert not service.get(intake.intake_id)["upstream_current"]
+        with pytest.raises(DeliveryConflict, match="iteración"):
+            service.record_evidence(
+                EngineeringEvidence.model_validate(
+                    {**evidence_data, "run_id": str(uuid4())}
+                )
+            )
+    finally:
+        runtime.close()
 
 
 @pytest.mark.parametrize("case", ["different_revision", "over_budget", "kms_region"])

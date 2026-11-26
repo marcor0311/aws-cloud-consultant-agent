@@ -448,7 +448,108 @@ def render_case_pdf(snapshot, sections, *, version, source, approval=None):
         )
     )
     technical = snapshot["technical"]
-    if technical:
+    engineering = snapshot.get("engineering")
+    check_status = {
+        "passed": "Correcta informada",
+        "failed": "Fallida informada",
+        "not_run": "No ejecutada",
+    }
+    if engineering:
+        inputs = engineering["intake"]["input"]
+        period = "mes" if inputs["period"] == "month" else "año"
+        label = "ficticio" if engineering["intake"]["is_fictitious"] else "registrado"
+        story.extend(
+            [
+                para(
+                    f"FinOps ({label}): presupuesto {inputs['currency']} {inputs['budget']} por {period}; estimación {inputs['currency']} {inputs['estimate']} por {period}."
+                ),
+                para(f"Calculadora registrada: {inputs['calculator_url']}", small),
+                para(
+                    "Excel de costos: "
+                    + next(
+                        f["reference"]
+                        for f in inputs["finops"]["files"]
+                        if f["role"] == "cost_workbook"
+                    ),
+                    small,
+                ),
+                para("3. Validaciones y evidencias de ingeniería", heading),
+                para(
+                    "Se verificó la integridad de los archivos registrados. Los resultados de ejecución fueron declarados por el operador; generar este informe no ejecuta ni autentica las pruebas."
+                ),
+                para(
+                    "Insumos vigentes para esta recepción."
+                    if engineering["upstream_current"]
+                    else "La recepción requiere conciliación con el estado actual del proceso antes de continuar."
+                ),
+            ]
+        )
+        latest = engineering["evidence"][-1] if engineering["evidence"] else None
+        if latest:
+            execution = latest["evidence"]
+            story.extend(
+                [
+                    para(f"Corrida seleccionada: {latest['run_id']}", small),
+                    para(
+                        f"Commit de implementación declarado: {execution['implementation_commit']}",
+                        small,
+                    ),
+                    para(f"Origen de la corrida: {execution['run_reference']}", small),
+                    table(
+                        [["Comprobación", "Resultado", "Detalle informado"]]
+                        + [
+                            [
+                                c["name"],
+                                check_status[c["status"]],
+                                c["detail"]
+                                + (
+                                    " | Origen del fallo: " + c["failure_origin"]
+                                    if c.get("failure_origin")
+                                    else ""
+                                ),
+                            ]
+                            for c in execution["checks"]
+                        ],
+                        [0.30, 0.22, 0.48],
+                    ),
+                    para("Versiones de la corrida", heading),
+                    table(
+                        [["Herramienta", "Versión registrada"]]
+                        + [
+                            [name, value]
+                            for name, value in execution["versions"].items()
+                        ],
+                        [0.35, 0.65],
+                    ),
+                    para(
+                        "Recursos informados: " + ", ".join(execution["resources"]),
+                        small,
+                    ),
+                ]
+            )
+        else:
+            story.append(
+                para(
+                    "Recepción registrada sin corridas técnicas importadas. Las comprobaciones permanecen pendientes."
+                )
+            )
+        story.extend(
+            [
+                para("Módulos y revisiones de referencia", heading),
+                table(
+                    [["Módulo", "Commit fijado"]]
+                    + [
+                        [m["repository"] + "/" + m["path"], m["commit"]]
+                        for m in inputs["modules"]
+                    ],
+                    [0.45, 0.55],
+                ),
+                para(
+                    "Referencias de aprobación de baselines pendientes de verificación externa. Revisión del arquitecto y PR de implementación pendientes."
+                ),
+            ]
+        )
+    elif technical:
         costs = technical["costs"]
         check_status = {
             "passed": "Correcta",
@@ -488,9 +589,28 @@ def render_case_pdf(snapshot, sections, *, version, source, approval=None):
         )
     story.append(para("Gasto real AWS: no disponible."))
     story.append(para("4. Tiempos registrados", heading))
+
+    def rework(phase):
+        total = phase.get("rework_effort_seconds")
+        recorded = phase.get("recorded_rework_effort_seconds")
+        if total is not None:
+            return seconds(total)
+        return (
+            seconds(recorded) + " (parcial)" if recorded is not None else "Sin medición"
+        )
+
     story.append(
         table(
-            [["Fase", "LT al corte", "PT esfuerzo", "Activa", "Humano / agente"]]
+            [
+                [
+                    "Fase",
+                    "LT al corte",
+                    "PT esfuerzo",
+                    "Activa",
+                    "Retrabajo",
+                    "Humano / agente",
+                ]
+            ]
             + [
                 [
                     PHASE_NAMES[p["phase"]]
@@ -498,16 +618,21 @@ def render_case_pdf(snapshot, sections, *, version, source, approval=None):
                     seconds(p["lead_time_seconds"]),
                     seconds(p["process_time_seconds"]),
                     seconds(p["active_elapsed_seconds"]),
+                    rework(p),
                     f"{seconds(p['human_effort_seconds'])} / {seconds(p['agent_effort_seconds'])}",
                 ]
                 for p in metrics["phases"]
             ],
-            [0.22, 0.17, 0.17, 0.17, 0.27],
+            [0.20, 0.14, 0.14, 0.14, 0.14, 0.24],
         )
     )
     story.extend(
         [
             para(metrics["note"], small),
+            para(
+                "El retrabajo marcado como parcial muestra solo intervalos clasificados; no estima la parte sin medición.",
+                small,
+            ),
             para(
                 f"Ciclos de ajustes observados: {metrics['rework_cycles']}; devoluciones del proceso: {metrics['process_rework_cycles']}. Su duración no se infiere del número de eventos.",
                 small,
@@ -544,6 +669,24 @@ def render_case_pdf(snapshot, sections, *, version, source, approval=None):
     story.append(para("Requisitos pendientes para el cierre", heading))
     story.extend(para(item) for item in snapshot["closure_blockers"])
     story.append(para("7. Decisiones y fuentes", heading))
+    if engineering:
+        story.append(
+            para(
+                f"Recepción: {engineering['intake']['intake_id']} | SHA-256 de entrada: {engineering['intake']['input_sha256']}",
+                small,
+            )
+        )
+        for run in engineering["evidence"]:
+            story.append(
+                para(
+                    f"Corrida registrada: {run['run_id']} | SHA-256 del manifiesto: {run['evidence_sha256']}",
+                    small,
+                )
+            )
+        for file in engineering["files"]:
+            story.append(
+                para(f"Respaldo: {file['path']} | SHA-256: {file['sha256']}", small)
+            )
     for d in snapshot["decisions"]:
         event = d["payload"]
         label = {
@@ -566,6 +709,7 @@ def render_case_pdf(snapshot, sections, *, version, source, approval=None):
             "fictitious": "Ficticia",
             "recorded": "Registrada",
             "simulated_inputs": "Insumos simulados",
+            "operator_recorded": "Declarada por el operador; integridad verificada",
         }[s["provenance"]]
         story.append(para(f"{s['reference']} | Procedencia: {provenance}", small))
     story.extend(
