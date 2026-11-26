@@ -128,6 +128,46 @@ def test_budget_result_does_not_authorize_evaluation():
     assert approved.decision == "approved"
 
 
+def test_decision_1_1_requires_matching_typed_chat_authorization():
+    base = {
+        "contract_version": "1.1",
+        "decision_id": "decision:case-finops:typed",
+        "case_id": "case-finops",
+        "project_id": "project-finops",
+        "architecture_revision": 1,
+        "architecture_sha256": "a" * 64,
+        "evaluation_reference": "finops://case-finops/analyses/1",
+        "budget_result": "within_budget",
+        "decision": "approved",
+        "rationale": "La cobertura y el presupuesto fueron revisados.",
+        "decided_by": "finops-analyst",
+        "decided_at": datetime.now(timezone.utc),
+    }
+    with pytest.raises(ValidationError, match="autorización trazable"):
+        FinOpsEvaluationDecision.model_validate(base)
+
+    authorization = {
+        "authorization_id": "authorization:case-finops:1",
+        "case_id": "case-finops",
+        "project_id": "project-finops",
+        "architecture_revision": 1,
+        "architecture_sha256": "a" * 64,
+        "evaluation_reference": "finops://case-finops/analyses/1",
+        "authorized_by": "finops-analyst",
+        "authorized_at": datetime.now(timezone.utc),
+        "conversation_reference": "codex://threads/finops-review",
+        "statement_sha256": "b" * 64,
+    }
+    decision = FinOpsEvaluationDecision.model_validate(
+        {**base, "authorization": authorization}
+    )
+    assert decision.authorization.conversation_reference.startswith("codex://")
+
+    mismatched = {**authorization, "architecture_revision": 2}
+    with pytest.raises(ValidationError, match="otra evaluación"):
+        FinOpsEvaluationDecision.model_validate({**base, "authorization": mismatched})
+
+
 def test_calculator_preparation_preserves_s3_values_and_traceability():
     payload = handoff_payload()
     intake = FinOpsIntake(

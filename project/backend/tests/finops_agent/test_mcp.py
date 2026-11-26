@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from openpyxl import load_workbook
 
 from app.architecture.corrections import FinOpsCorrectionRequest
 from app.architecture.demo import DEFAULT_INPUT
@@ -58,7 +59,7 @@ def service_at(tmp_path):
         revision=1,
         artifact_sha256=handoff["artifact_sha256"],
     )
-    return database, store, FinOpsService(store), handoff
+    return database, store, FinOpsService(store, output_dir=tmp_path / "artifacts"), handoff
 
 
 def seed_finops_issue(store, service, handoff):
@@ -226,6 +227,8 @@ def test_dedicated_finops_server_exposes_only_finops_tools(tmp_path):
             "registrar_evidencia_calculadora",
             "ejecutar_analisis_finops",
             "consultar_resultado_finops",
+            "generar_excel_costos",
+            "preparar_comentario_finops",
             "emitir_decision_finops",
             "generar_solicitud_correccion_arquitectura",
             "consultar_historial_finops",
@@ -251,6 +254,69 @@ def test_finops_validates_issue_and_prepares_real_estimate_operation(tmp_path):
         altered = {**snapshot, "architecture_sha256": "c" * 64}
         with pytest.raises(ValueError, match="no coincide"):
             service.register_issue("block-c-s3", 1, altered)
+    finally:
+        store.engine.dispose()
+
+
+def test_finops_generates_one_versioned_workbook_and_comment_draft(tmp_path):
+    _, store, service, handoff = service_at(tmp_path)
+    try:
+        service.receive_handoff("block-c-s3", handoff)
+        seed_finops_issue(store, service, handoff)
+        evidence = json.loads(EVIDENCE.read_text("utf-8"))
+        service.register_evidence("block-c-s3", 1, evidence)
+        analysis = service.run_analysis("block-c-s3", 1)
+
+        generated = service.generate_workbook("block-c-s3", 1)
+        duplicate = service.generate_workbook("block-c-s3", 1)
+        assert generated["duplicate"] is False
+        assert duplicate["duplicate"] is True
+        artifact = generated["workbook"]
+        assert artifact["status"] == "partial"
+        assert artifact["pending_resources"] == ["documents-key"]
+        path = tmp_path / "artifacts" / artifact["relative_path"]
+        assert path.is_file()
+
+        workbook = load_workbook(path, data_only=False)
+        assert workbook.sheetnames == [
+            "Resumen",
+            "Costos",
+            "Proyección",
+            "Escenarios",
+            "Evidencias",
+            "Supuestos",
+        ]
+        assert workbook["Costos"]["E2"].value == "=D2*12"
+        assert workbook["Costos"]["C3"].value == "Pendiente"
+        assert workbook["Costos"]["D3"].value is None
+        assert workbook["Proyección"]["N3"].value.startswith("=IF(COUNTA")
+        assert workbook["Escenarios"]["B3"].value == "blocked"
+        assert workbook["Evidencias"]["A2"].value == evidence["execution_id"]
+        workbook.close()
+
+        comment = service.prepare_comment(
+            "block-c-s3",
+            1,
+            {
+                "comment_id": "comment-kms-question",
+                "comment_type": "question",
+                "message": "Confirme los consumos mensuales de AWS KMS.",
+                "architect_github_username": "cloud-architect",
+            },
+        )
+        assert comment["comment"]["publication_status"] == "draft"
+        assert comment["comment"]["body"].startswith("@cloud-architect")
+        assert analysis["reference"] in comment["comment"]["body"]
+        assert service.prepare_comment(
+            "block-c-s3",
+            1,
+            {
+                "comment_id": "comment-kms-question",
+                "comment_type": "question",
+                "message": "Confirme los consumos mensuales de AWS KMS.",
+                "architect_github_username": "cloud-architect",
+            },
+        )["duplicate"] is True
     finally:
         store.engine.dispose()
 
@@ -308,6 +374,42 @@ async def protocol_issue_and_estimate_exchange(database, snapshot):
             return validated, operation
 
 
+async def protocol_workbook_and_comment_exchange(database, data_dir):
+    parameters = StdioServerParameters(
+        command=sys.executable,
+        args=["-m", "app.finops.mcp_server"],
+        cwd=str(BACKEND),
+        env={
+            **os.environ,
+            "FINOPS_DATABASE_URL": database,
+            "FINOPS_DATA_DIR": str(data_dir),
+            "LANGSMITH_TRACING": "false",
+            "LANGCHAIN_TRACING_V2": "false",
+        },
+    )
+    async with stdio_client(parameters) as (reader, writer):
+        async with ClientSession(reader, writer) as session:
+            await session.initialize()
+            workbook = await session.call_tool(
+                "generar_excel_costos",
+                {"expediente_id": "block-c-s3", "revision": 1},
+            )
+            comment = await session.call_tool(
+                "preparar_comentario_finops",
+                {
+                    "expediente_id": "block-c-s3",
+                    "revision": 1,
+                    "solicitud": {
+                        "comment_id": "comment-protocol-kms",
+                        "comment_type": "question",
+                        "message": "Confirme los consumos mensuales de AWS KMS.",
+                        "architect_github_username": "cloud-architect",
+                    },
+                },
+            )
+            return workbook, comment
+
+
 def test_real_stdio_protocol_initializes_lists_and_calls_tool(tmp_path):
     database, store, _, handoff = service_at(tmp_path)
     store.engine.dispose()
@@ -345,3 +447,25 @@ def test_real_stdio_protocol_validates_issue_and_prepares_estimate(tmp_path):
     assert operation.structured_content is not None, operation.model_dump()
     assert operation.structured_content["status"] == "awaiting_codex_execution"
     assert operation.structured_content["may_mark_verified"] is False
+
+
+def test_real_stdio_protocol_generates_workbook_and_comment(tmp_path):
+    database, store, service, handoff = service_at(tmp_path)
+    service.receive_handoff("block-c-s3", handoff)
+    seed_finops_issue(store, service, handoff)
+    service.register_evidence(
+        "block-c-s3", 1, json.loads(EVIDENCE.read_text("utf-8"))
+    )
+    service.run_analysis("block-c-s3", 1)
+    store.engine.dispose()
+
+    workbook, comment = asyncio.run(
+        protocol_workbook_and_comment_exchange(database, tmp_path / "mcp-data")
+    )
+
+    assert workbook.is_error is False
+    assert workbook.structured_content["workbook"]["status"] == "partial"
+    relative = workbook.structured_content["workbook"]["relative_path"]
+    assert (tmp_path / "mcp-data" / "artifacts" / relative).is_file()
+    assert comment.is_error is False
+    assert comment.structured_content["comment"]["publication_status"] == "draft"

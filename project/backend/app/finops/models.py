@@ -40,7 +40,7 @@ class FinOpsIntake(FinOpsModel):
 class FinOpsEvaluationDecision(FinOpsModel):
     """Authorized outcome of an evaluation, independent from handoff receipt."""
 
-    contract_version: Literal["1.0"] = "1.0"
+    contract_version: Literal["1.0", "1.1"] = "1.0"
     decision_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{2,159}$")
     case_id: str = Field(min_length=1, max_length=120)
     project_id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{2,59}$")
@@ -64,16 +64,82 @@ class FinOpsEvaluationDecision(FinOpsModel):
     authorization_reference: str | None = Field(
         default=None, min_length=1, max_length=512
     )
+    authorization: "FinOpsChatAuthorization | None" = None
 
     @model_validator(mode="after")
     def approval_requires_explicit_authorization(self):
         if self.decided_at.tzinfo is None or self.decided_at.utcoffset() is None:
             raise ValueError("decided_at debe incluir zona horaria.")
-        if self.decision == "approved" and not self.authorization_reference:
+        if self.decision == "approved" and not (
+            self.authorization_reference or self.authorization
+        ):
             raise ValueError("La aprobación requiere autorización trazable.")
-        if self.decision != "approved" and self.authorization_reference:
+        if self.decision != "approved" and (
+            self.authorization_reference or self.authorization
+        ):
             raise ValueError("Solo una aprobación puede declarar autorización.")
+        if self.contract_version == "1.1" and self.decision == "approved":
+            if not self.authorization:
+                raise ValueError("La decisión 1.1 requiere autorización tipada.")
+            if self.authorization_reference:
+                raise ValueError("La decisión 1.1 no usa autorización textual legado.")
+            if (
+                self.authorization.case_id != self.case_id
+                or self.authorization.project_id != self.project_id
+                or self.authorization.architecture_revision
+                != self.architecture_revision
+                or self.authorization.architecture_sha256
+                != self.architecture_sha256
+                or self.authorization.evaluation_reference
+                != self.evaluation_reference
+            ):
+                raise ValueError("La autorización corresponde a otra evaluación.")
         return self
+
+
+class FinOpsChatAuthorization(FinOpsModel):
+    contract_version: Literal["1.0"] = "1.0"
+    authorization_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{2,159}$")
+    case_id: str = Field(min_length=1, max_length=120)
+    project_id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{2,59}$")
+    architecture_revision: int = Field(ge=1)
+    architecture_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    evaluation_reference: str = Field(pattern=r"^finops://", max_length=512)
+    authorized_by: str = Field(min_length=1, max_length=160)
+    authorized_at: datetime
+    conversation_reference: str = Field(
+        min_length=1, max_length=512, pattern=r"^(chat|codex)://"
+    )
+    statement_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def authorized_at_is_aware(self):
+        if self.authorized_at.tzinfo is None or self.authorized_at.utcoffset() is None:
+            raise ValueError("authorized_at debe incluir zona horaria.")
+        return self
+
+
+class FinOpsCommentRequest(FinOpsModel):
+    contract_version: Literal["1.0"] = "1.0"
+    comment_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{2,159}$")
+    comment_type: Literal[
+        "question", "cost_difference", "adjustment_required", "approval_summary"
+    ]
+    message: str = Field(min_length=1, max_length=4000)
+    architect_github_username: str | None = Field(
+        default=None, pattern=r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$"
+    )
+
+    @model_validator(mode="after")
+    def adjustment_mentions_architect(self):
+        if self.comment_type in {"question", "adjustment_required"} and not (
+            self.architect_github_username
+        ):
+            raise ValueError("Las dudas o ajustes deben mencionar al arquitecto.")
+        return self
+
+
+FinOpsEvaluationDecision.model_rebuild()
 
 
 class FinOpsIssueSnapshot(FinOpsModel):

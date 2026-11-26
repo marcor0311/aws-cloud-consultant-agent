@@ -28,7 +28,7 @@ def create_service(*, database_url: str | None = None):
     resources = ExitStack()
     store = WorkflowStore(database)
     resources.callback(store.engine.dispose)
-    return FinOpsService(store), resources
+    return FinOpsService(store, output_dir=data / "artifacts"), resources
 
 
 def create_server(service):
@@ -104,6 +104,18 @@ def create_server(service):
     def consultar_resultado_finops(expediente_id: str, revision: int) -> dict:
         """Consulta cobertura, presupuesto y resultado económico vigente."""
         return call(service.result, expediente_id, revision)
+
+    @server.tool()
+    def generar_excel_costos(expediente_id: str, revision: int) -> dict[str, Any]:
+        """Genera un único forecast.xlsx versionado desde evidencia persistida."""
+        return call(service.generate_workbook, expediente_id, revision)
+
+    @server.tool()
+    def preparar_comentario_finops(
+        expediente_id: str, revision: int, solicitud: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Prepara un comentario trazable; Codex decide si lo publica en GitHub."""
+        return call(service.prepare_comment, expediente_id, revision, solicitud)
 
     @server.tool()
     def emitir_decision_finops(

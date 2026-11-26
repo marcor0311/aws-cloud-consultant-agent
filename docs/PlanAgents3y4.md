@@ -558,16 +558,93 @@ remota y los respaldos CSV/PDF continúan pendientes; el piloto S3 no se repiti�
 
 ### 15.3 — Completar `generar_excel_costos` y los entregables del Bloque F
 
-Se expondrá por MCP la tool `generar_excel_costos`. Generará
-`docs/04-finops/forecast.xlsx` con:
+`generar_excel_costos` será una tool del MCP FinOps, no un archivo adicional. La
+tool consumirá la recepción, el análisis y las evidencias persistidas para producir
+un único libro versionado:
 
-- costos por recurso y servicio;
-- fórmulas mensuales y anuales, sin totales escritos manualmente;
-- presupuesto, diferencia y cobertura;
-- escenarios base, mayor demanda, menor demanda y optimización solamente cuando
-  cada cambio facturable tenga evidencia oficial propia;
-- referencias a la revisión, SHA-256, enlace de la calculadora y evidencias;
-- moneda y periodo explícitos, sin conversiones no autorizadas.
+```text
+docs/04-finops/versions/vNNN/forecast.xlsx
+```
+
+El libro tendrá las siguientes pestañas:
+
+| Pestaña | Contenido |
+| --- | --- |
+| `Resumen` | Costo mensual y anual, presupuesto, diferencias, moneda, cobertura y estado de la evaluación. |
+| `Costos` | Desglose por recurso y servicio, con fórmulas y referencias a las evidencias de AWS. |
+| `Proyección` | Proyección de los doce meses y total anual, calculados desde los costos mensuales verificados. |
+| `Escenarios` | Base, mayor demanda, menor demanda y optimización; únicamente cuando cada cambio facturable tenga evidencia válida. |
+| `Evidencias` | URL de AWS Pricing Calculator, revisión, SHA-256, fecha de ejecución y respaldos CSV/PDF. |
+| `Supuestos` | Consumos, unidades, procedencia, requisitos relacionados y datos pendientes. |
+
+#### Reglas de construcción del libro
+
+- `Resumen` será la primera pestaña y mostrará claramente si el resultado es
+  completo, parcial o no evaluable. `within_budget` no se presentará como una
+  aprobación FinOps.
+- `Costos` tendrá una fila estable por recurso y servicio. El costo anual se
+  calculará mediante fórmula desde el costo mensual; los subtotales y totales
+  también serán fórmulas, no valores escritos manualmente.
+- Un servicio pendiente, como KMS en el caso actual, se mostrará como `Pendiente`
+  o `Sin evidencia`. No se reemplazará por cero y no se incluirá silenciosamente en
+  un total presentado como completo.
+- `Proyección` usará columnas para los doce meses y una columna anual. El escenario
+  base podrá repetir el costo mensual verificado solo cuando el periodo de la
+  evidencia sea mensual y no existan variaciones justificadas.
+- `Escenarios` no extrapolará cambios de consumo mediante precios locales. Un
+  escenario que cambie parámetros facturables permanecerá `Bloqueado` hasta contar
+  con su propia evidencia de AWS Pricing Calculator.
+- `Evidencias` conservará una fila por ejecución y artefacto, con
+  `execution_id`, servicio, región, URL, fecha, estado, ruta, tipo de archivo y
+  SHA-256. El binario no se incrustará dentro del contrato MCP.
+- `Supuestos` distinguirá cantidades conocidas, desconocidas y no representables;
+  conservará unidad, periodo, fuente, requisito y explicación del bloqueo.
+- Todas las pestañas conservarán `project_id`, expediente, revisión de
+  Arquitectura y SHA-256, ya sea en su encabezado o mediante referencias a una
+  sección de control única.
+- La moneda y el periodo serán explícitos. Una diferencia de moneda bloqueará la
+  comparación hasta recibir un tipo de cambio autorizado, fechado y trazable.
+- Las celdas de entrada procedentes de evidencia estarán separadas visualmente de
+  las fórmulas. El libro no permitirá que una edición manual se presente como un
+  resultado verificado sin regenerar y validar el artefacto.
+
+#### Contrato y resultado de `generar_excel_costos`
+
+La tool recibirá `expediente_id` y `revision`. Recuperará internamente el handoff,
+el issue FinOps validado, el análisis vigente y las evidencias registradas; Codex
+no tendrá que reconstruir esas entradas. La respuesta incluirá:
+
+- estado `generated`, `partial` o `blocked`;
+- ruta relativa del libro;
+- SHA-256 del archivo;
+- revisión y SHA-256 de Arquitectura;
+- evidencias utilizadas y servicios pendientes;
+- versión del contrato y del generador;
+- clave de idempotencia.
+
+La misma revisión y el mismo conjunto de evidencias devolverán el mismo artefacto
+o un resultado duplicado. Un cambio de evidencia, análisis, revisión o SHA-256
+producirá una nueva versión y nunca sobrescribirá una versión aprobada. Un libro
+parcial podrá generarse como evidencia de avance, pero no habilitará una decisión
+`approved` ni el PR final de costos.
+
+#### Validación de `forecast.xlsx`
+
+Las pruebas comprobarán nombres y orden de pestañas, fórmulas mensuales/anuales,
+totales, referencias entre hojas, formatos monetarios, estados pendientes, hashes
+de evidencias e idempotencia. También abrirán y recalcularán el libro con una
+herramienta compatible, buscarán errores de fórmula y verificarán visualmente que
+encabezados, valores y advertencias sean legibles.
+
+#### Resultado del incremento 15.3
+
+Implementados `ForecastWorkbookGenerator`, el contrato
+`ForecastWorkbookArtifact 1.0` y la tool MCP `generar_excel_costos`. La tool
+produce un único `forecast.xlsx` con las seis pestañas acordadas, fórmulas
+mensuales/anuales, evidencias y supuestos. La ejecución actual produce estado
+`partial` y conserva KMS como pendiente; no lo convierte en cero ni habilita una
+aprobación. El artefacto se identifica por revisión, SHA-256 de Arquitectura y
+digest de sus fuentes, y los reintentos devuelven el mismo registro sin duplicarlo.
 
 También se publicarán el análisis, supuestos, riesgos, recomendaciones, evidencia
 y manifiesto versionado bajo `docs/04-finops/`. La publicación será idempotente por
@@ -587,6 +664,17 @@ Codex ayudará a redactar y publicar comentarios con dudas, diferencias o ajuste
 Cuando corresponda, mencionará al arquitecto asignado mediante su usuario real de
 GitHub y enlazará la arquitectura o estimación pertinente. No se aprobará una
 evaluación parcial, con moneda incompatible o sin cobertura completa.
+
+#### Resultado parcial 15.4
+
+Implementados `FinOpsChatAuthorization 1.0`, decisiones FinOps 1.1 y la tool MCP
+`preparar_comentario_finops`. Una aprobación 1.1 exige autorización tipada de la
+conversación para el expediente, análisis, revisión y SHA-256 exactos. Los
+comentarios se generan como borradores idempotentes con análisis, cobertura,
+resultado e issue de Arquitectura; Codex conserva la responsabilidad de mostrarlos
+y publicarlos mediante GitHub MCP. El análisis parcial S3 + KMS pendiente continúa
+rechazando `approved`. La validación remota del usuario real del arquitecto y la
+publicación del comentario permanecen para la integración GitHub posterior.
 
 ### 15.5 — Devolver correcciones a Arquitectura
 

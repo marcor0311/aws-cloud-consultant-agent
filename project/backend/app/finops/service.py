@@ -3,6 +3,7 @@
 import hashlib
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 
 from app.architecture.corrections import FinOpsCorrectionRequest
 from app.architecture.metrics import FinOpsHandoffAcceptance
@@ -12,10 +13,12 @@ from app.finops.analysis import FinOpsEconomicAnalyzer
 from app.finops.calculator import PricingCalculatorPreparer
 from app.finops.evidence import PricingCalculatorEvidence
 from app.finops.models import (
+    FinOpsCommentRequest,
     FinOpsEvaluationDecision,
     FinOpsIntake,
     FinOpsIssueSnapshot,
 )
+from app.finops.workbook import ForecastWorkbookGenerator
 
 
 class FinOpsIntakeService:
@@ -103,12 +106,17 @@ class FinOpsIntakeService:
 class FinOpsService:
     """Persisted application boundary exposed by the dedicated FinOps MCP."""
 
-    def __init__(self, store, actor_id="finops-agent"):
+    def __init__(self, store, actor_id="finops-agent", output_dir=None):
         self.store = store
         self.intakes = FinOpsIntakeService(store, actor_id=actor_id)
         self.preparer = PricingCalculatorPreparer()
         self.analyzer = FinOpsEconomicAnalyzer()
         self.actor_id = actor_id
+        self.output_dir = Path(
+            output_dir
+            or Path(__file__).resolve().parents[2] / "data" / "finops"
+        )
+        self.workbooks = ForecastWorkbookGenerator()
 
     @staticmethod
     def _digest(payload):
@@ -312,6 +320,88 @@ class FinOpsService:
         self.store.put(self._analysis_pointer(case_id, revision), "finops_current", record)
         return {"duplicate": bool(previous), **record}
 
+    def generate_workbook(self, case_id, revision):
+        intake = FinOpsIntake.model_validate(self.intakes.get(case_id, revision))
+        analysis_record = self.result(case_id, revision)
+        analysis = self.analyzer.analyze(
+            intake,
+            self._evidences(case_id, revision),
+        )
+        if analysis.model_dump(mode="json") != analysis_record["analysis"]:
+            raise ValueError("El análisis vigente no coincide con sus evidencias.")
+        evidences = [
+            PricingCalculatorEvidence.model_validate(item)
+            for item in self._evidences(case_id, revision)
+        ]
+        source_digest = self.workbooks.source_digest(intake, analysis, evidences)
+        key = f"finops-workbook:{case_id}:{revision}:{source_digest}"
+        previous = self.store.get(key)
+        if previous:
+            target = self.output_dir / previous["relative_path"]
+            if not target.exists():
+                raise ValueError("El forecast.xlsx persistido ya no existe en disco.")
+            actual_sha = hashlib.sha256(target.read_bytes()).hexdigest()
+            if actual_sha != previous["file_sha256"]:
+                raise ValueError("forecast.xlsx cambió después de su generación.")
+            return {"duplicate": True, "workbook": previous}
+        artifact = self.workbooks.generate(
+            self.output_dir,
+            intake,
+            analysis,
+            evidences,
+        ).model_dump(mode="json")
+        self.store.put(key, "finops_forecast_workbook", artifact)
+        self.store.put(
+            f"finops-workbook-current:{case_id}:{revision}",
+            "finops_current",
+            artifact,
+        )
+        self.store.event(
+            f"finops-workbook:{case_id}:{revision}:{artifact['source_digest']}",
+            case_id,
+            "finops.workbook_generated",
+            artifact,
+        )
+        return {"duplicate": False, "workbook": artifact}
+
+    def prepare_comment(self, case_id, revision, request_payload):
+        request = FinOpsCommentRequest.model_validate(request_payload)
+        issue = self.store.get(f"finops-issue:{case_id}:{revision}")
+        analysis_record = self.result(case_id, revision)
+        if not issue:
+            raise ValueError("Primero se debe validar el issue FinOps.")
+        analysis = analysis_record["analysis"]
+        mention = (
+            f"@{request.architect_github_username} "
+            if request.architect_github_username
+            else ""
+        )
+        body = (
+            f"{mention}{request.message}\n\n"
+            f"Evaluación: {analysis_record['reference']}\n"
+            f"Arquitectura: revisión {revision}, `{analysis['architecture_sha256']}`\n"
+            f"Cobertura de recursos: "
+            f"{analysis['coverage']['resource_coverage_percent']}%\n"
+            f"Resultado presupuestario: {analysis['budget_result']}\n"
+            f"Issue de Arquitectura: {issue['architecture_issue_url']}"
+        )
+        payload = {
+            **request.model_dump(mode="json"),
+            "issue_url": issue["issue_url"],
+            "analysis_reference": analysis_record["reference"],
+            "architecture_sha256": analysis["architecture_sha256"],
+            "body": body,
+            "body_sha256": hashlib.sha256(body.encode()).hexdigest(),
+            "publication_status": "draft",
+        }
+        key = f"finops-comment:{case_id}:{revision}:{request.comment_id}"
+        previous = self.store.get(key)
+        if previous and previous != payload:
+            raise ValueError("El identificador de comentario ya tiene otro contenido.")
+        if not previous:
+            self.store.put(key, "finops_comment_draft", payload)
+        return {"duplicate": bool(previous), "comment": payload}
+
     def result(self, case_id, revision):
         record = self.store.get(self._analysis_pointer(case_id, revision))
         if not record:
@@ -417,6 +507,17 @@ class FinOpsService:
             "current_analysis": self.store.get(
                 self._analysis_pointer(case_id, revision)
             ),
+            "workbook": self.store.get(
+                f"finops-workbook-current:{case_id}:{revision}"
+            ),
+            "comment_drafts": [
+                item
+                for item in self.store.list("finops_comment_draft")
+                if item["analysis_reference"]
+                == (
+                    self.store.get(self._analysis_pointer(case_id, revision)) or {}
+                ).get("reference")
+            ],
             "decisions": [
                 item
                 for item in self.store.list("finops_evaluation_decision")
