@@ -2,12 +2,13 @@
 
 import hashlib
 import json
+from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import AwareDatetime, Field, model_validator
 
-from app.delivery.models import Contract, Money, Text
+from app.delivery.models import Contract, Text
 
 Digest = Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
 Commit = Annotated[str, Field(pattern=r"^[a-f0-9]{40}$")]
@@ -42,6 +43,8 @@ class EngineeringFile(Contract):
         "policies",
         "calculator_export",
         "cost_workbook",
+        "pricing_evidence",
+        "upstream_artifact",
         "implementation",
         "log",
         "security_report",
@@ -71,7 +74,7 @@ class RecordedApproval(Contract):
 class UpstreamPackage(Contract):
     commit: Commit
     revision: int = Field(ge=1)
-    files: list[EngineeringFile] = Field(min_length=2, max_length=3)
+    files: list[EngineeringFile] = Field(min_length=2, max_length=200)
     approval: RecordedApproval
 
 
@@ -84,7 +87,7 @@ class PinnedModule(Contract):
 
 
 class EngineeringIntake(Contract):
-    schema_version: Literal["1.0"] = "1.0"
+    schema_version: Literal["1.0", "1.1"] = "1.0"
     intake_id: UUID
     case_id: str = Field(pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,119}$")
     incoming_handoff_id: Text
@@ -95,8 +98,8 @@ class EngineeringIntake(Contract):
     finops_architecture_sha256: Digest
     modules: list[PinnedModule] = Field(min_length=1, max_length=30)
     region: str = Field(pattern=r"^[a-z]{2}(?:-[a-z]+)+-\d$")
-    budget: Money
-    estimate: Money
+    budget: Annotated[Decimal, Field(ge=0, max_digits=18, decimal_places=6)]
+    estimate: Annotated[Decimal, Field(ge=0, max_digits=18, decimal_places=6)]
     currency: str = Field(pattern=r"^[A-Z]{3}$")
     period: Literal["month", "year"]
     calculator_url: Annotated[
@@ -107,11 +110,20 @@ class EngineeringIntake(Contract):
     def coherent(self):
         for package, roles in (
             (self.architecture, {"requirements", "design", "policies"}),
-            (self.finops, {"calculator_export", "cost_workbook"}),
+            (
+                self.finops,
+                {"calculator_export", "cost_workbook"}
+                if self.schema_version == "1.0"
+                else {"pricing_evidence", "cost_workbook"},
+            ),
         ):
             if (
-                len(package.files) != len(roles)
-                or {f.role for f in package.files} != roles
+                self.schema_version == "1.0"
+                and (
+                    len(package.files) != len(roles)
+                    or {f.role for f in package.files} != roles
+                )
+                or not roles.issubset({f.role for f in package.files})
             ):
                 raise ValueError(
                     "El paquete requiere los archivos de arquitectura o FinOps completos y distintos"
@@ -135,6 +147,16 @@ class EngineeringIntake(Contract):
         return self
 
     def approval_digest(self, stage):
+        if self.schema_version == "1.1":
+            # These approvals already exist in #19/#20; never replace their hashes
+            # with the manifest algorithm used by the manual intake contract.
+            return (
+                self.finops_architecture_sha256
+                if stage == 3
+                else next(
+                    f.sha256 for f in self.finops.files if f.role == "cost_workbook"
+                )
+            )
         if stage == 3:
             value = {
                 "package": self.architecture.model_dump(
@@ -160,6 +182,15 @@ class EngineeringIntake(Contract):
                 ),
             }
         return digest({"repository": self.repository, **value})
+
+
+class FinOpsEngineeringReceipt(Contract):
+    """Only missing baseline review references are supplied by the operator."""
+
+    intake_id: UUID
+    case_id: str = Field(pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,119}$")
+    revision: int = Field(ge=1)
+    modules: list[PinnedModule] = Field(min_length=1, max_length=30)
 
 
 class TechnicalCheck(Contract):

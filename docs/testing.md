@@ -43,6 +43,21 @@ Se conserva en el job dedicado de delivery; no añade casos unitarios ni simulac
 cloud a `make test`. Requiere `DELIVERY_TEST_DATABASE_URL`; una omisión no acredita
 la integración. El PDF del recorrido se exporta para inspección visual.
 
+Ese recorrido también solicita enlaces firmados por MCP HTTP y descarga el PDF
+y las fuentes JSON sin enviar el Bearer desde el navegador. Verifica los hashes,
+rechazo de otro operador, firma alterada, archivo cambiado de URL y caducidad;
+el endpoint MCP conserva su autenticación. Usa un origen HTTPS ficticio sobre
+TestClient, sin publicar túneles ni contactar servicios externos.
+
+El recorrido existente de FinOps
+`tests/finops_agent/test_mcp.py::test_finops_delivers_merged_costs_to_engineering_and_measures_work`
+continúa ahora hasta Ingeniería y captura de fuentes #22. Genera publicaciones de
+Arquitectura/FinOps con sus servicios, recibe un fixture S3 completo, conserva los
+hashes originales, devuelve aceptación y recupera una interrupción entre grafo y
+SQL. Rechaza un archivo alterado antes de avanzar e invalida fuentes modificadas
+después de recibirlas. Las revisiones GitHub son recibos ficticios; el recorrido
+no acredita aprobación real ni aceptación dentro de ChatGPT.
+
 El recorrido existente `tests/test_delivery.py::test_handoff_report_download_and_idempotency`
 también cubre la recepción de ingeniería #21: decisiones de Arquitectura/FinOps
 aplicadas con LangGraph y persistidas en PostgreSQL, rechazo de archivos alterados,

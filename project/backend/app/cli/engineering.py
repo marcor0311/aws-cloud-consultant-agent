@@ -16,6 +16,7 @@ from app.delivery.engineering_models import (
     EngineeringIntegration,
     EngineeringPublication,
     EngineeringRelease,
+    FinOpsEngineeringReceipt,
     digest,
 )
 from app.integrations.errors import ProviderError
@@ -30,6 +31,7 @@ def main():
         choices=[
             "manifest",
             "intake",
+            "receive-finops",
             "evidence",
             "status",
             "catalog",
@@ -57,6 +59,7 @@ def main():
             model = {
                 "publish": EngineeringPublication,
                 "integrate": EngineeringIntegration,
+                "receive-finops": FinOpsEngineeringReceipt,
             }.get(args.command) or (
                 EngineeringRelease
                 if args.command in ("release", "release-manifest")
@@ -91,6 +94,7 @@ def main():
         try:
             method = {
                 "intake": runtime.service.register,
+                "receive-finops": runtime.service.receive_finops,
                 "evidence": runtime.service.record_evidence,
                 "release": runtime.service.record_release,
                 "catalog": runtime.service.catalog,

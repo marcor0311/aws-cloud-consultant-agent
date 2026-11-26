@@ -2,15 +2,52 @@
 
 Este incremento implementa las prioridades 1–3: recibir los insumos aprobados,
 consolidar evidencias existentes y registrar sus intervalos técnicos. No ejecuta
-Terraform ni AWS Emulator, no publica PRs y no aprueba infraestructura. El recorrido
-S3 de demostración y `DemoRequest` conservan su contrato anterior.
+Terraform ni AWS Emulator. Publicación e integración son operaciones explícitas
+separadas, descritas en [ciclo GitHub](engineering-github.md). El recorrido S3 de
+demostración y `DemoRequest` conservan su contrato anterior.
 
-## Entrada versionada
+## Recepción directa de Arquitectura y FinOps
+
+Para las entregas de los runtimes #19/#20 usar `recibir_entrega_finops` del MCP
+de Ingeniería, o `python -m app.cli.engineering receive-finops --input recepcion.json`.
+La solicitud contiene `intake_id`, `case_id`, `revision` y `modules` con las
+referencias de aprobación de los baselines. Esas referencias aún no existen en
+el contrato de selección de Arquitectura y debe proporcionarlas el responsable;
+se contrastan remotamente durante la integración técnica, no durante la recepción.
+
+El adaptador lee los planes, archivos y recibos publicados de Arquitectura/FinOps
+desde el mismo workflow PostgreSQL. Comprueba repositorio, revisión, commits,
+SHA-256, revisión del arquitecto, autorización FinOps 1.1, cobertura completa y
+presupuesto comparable. Los módulos deben coincidir exactamente con la selección
+de Arquitectura. No requiere copiar los archivos a `ENGINEERING_ARTIFACTS_DIR`.
+
+Genera una entrada `schema_version=1.1` que conserva todos los archivos de ambas
+publicaciones: requisitos, diseño, seguridad, políticas, ADRs, diagrama, análisis,
+evidencia de precios, forecast y manifiestos. `pricing_evidence` identifica el JSON
+publicado por FinOps; no se presenta como un CSV/PDF original de la calculadora.
+Los respaldos referenciados desde ese JSON siguen dependiendo de su origen.
+El presupuesto y los subtotales conservan hasta seis decimales, moneda y periodo.
+
+La autorización existente de FinOps se proyecta al proceso con el hash del forecast
+original y referencias a la decisión, conversación y PR. Se exige que la última
+transición aprobada de Arquitectura corresponda al hash original y al ciclo actual.
+La secuencia recupera reintentos entre checkpoint y SQL; no crea una aprobación
+humana nueva ni sustituye las decisiones por hashes del contrato manual.
+
+Recepción, bytes, procedencia, aceptación del handoff y final de la fase 4 se
+guardan en una transacción. `intake.finops_acceptance` es el recibo que puede
+consultar FinOps; repetirlo en `aceptar_handoff_ingenieria` es idempotente.
+El proceso queda en etapa 5, pendiente de implementación. Cambios posteriores en
+las fuentes invalidan `upstream_current` y bloquean su uso como entrega definitiva.
+El informe #22 conserva esa procedencia y los archivos en su instantánea.
+
+## Entrada manual versionada
 
 `EngineeringIntake` está en `app/delivery/engineering_models.py`. La entrada puede
 prepararse manualmente; los agentes #19/#20 no necesitan estar automatizados.
 Las decisiones y la entrega previas sí deben estar registradas en el workflow.
-Este contrato v1 debe acordarse con Arquitectura y FinOps antes de usar un piloto real.
+El contrato manual `1.0` conserva sus hashes y validaciones anteriores. No se debe
+usar para recalcular las aprobaciones originales de los runtimes #19/#20.
 
 | Campo | Contenido |
 | --- | --- |
@@ -76,7 +113,9 @@ y ejecutar otra vez `manifest` para obtener el hash definitivo de FinOps. Las
 decisiones previas deben referenciar los hashes definitivos. Registrar una entrada
 con el valor provisional es rechazado.
 
-El esquema completo se obtiene sin red desde Python:
+La entrada 1.1 solo se registra mediante la recepción directa; no admite una
+procedencia arbitraria suministrada por el cliente. El esquema completo se obtiene
+sin red desde Python:
 
 ```powershell
 python -c "import json; from app.delivery.engineering_models import EngineeringIntake; print(json.dumps(EngineeringIntake.model_json_schema(), indent=2))"

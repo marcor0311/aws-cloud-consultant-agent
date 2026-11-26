@@ -23,10 +23,11 @@ class IntakeState(TypedDict):
 
 
 class EngineeringService:
-    def __init__(self, repository, files, operator):
+    def __init__(self, repository, files, operator, *, upstream=None, process=None):
         if not operator or not operator.strip():
             raise ValueError("Configurar ENGINEERING_OPERATOR con el responsable local")
         self.repository, self.files, self.operator = repository, files, operator
+        self.upstream, self.process = upstream, process
 
     def _project(self, case_id):
         project = next(
@@ -41,8 +42,58 @@ class EngineeringService:
             raise ValueError("Expediente inexistente o de otro responsable")
         return project
 
-    def _upstream(self, request, *, delivered=False):
+    def _upstream(self, request, *, delivered=False, source=None):
         store = self.repository.store
+        if request.schema_version == "1.1":
+            if source is None:
+                source = (self.repository.get(request.intake_id) or {}).get(
+                    "upstream_source"
+                )
+            if not self.upstream or not source:
+                raise DeliveryConflict(
+                    "La entrada 1.1 exige la recepción del handoff FinOps registrado"
+                )
+            _, handoff = self.upstream.validate(request, source)
+            state = store.get(f"process:{request.case_id}") or {}
+            events = [
+                e["payload"]
+                for e in store.case_events(request.case_id)
+                if e["kind"] == "process.transition"
+            ]
+            approval = next(
+                (
+                    e
+                    for e in events
+                    if e.get("event_id") == self._finops_approval_id(request, source)
+                ),
+                None,
+            )
+            if (
+                not approval
+                or approval.get("kind") != "stage.approved"
+                or approval.get("from_stage") != 4
+                or approval.get("to_stage") != 5
+                or approval.get("revision") != request.finops.revision
+                or approval.get("artifact_sha256") != handoff["artifact_sha256"]
+                or approval.get("actor") != request.finops.approval.actor
+                or approval["to_iteration"]
+                != max(
+                    e["to_iteration"]
+                    for e in events
+                    if e.get("kind") == "stage.approved" and e.get("from_stage") == 4
+                )
+                or not (
+                    state.get("stage") == 5
+                    and state.get("status") == "awaiting_deliverable"
+                    or delivered
+                    and state.get("stage") in (5, 6)
+                )
+                or handoff["accepted_by"] not in (None, self.operator)
+            ):
+                raise DeliveryConflict(
+                    "La recepción FinOps no corresponde al responsable o ciclo vigente"
+                )
+            return handoff
         if request.finops_architecture_sha256 != request.approval_digest(3):
             raise DeliveryConflict(
                 "FinOps no referencia el manifiesto aprobado exacto de arquitectura"
@@ -134,6 +185,89 @@ class EngineeringService:
         return handoff
 
     def register(self, request):
+        if request.schema_version != "1.0":
+            raise DeliveryConflict("Usar recibir_entrega_finops para la entrada 1.1")
+        return self._register(request)
+
+    @staticmethod
+    def _finops_approval_id(request, source):
+        return f"finops.approved:{request.finops.revision}:{source['sha256']}"
+
+    def receive_finops(self, receipt):
+        self._project(receipt.case_id)
+        if not self.upstream or not self.process:
+            raise ValueError("La recepción FinOps no está configurada")
+        request, source, files, handoff = self.upstream.resolve(receipt)
+        if handoff["accepted_by"] not in (None, self.operator):
+            raise DeliveryConflict(
+                "La entrega FinOps ya fue aceptada por otro responsable"
+            )
+        previous = self.repository.get(request.intake_id)
+        if previous:
+            if previous.get("upstream_source") != source:
+                raise DeliveryConflict("El intake_id ya corresponde a otro origen")
+            return self._register(request, source=source, source_files=files)
+        state = self.process.get(request.case_id)["state"]
+        approvals = [
+            e
+            for e in state["history"]
+            if e.get("kind") == "stage.approved" and e.get("from_stage") == 3
+        ]
+        if not approvals:
+            raise DeliveryConflict("Falta la transición aprobada de Arquitectura")
+        architecture = approvals[-1]
+        if (
+            architecture["revision"] != receipt.revision
+            or architecture["artifact_sha256"] != request.finops_architecture_sha256
+        ):
+            raise DeliveryConflict(
+                "El handoff corresponde a otra revisión de Arquitectura"
+            )
+        common = {
+            "stage": 4,
+            "iteration": architecture["to_iteration"],
+            "revision": receipt.revision,
+            "artifact_sha256": handoff["artifact_sha256"],
+            "actor": request.finops.approval.actor,
+            "origin": "internal",
+            "evidence": [
+                request.finops.approval.event_id,
+                request.finops.approval.reference,
+                source["finops_decision"]["authorization"]["conversation_reference"],
+            ],
+        }
+        events = [
+            {
+                **common,
+                "event_id": self._finops_approval_id(request, source) + ":ready",
+                "kind": "deliverable.ready",
+            },
+            {
+                **common,
+                "event_id": self._finops_approval_id(request, source),
+                "kind": "stage.approved",
+            },
+        ]
+
+        def guard(current):
+            self.upstream.validate(request, source)
+            if not (
+                (current["stage"], current["iteration"])
+                == (4, architecture["to_iteration"])
+                or self._finops_approval_id(request, source) in current["processed"]
+                and current["stage"] == 5
+                and current["iteration"] == architecture["to_iteration"] + 1
+            ):
+                raise DeliveryConflict(
+                    "El proceso no está recibiendo esta entrega FinOps"
+                )
+
+        # Replays recover a checkpoint committed before the SQL receipt; the human
+        # decision already exists in FinOps and retains its original hash/reference.
+        self.process.apply_sequence(request.case_id, events, guard)
+        return self._register(request, source=source, source_files=files)
+
+    def _register(self, request, *, source=None, source_files=None):
         project = self._project(request.case_id)
         key = str(request.intake_id)
         input_sha256 = digest(request.model_dump(mode="json"))
@@ -151,16 +285,26 @@ class EngineeringService:
                 return self.get(request.intake_id)
 
             def validate(_state):
-                self._upstream(request)
+                self._upstream(request, source=source)
                 return {}
 
             def record(_state):
-                handoff = self._upstream(request)
-                files = self.files.read(
-                    [*request.architecture.files, *request.finops.files]
+                handoff = self._upstream(request, source=source)
+                files = (
+                    source_files
+                    if source_files is not None
+                    else self.files.read(
+                        [*request.architecture.files, *request.finops.files]
+                    )
                 )
                 self.repository.register(
-                    request, input_sha256, self.operator, files, project, handoff
+                    request,
+                    input_sha256,
+                    self.operator,
+                    files,
+                    project,
+                    handoff,
+                    source=source,
                 )
                 return {"recorded": True}
 

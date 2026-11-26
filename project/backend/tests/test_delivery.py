@@ -58,6 +58,7 @@ from app.delivery.models import (
 from app.delivery.workflow import DeliveryWorkflow
 from app.integrations.engineering_github import EngineeringGitHub
 from app.integrations.langgraph import LangGraphExecution
+from app.integrations.report_downloads import ReportDownloads
 from app.integrations.slack import SlackNotifier
 from app.persistence.delivery import DeliveryBusy, DeliveryConflict, PostgresRepository
 from app.persistence.workflow import WorkflowStore
@@ -1700,8 +1701,20 @@ def test_report_revision_approval_and_close(
         from mcp.types import LATEST_PROTOCOL_VERSION
 
         token = "test-only-bearer-" + "x" * 32
+        download_clock = [1800000000.0]
+        downloads = ReportDownloads(
+            repo,
+            manager,
+            "https://reports.example.test",
+            token,
+            clock=lambda: download_clock[0],
+        )
         with TestClient(
-            http_app(create_server(repo, manager, service), token),
+            http_app(
+                create_server(repo, manager, service, downloads=downloads),
+                token,
+                downloads=downloads,
+            ),
             base_url="http://127.0.0.1:8770",
         ) as wire:
             assert wire.post("/mcp", json={}).status_code == 401
@@ -1787,6 +1800,50 @@ def test_report_revision_approval_and_close(
                 sha256(raw).hexdigest()
                 == approved_http["report"]["approved_document"]["sha256"]
             )
+            link = rpc(
+                "tools/call",
+                {
+                    "name": "preparar_descarga_informe",
+                    "arguments": {"entrega_id": generated["delivery_id"]},
+                },
+            )["structuredContent"]
+            download = wire.get(link["download_url"])
+            assert download.status_code == 200
+            assert download.content == raw
+            assert sha256(download.content).hexdigest() == link["sha256"]
+            assert download.headers["content-disposition"].startswith("attachment;")
+            assert download.headers["cache-control"] == "no-store"
+            sources_link = link["sources_download"]
+            sources_download = wire.get(sources_link["download_url"])
+            assert sources_download.status_code == 200
+            assert sources_download.json()["case_id"] == case_id
+            assert (
+                sha256(sources_download.content).hexdigest() == sources_link["sha256"]
+            )
+            assert sources_download.headers["content-type"].startswith(
+                "application/json"
+            )
+            assert wire.get(link["download_url"].split("?")[0]).status_code == 404
+            assert (
+                wire.get(
+                    link["download_url"].replace(link["sha256"], "0" * 64)
+                ).status_code
+                == 404
+            )
+            assert (
+                wire.get(
+                    link["download_url"].replace(generated["delivery_id"], str(uuid4()))
+                ).status_code
+                == 404
+            )
+            foreign = ReportDownloads(
+                repo, "Otro operador", "https://reports.example.test", token
+            )
+            with pytest.raises(ValueError, match="otro responsable"):
+                foreign.prepare(generated["delivery_id"], link["artifact_id"])
+            download_clock[0] += downloads.lifetime_seconds
+            assert wire.get(link["download_url"]).status_code == 404
+            assert wire.post("/mcp", json={}).status_code == 401
             source = rpc("resources/read", {"uri": approved_http["sources_uri"]})[
                 "contents"
             ][0]

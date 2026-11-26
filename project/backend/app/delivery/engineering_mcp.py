@@ -15,6 +15,7 @@ from app.delivery.engineering_models import (
     EngineeringIntegration,
     EngineeringPublication,
     EngineeringRelease,
+    FinOpsEngineeringReceipt,
 )
 from app.integrations.errors import ProviderError
 from app.persistence.delivery import DeliveryConflict
@@ -44,6 +45,15 @@ def create_server(service, publication=None):
                 TextContent(type="text", text=json.dumps(result, ensure_ascii=False))
             ],
         )
+
+    @server.tool()
+    def recibir_entrega_finops(recepcion: FinOpsEngineeringReceipt) -> CallToolResult:
+        """Recibe las publicaciones originales de #19/#20, conserva sus hashes y devuelve aceptación.
+
+        Los módulos requieren referencias explícitas de aprobación; no se inventan.
+        Sincroniza etapa 4 con la autorización FinOps existente, sin aprobar ingeniería.
+        """
+        return call(service.receive_finops, recepcion)
 
     @server.tool()
     def registrar_entrada_ingenieria(entrada: EngineeringIntake) -> CallToolResult:
