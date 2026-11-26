@@ -173,7 +173,7 @@ class GitHub:
 
 @pytest.fixture
 def source(tmp_path):
-    request = json.loads(FIXTURE.read_text())
+    request = json.loads(FIXTURE.read_text(encoding="utf-8"))
     for file in request["files"]:
         value = ("Contenido ficticio " + file["name"]).encode()
         (tmp_path / file["name"]).write_bytes(value)
@@ -210,9 +210,11 @@ def make_service(store, saver, github, directory, *, board_choices=None):
 def seed_preparation(store, saver, request, directory):
     fixture = FIXTURE.parent
     transcript = MeetingTranscript.model_validate_json(
-        (fixture / "transcript.json").read_text()
+        (fixture / "transcript.json").read_text(encoding="utf-8")
     )
-    content = MeetingInsumos.model_validate_json((fixture / "content.json").read_text())
+    content = MeetingInsumos.model_validate_json(
+        (fixture / "content.json").read_text(encoding="utf-8")
+    )
     package = content.executive_package(transcript).model_dump()
     package["budget"] = {
         "text": "Presupuesto por conciliar: la transcripción indica un importe y las notas no lo confirman.",

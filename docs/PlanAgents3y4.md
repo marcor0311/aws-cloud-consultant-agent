@@ -814,6 +814,35 @@ dobles de prueba con servicios reales:
 El Paso 16 producirá la evidencia académica final y la matriz de requisitos. Hasta
 entonces, ningún éxito local se describirá como integración completa del proceso.
 
+### Resultado de la validación conjunta de los pasos 13, 14, 15.9 y 16
+
+Validación ejecutada el 26 de noviembre de 2026 sobre la rama `issue19&20`:
+
+| Nivel | Evidencia ejecutada | Resultado | Alcance demostrado |
+| --- | --- | --- | --- |
+| Integración local Agentes 2, 3 y 4 | `pytest -q tests/project_opening tests/architecture_agent tests/finops_agent` | 89 aprobadas, 2 omitidas y 1 deseleccionada; 0 fallos | Contratos, issue y expediente, Arquitectura, FinOps, correcciones, publicación idempotente, Excel, webhooks, métricas y reinicios SQLite. |
+| Regresión focalizada Agentes 3 y 4 | `pytest -q tests/architecture_agent tests/finops_agent` | 86 aprobadas y 2 omitidas; 0 fallos | El merge no rompió los contratos especializados de Arquitectura y FinOps. |
+| MCP Arquitectura conectado a Codex | Invocación real de `consultar_catalogo_baselines` | Correcta | Codex descubrió e invocó el MCP local y recibió los módulos `api-gateway`, `dynamodb` y `s3`. |
+| MCP FinOps por STDIO | Tres pruebas aisladas de protocolo con `ClientSession` | 3 aprobadas; 0 fallos | Inicio real, `initialize`, `tools/list`, `tools/call`, validación del issue, plan de estimación, workbook y comentario. |
+| Calidad estática | `ruff check` y `git diff --check` | Correcta | No se detectaron errores estáticos ni espacios inválidos en los archivos afectados. |
+| PostgreSQL | Variables de prueba `WORKFLOW_TEST_POSTGRES_URL` y `DELIVERY_TEST_DATABASE_URL` | No configuradas | No se validó reinicio contra PostgreSQL; las pruebas omitidas no se cuentan como éxito. |
+| AWS Pricing Calculator | Evidencia S3 real ya conservada por el Bloque C | Parcial | S3 tiene evidencia verificable; KMS continúa pendiente y la cobertura no permite aprobar FinOps. |
+| GitHub remoto | No ejecutado | Pendiente de autorización y credenciales | Los planes, recibos, webhooks y controles idempotentes están probados localmente; no se creó ni integró un PR real. |
+| Flujo completo de seis etapas | No ejecutado de extremo a extremo remoto | Pendiente | Aún no puede afirmarse la integración total con PostgreSQL, GitHub, cobertura AWS completa y recepción real de Ingeniería. |
+
+Durante esta validación se corrigieron tres lecturas de fixtures del Agente 2 para
+declarar UTF-8 explícitamente y hacer reproducible la suite en Windows. También se
+sincronizó `pypdf` desde `requirements-dev.txt`; no se añadió una dependencia nueva.
+La regresión global conserva una prueba heredada de preparación basada en un
+catálogo retirado por `main`; no se reintrodujo ese diseño obsoleto para forzarla a
+pasar. Esta incompatibilidad de merge queda separada de la batería conjunta de los
+Agentes 2, 3 y 4.
+
+Conclusión: los pasos 13, 14 y 15.9 quedan demostrados en su alcance local y de
+protocolo MCP. El Paso 16 permanece **parcial** hasta validar PostgreSQL, completar
+la evidencia de precios pendiente y ejecutar las operaciones GitHub y el handoff
+real a Ingeniería con autorización explícita.
+
 ## Reglas permanentes
 
 - Los MCP no se llaman directamente entre sí.
