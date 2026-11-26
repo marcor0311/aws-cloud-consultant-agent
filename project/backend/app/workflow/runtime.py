@@ -487,8 +487,25 @@ class WorkflowRuntime:
                 notice = job["payload"]
                 if notice["manager_id"] != self.settings.manager_id:
                     raise ConfigurationError("notification_manager_mismatch")
-                current = self.store.get(f"status:{notice['case_id']}")
-                if current != notice:
+                if notice.get("topic") == "engineering":
+                    release = self.store.get(
+                        f"engineering-release:{notice['intake_id']}"
+                    )
+                    intake = self.store.get(f"engineering:{notice['intake_id']}") or {}
+                    state = self.store.get(f"process:{notice['case_id']}") or {}
+                    current = bool(
+                        release
+                        and release["case_id"] == notice["case_id"]
+                        and release["operator"] == notice["manager_id"]
+                        and release["release_sha256"] == notice["release_sha256"]
+                        and release["release"]["pull_request"] == notice["pull_request"]
+                        and state.get("stage") == 6
+                        and state.get("iteration")
+                        == intake.get("process_iteration", -2) + 1
+                    )
+                else:
+                    current = self.store.get(f"status:{notice['case_id']}") == notice
+                if not current:
                     self.store.finish_job(job["id"], status="superseded")
                     return True
                 receipt = self.notifier.send(

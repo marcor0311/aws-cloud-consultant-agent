@@ -8,26 +8,35 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import CallToolResult, TextContent
 
-from app.core.config import project_path
+from app.core.config import load_environment, project_path
 from app.delivery.engineering_models import (
     EngineeringEvidence,
     EngineeringIntake,
+    EngineeringIntegration,
+    EngineeringPublication,
     EngineeringRelease,
 )
+from app.integrations.errors import ProviderError
 from app.persistence.delivery import DeliveryConflict
 from app.persistence.locking import Busy
 
 
-def create_server(service):
+def create_server(service, publication=None):
     server = MCPServer(
         "Ingeniería - recepción y evidencias",
-        instructions="Registra entregas y resultados existentes. No ejecuta Terraform, no abre PRs y no aprueba infraestructura. Mostrá los faltantes y la procedencia declarada de las evidencias.",
+        instructions="Registra entregas y resultados existentes. Publicar o integrar un PR requiere instrucción expresa del operador para la recepción exacta. Nunca emite una revisión como arquitecto; verifica su revisión real en GitHub. No ejecuta Terraform. Mostrá faltantes y procedencia de evidencias.",
     )
 
     def call(method, value):
         try:
             result = method(value)
-        except (ValueError, LookupError, DeliveryConflict, Busy) as error:
+        except (
+            ValueError,
+            LookupError,
+            DeliveryConflict,
+            Busy,
+            ProviderError,
+        ) as error:
             raise ToolError(str(error)) from error
         return CallToolResult(
             structured_content=result,
@@ -67,6 +76,18 @@ def create_server(service):
         """
         return call(service.record_release, entrega)
 
+    if publication is not None:
+
+        @server.tool()
+        def publicar_pr_ingenieria(solicitud: EngineeringPublication) -> CallToolResult:
+            """Con autorización expresa, publica el commit probado y solicita revisión del arquitecto."""
+            return call(publication.publish, solicitud)
+
+        @server.tool()
+        def integrar_pr_ingenieria(solicitud: EngineeringIntegration) -> CallToolResult:
+            """Con autorización expresa, verifica revisión/CI/baselines, integra y encola aviso al EM."""
+            return call(publication.integrate, solicitud)
+
     @server.resource(
         "engineering://artifact/{intake_id}/{file_sha256}",
         mime_type="application/octet-stream",
@@ -81,15 +102,17 @@ def create_server(service):
 def main():
     from app.bootstrap import create_engineering_runtime
 
+    load_environment()
     runtime = create_engineering_runtime(
         os.getenv("WORKFLOW_DATABASE_URL", ""),
         project_path(
             os.getenv("ENGINEERING_ARTIFACTS_DIR", "generated/engineering-inputs")
         ),
         os.getenv("ENGINEERING_OPERATOR", ""),
+        checkpoint_url=os.getenv("WORKFLOW_CHECKPOINT_URL") or None,
     )
     try:
-        create_server(runtime.service).run(transport="stdio")
+        create_server(runtime.service, runtime.publication).run(transport="stdio")
     finally:
         runtime.close()
 

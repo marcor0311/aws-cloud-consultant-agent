@@ -33,9 +33,14 @@ hash y arquitecto con la aprobación de etapa 5, exige corridas local/CI exitosa
 conserva referencias de PR, merge, protección de rama y baselines confirmadas por
 el operador. Emite disponibilidad en SQL para #22; no autentica GitHub remotamente.
 
-Faltan el acuerdo del contrato con Arquitectura/FinOps y el piloto con sus insumos
-reales, la automatización de verificación externa y del ciclo
-PR/revisión/merge/notificación externa.
+Las operaciones explícitas `publish` e `integrate` publican el commit probado,
+solicitan revisión, verifican baselines/CI/protección y la aprobación exacta mediante
+la API de GitHub, integran y encolan el aviso para Slack. Los recibos externos y
+las operaciones ya completadas se recuperan sin duplicar PR, merge ni aviso.
+Ver [operación GitHub](../../../docs/engineering-github.md).
+
+Faltan el acuerdo del contrato con Arquitectura/FinOps, el piloto con sus insumos
+reales y la acreditación de GitHub/Slack con los permisos del proyecto.
 Recibir o importar una corrida exitosa no equivale a aprobación del arquitecto.
 
 Contrato funcional: [issues.md](../../../issues.md#5-cloud-infrastructure-engineer--implementación).

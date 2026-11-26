@@ -224,9 +224,10 @@ El registro definitivo es inmutable por recepción, conserva catálogo/hash y em
 ingeniería e inicia la de informe. Los reintentos recuperan el mismo registro sin
 duplicar el evento. El handoff de etapa 5 a 6 lo crea el proceso existente.
 
-Este incremento no crea ni integra PRs, verifica GitHub remotamente ni envía avisos
-externos. Esas acciones se realizan fuera de estos comandos y se registran de
-forma explícita. Siguen pendientes el acuerdo/piloto con insumos reales de #19/#20,
-la automatización del ciclo PR/revisión/merge y el envío externo al Engagement
-Manager. Los expedientes ficticios pueden documentar el recorrido sin cerrar un
-proyecto real.
+El registro manual anterior conserva su procedencia declarada. Las nuevas
+operaciones `publish` e `integrate` automatizan el ciclo del PR y verifican
+baselines, código, protección, CI y revisión mediante la API de GitHub. La entrega
+encola un aviso para el worker de Slack. Ver [operación y requisitos](engineering-github.md).
+Siguen pendientes el acuerdo/piloto con insumos reales de #19/#20 y la acreditación
+del recorrido en los servicios reales. Los expedientes ficticios pueden documentar
+el recorrido sin cerrar un proyecto real.

@@ -272,7 +272,7 @@ class EngineeringService:
         }
         return {**content, "sha256": digest(content)}
 
-    def _validate_release(self, intake, release):
+    def _validate_release(self, intake, release, *, require_approval=True):
         request = EngineeringIntake.model_validate(intake["input"])
         if digest(request.model_dump(mode="json")) != intake["input_sha256"]:
             raise DeliveryConflict("El manifiesto de entrada no coincide con su hash")
@@ -349,6 +349,8 @@ class EngineeringService:
             raise DeliveryConflict(
                 "La entrega debe incorporar la última corrida registrada"
             )
+        if not require_approval:
+            return
         approval = next(
             (
                 e["payload"]
@@ -460,6 +462,12 @@ class EngineeringService:
             "review_status": "approved_recorded" if release and current else "pending",
             "integration_status": "merged_recorded" if release and current else "no_pr",
             "release": release,
+            "publication": self.repository.store.get(
+                f"engineering-publication:{intake_id}"
+            ),
+            "notification": self.repository.store.job(
+                f"engineering-notice:{intake_id}"
+            ),
             "catalog": self.catalog(intake_id),
             "blockers": (
                 []

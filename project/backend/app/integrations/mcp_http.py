@@ -16,7 +16,9 @@ class BearerProtectedMCP:
         self.path = path
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] == "http" and scope.get("path") == self.path:
+        if scope["type"] == "http" and scope.get("path", "").rstrip(
+            "/"
+        ) == self.path.rstrip("/"):
             supplied = dict(scope.get("headers", [])).get(b"authorization", b"")
             expected = b"Bearer " + self.token
             if not hmac.compare_digest(supplied, expected):

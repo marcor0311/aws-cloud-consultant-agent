@@ -9,13 +9,16 @@ from uuid import UUID
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.bootstrap import create_engineering_runtime
-from app.core.config import project_path
+from app.core.config import load_environment, project_path
 from app.delivery.engineering_models import (
     EngineeringEvidence,
     EngineeringIntake,
+    EngineeringIntegration,
+    EngineeringPublication,
     EngineeringRelease,
     digest,
 )
+from app.integrations.errors import ProviderError
 from app.persistence.delivery import DeliveryConflict
 from app.persistence.locking import Busy
 
@@ -32,6 +35,8 @@ def main():
             "catalog",
             "release-manifest",
             "release",
+            "publish",
+            "integrate",
         ],
     )
     parser.add_argument("--input", type=Path)
@@ -49,7 +54,10 @@ def main():
     try:
         value = None
         if args.input:
-            model = (
+            model = {
+                "publish": EngineeringPublication,
+                "integrate": EngineeringIntegration,
+            }.get(args.command) or (
                 EngineeringRelease
                 if args.command in ("release", "release-manifest")
                 else (
@@ -73,10 +81,12 @@ def main():
                 )
             )
             return
+        load_environment()
         runtime = create_engineering_runtime(
             os.getenv("WORKFLOW_DATABASE_URL", ""),
             args.artifact_root,
             os.getenv("ENGINEERING_OPERATOR", ""),
+            checkpoint_url=os.getenv("WORKFLOW_CHECKPOINT_URL") or None,
         )
         try:
             method = {
@@ -85,6 +95,8 @@ def main():
                 "release": runtime.service.record_release,
                 "catalog": runtime.service.catalog,
                 "status": runtime.service.get,
+                "publish": runtime.publication.publish,
+                "integrate": runtime.publication.integrate,
             }[args.command]
             result = method(
                 args.intake_id if args.command in ("status", "catalog") else value
@@ -92,7 +104,14 @@ def main():
             print(json.dumps(result, ensure_ascii=False, indent=2))
         finally:
             runtime.close()
-    except (ValueError, LookupError, OSError, DeliveryConflict, Busy) as error:
+    except (
+        ValueError,
+        LookupError,
+        OSError,
+        DeliveryConflict,
+        Busy,
+        ProviderError,
+    ) as error:
         parser.exit(1, str(error) + "\n")
     except SQLAlchemyError:
         parser.exit(1, "Persistencia no disponible; revisar WORKFLOW_DATABASE_URL.\n")

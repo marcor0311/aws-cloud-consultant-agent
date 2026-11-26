@@ -553,6 +553,8 @@ def render_case_pdf(snapshot, sections, *, version, source, approval=None):
                 para(
                     "Referencias de aprobación de baselines pendientes de verificación externa. Revisión del arquitecto y PR de implementación pendientes."
                     if not engineering.get("release")
+                    else "Aprobación técnica contrastada con el proceso. Código, revisión, baselines, estado de CI y protección de main verificados mediante la API de GitHub; los logs locales conservan su procedencia declarada."
+                    if engineering["release"].get("external_verification")
                     else "Aprobación técnica contrastada con el proceso. Referencias de GitHub, protección de main y baselines confirmadas por el operador; sin autenticación remota automática."
                 ),
             ]
@@ -640,6 +642,7 @@ def render_case_pdf(snapshot, sections, *, version, source, approval=None):
                     "LT al corte",
                     "PT esfuerzo",
                     "Activa",
+                    "Espera",
                     "Retrabajo",
                     "Humano / agente",
                 ]
@@ -651,12 +654,13 @@ def render_case_pdf(snapshot, sections, *, version, source, approval=None):
                     seconds(p["lead_time_seconds"]),
                     seconds(p["process_time_seconds"]),
                     seconds(p["active_elapsed_seconds"]),
+                    seconds(p["wait_seconds"]),
                     rework(p),
                     f"{seconds(p['human_effort_seconds'])} / {seconds(p['agent_effort_seconds'])}",
                 ]
                 for p in metrics["phases"]
             ],
-            [0.20, 0.14, 0.14, 0.14, 0.14, 0.24],
+            [0.18, 0.12, 0.12, 0.12, 0.12, 0.12, 0.22],
         )
     )
     story.extend(

@@ -37,6 +37,7 @@ def case_result(row):
         "metrics": snapshot["metrics"],
         "closure_blockers": snapshot["closure_blockers"],
         "captured_at": snapshot["captured_at"],
+        "measurement_review": snapshot.get("measurement_review"),
         "report_activity_metrics": calculate_metrics(
             [PhaseTiming.model_validate(row["report_timing"])]
             if row["report_timing"]
@@ -54,11 +55,12 @@ def require_report_owner(row, operator):
 
 
 class CaseReportService:
-    def __init__(self, repository, sources, operator, process=None):
+    def __init__(self, repository, sources, operator, process=None, measurements=None):
         if not operator or not operator.strip():
             raise ValueError("Configurar el responsable del informe")
         self.repository, self.sources, self.operator = repository, sources, operator
         self.process = process
+        self.measurements = measurements
 
     def generate(self, request):
         identity = {
@@ -258,6 +260,17 @@ class CaseReportService:
                     "El proceso cambió o ya existe otra presentación; conciliar antes del cierre"
                 )
             current = self.sources._capture(request, operator)
+            if (
+                not replay
+                and snapshot.get("measurement_review")
+                and (
+                    current["measurement_review"]["state_sha256"]
+                    != snapshot["measurement_review"]["state_sha256"]
+                )
+            ):
+                raise DeliveryConflict(
+                    "Las mediciones cambiaron; generar y aprobar un informe nuevo"
+                )
             if current["closure_blockers"] or (
                 current["engineering"]["release"]["release_sha256"]
                 != engineering["release"]["release_sha256"]

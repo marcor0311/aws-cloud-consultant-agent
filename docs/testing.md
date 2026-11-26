@@ -68,3 +68,17 @@ duplicarlo. Usa un expediente adicional aislado con metadatos de producción par
 ejercitar esa condición, pero todos sus insumos, revisiones y corridas son datos
 de prueba: no acredita entregas reales ni ejecuta Terraform/GitHub/AWS. Exporta
 `informe-definitivo-prueba.pdf` para inspección visual.
+
+Ese recorrido también usa el adaptador GitHub real con transporte HTTP simulado:
+rechaza bytes distintos del commit y una revisión antigua; publica un único PR,
+solicita revisión y recupera una respuesta perdida del merge sin repetirlo.
+Comprueba baselines, protección, CI, archivos del PR, recibo externo y un único
+aviso mediante el worker y Slack simulado. Continúa con una sesión abierta,
+conciliación con hash obsoleto rechazada, corrección explícita a espera sin sumar
+esfuerzo y generación de otra instantánea, conservando las fuentes anteriores.
+
+El recorrido de revisión existente también usa JSON-RPC sobre Streamable HTTP
+con Bearer: inicialización, herramientas, generación, ajustes, aprobación, bloqueo
+del cierre parcial y descarga PDF/JSON. Rechaza peticiones sin token en ambas
+variantes de la ruta. Esto valida el protocolo, no la cuenta ni la interfaz real
+de ChatGPT. Ninguna prueba envía mensajes, publica PRs o ejecuta servicios cloud.

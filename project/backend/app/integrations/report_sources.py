@@ -7,6 +7,7 @@ from app.delivery.engineering_models import (
     EngineeringIntake,
     digest,
 )
+from app.delivery.measurements import reconciliation_status
 from app.delivery.metrics import case_metrics
 from app.delivery.models import EngineeringHandoff
 
@@ -169,6 +170,7 @@ class CaseReportSources:
             "engineering": engineering,
             "metrics": metrics,
             "measurements": recorded,
+            "measurement_review": reconciliation_status(recorded),
             "decisions": decisions,
             "sources": sources,
             "closure_blockers": list(dict.fromkeys(blockers)),
@@ -266,7 +268,11 @@ class CaseReportSources:
         bundle["summary"] = (
             f"Recepción de ingeniería registrada {status}. {history} "
             + (
-                "Entrega técnica aprobada en el proceso, con revisión e integración declaradas por el operador. "
+                (
+                    "Entrega técnica aprobada en el proceso, con revisión, baselines, CI e integración contrastados mediante la API de GitHub. "
+                    if bundle["release"].get("external_verification")
+                    else "Entrega técnica aprobada en el proceso, con revisión e integración declaradas por el operador. "
+                )
                 if bundle.get("release") and not bundle["blockers"]
                 else "Revisión técnica e integración pendientes. "
             )

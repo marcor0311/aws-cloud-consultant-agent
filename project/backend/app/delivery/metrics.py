@@ -119,12 +119,15 @@ def case_metrics(recorded: dict, captured_at: float) -> dict:
             and s["ended_at"] > start
             and s["started_at"] < end
         ]
-        active = union([(a, b) for _, a, b in spans]) if spans else None
+        active_spans = [(s, a, b) for s, a, b in spans if s.get("kind") != "wait"]
+        active = union([(a, b) for _, a, b in active_spans]) if spans else None
+        classified = union([(a, b) for _, a, b in spans]) if spans else None
+        has_wait = any(s.get("kind") == "wait" for s, _, _ in spans)
 
         def effort(actor_type, *, rework=False):
             selected = [
                 (s, a, b)
-                for s, a, b in spans
+                for s, a, b in active_spans
                 if s["actor_type"] == actor_type
                 and (not rework or s.get("kind") == "rework")
             ]
@@ -148,19 +151,21 @@ def case_metrics(recorded: dict, captured_at: float) -> dict:
                 "active_elapsed_seconds": active,
                 "human_effort_seconds": human,
                 "agent_effort_seconds": agent,
-                "wait_seconds": None,
+                "wait_seconds": classified - active if has_wait else None,
                 "rework_effort_seconds": (
                     effort("human", rework=True) + effort("agent", rework=True)
                 )
                 if spans
-                and all(s.get("kind") in {"work", "rework"} for s, _, _ in spans)
+                and all(
+                    s.get("kind") in {"work", "rework", "wait"} for s, _, _ in spans
+                )
                 else None,
                 "recorded_rework_effort_seconds": (
                     effort("human", rework=True) + effort("agent", rework=True)
                 )
                 if any(s.get("kind") == "rework" for s, _, _ in spans)
                 else None,
-                "unclassified_seconds": end - start - (active or 0)
+                "unclassified_seconds": end - start - (classified or 0)
                 if start is not None
                 else None,
                 "open_sessions": sum(s["ended_at"] is None for s in sessions),
@@ -175,5 +180,5 @@ def case_metrics(recorded: dict, captured_at: float) -> dict:
         "global_lead_time_seconds": None,
         "rework_cycles": recorded["rework_cycles"],
         "handoffs": recorded["handoffs"],
-        "note": "PT es esfuerzo registrado por actor; duración activa une intervalos sin duplicar fases de detalle. Retrabajo solo desde intervalos explícitamente clasificados; espera de fase sin intervalos: sin medición. La espera entre entregas se muestra por separado. Sesiones abiertas no acreditan esfuerzo terminado. Un expediente ficticio sigue siendo ficticio aunque sus intervalos estén medidos.",
+        "note": "PT es esfuerzo registrado por actor; duración activa une intervalos sin duplicar fases de detalle. Retrabajo y espera solo desde intervalos explícitamente clasificados; la espera excluye actividad superpuesta. La espera entre entregas se muestra por separado. Sesiones abiertas no acreditan esfuerzo terminado. Un expediente ficticio sigue siendo ficticio aunque sus intervalos estén medidos.",
     }

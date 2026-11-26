@@ -6,7 +6,7 @@ from uuid import uuid5
 from sqlalchemy import insert, update
 
 from app.persistence.delivery import DeliveryConflict
-from app.persistence.workflow import events, handoffs, sessions
+from app.persistence.workflow import events, handoffs, jobs, sessions
 
 
 class EngineeringRepository:
@@ -203,6 +203,7 @@ class EngineeringRepository:
         return self.store.get(f"engineering-release:{intake_id}")
 
     def record_release(self, intake, release, operator, catalog):
+        verified = self.store.get(f"engineering-integration:{intake['intake_id']}")
         record = {
             "intake_id": intake["intake_id"],
             "case_id": intake["case_id"],
@@ -213,6 +214,9 @@ class EngineeringRepository:
             "catalog": catalog,
             "verification": "workflow_approval_matched; github_and_baselines_operator_attested",
         }
+        if verified and verified["release"] == record["release"]:
+            record["external_verification"] = verified
+            record["verification"] = verified["verification"]
         with self.store.engine.begin() as db:
             self.store.put_in(
                 db,
@@ -232,6 +236,26 @@ class EngineeringRepository:
                         "actor": operator,
                         "to_phase": "stage-6",
                     },
+                )
+            )
+            db.execute(
+                insert(jobs).values(
+                    id=f"engineering-notice:{intake['intake_id']}",
+                    kind="slack",
+                    payload={
+                        "topic": "engineering",
+                        "case_id": intake["case_id"],
+                        "intake_id": intake["intake_id"],
+                        "revision": release.revision,
+                        "release_sha256": record["release_sha256"],
+                        "status": "engineering_ready",
+                        "manager_id": operator,
+                        "pull_request": release.pull_request,
+                    },
+                    status="pending",
+                    available_at=record["recorded_at"],
+                    lease_until=0,
+                    attempts=0,
                 )
             )
         return record

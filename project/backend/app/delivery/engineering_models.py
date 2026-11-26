@@ -299,3 +299,24 @@ class EngineeringRelease(Contract):
         if self.local_run_id == self.ci_run_id:
             raise ValueError("La entrega requiere corridas distintas para local y CI")
         return self
+
+
+class EngineeringPublication(Contract):
+    intake_id: UUID
+    local_run_id: UUID
+    branch: str = Field(pattern=r"^engineering/[a-zA-Z0-9][a-zA-Z0-9._/-]{0,100}$")
+
+    @model_validator(mode="after")
+    def git_branch(self):
+        if any(
+            part in self.branch for part in ("..", "//", "@{")
+        ) or self.branch.endswith(("/", ".", ".lock")):
+            raise ValueError("Nombre de rama de ingeniería inválido")
+        return self
+
+
+class EngineeringIntegration(Contract):
+    intake_id: UUID
+    ci_run_id: UUID
+    revision: int = Field(ge=1)
+    compatibility_limits: list[Text] = Field(min_length=1, max_length=30)

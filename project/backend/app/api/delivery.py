@@ -45,6 +45,7 @@ def case_report_service():
             os.getenv("DELIVERY_DATABASE_URL", ""),
             os.getenv("WORKFLOW_DATABASE_URL"),
             configured_manager(),
+            checkpoint_url=os.getenv("WORKFLOW_CHECKPOINT_URL") or None,
         )
         if runtime.service is None:
             runtime.close()
@@ -156,7 +157,10 @@ def decide_report(delivery_id: UUID, decision: ReportDecision, repo: Repository)
                 from app.bootstrap import create_report_runtime
 
                 runtime = create_report_runtime(
-                    repo.dsn, os.environ["WORKFLOW_DATABASE_URL"], operator
+                    repo.dsn,
+                    os.environ["WORKFLOW_DATABASE_URL"],
+                    operator,
+                    checkpoint_url=os.getenv("WORKFLOW_CHECKPOINT_URL") or None,
                 )
                 resources.callback(runtime.close)
                 service = runtime.service
