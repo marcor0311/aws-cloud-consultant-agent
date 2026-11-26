@@ -38,6 +38,7 @@ from app.delivery.engineering_models import (
     EngineeringEvidence,
     EngineeringFile,
     EngineeringIntake,
+    EngineeringRelease,
     package_digest,
 )
 from app.delivery.mcp import create_server
@@ -165,7 +166,9 @@ def test_contract_rejects_ambiguous_or_invalid_inputs(payload, mutation):
         DemoRequest.model_validate(payload)
 
 
-def test_handoff_report_download_and_idempotency(client, repo, payload, tmp_path):
+def test_handoff_report_download_and_idempotency(
+    client, repo, payload, tmp_path, monkeypatch
+):
     response = client.post("/api/delivery/runs", json=payload)
     assert response.status_code == 200, response.text
     result = response.json()
@@ -466,6 +469,10 @@ def test_handoff_report_download_and_idempotency(client, repo, payload, tmp_path
         assert len(store.metrics(case_id)["sessions"]) == 6
         assert store.get(f"process:{case_id}")["stage"] == 5
         assert result["review_status"] == "pending"
+        catalog = service.catalog(intake.intake_id)
+        assert catalog["revision"] == 1
+        assert catalog["entries"][0]["status"] == "failed"
+        assert catalog["entries"][0]["versions"] == evidence_data["versions"]
         assert store.get(f"phase:{case_id}:stage-5")["completed_at"] is None
 
         async def inspect_mcp():
@@ -704,6 +711,265 @@ def test_handoff_report_download_and_idempotency(client, repo, payload, tmp_path
                     {**evidence_data, "run_id": str(uuid4())}
                 )
             )
+
+        # Continue the handoff journey with a separate isolated case exercising
+        # the production metadata branch. All files/approvals/runs remain test
+        # doubles; no GitHub operation, Terraform or cloud provider executes.
+        final_case = case_id + "-final"
+        store.register_project(
+            final_case,
+            "final-pilot",
+            "Datos de prueba del cierre",
+            "Empresa de prueba",
+            "engineer",
+            is_fictitious=False,
+        )
+        store.put(f"owner:{final_case}", "owner", {"manager_id": "engineer"})
+        final_runtime = create_report_runtime(repo.dsn, url, "engineer")
+        try:
+            final_runtime.service.sources.store.clock = lambda: clock[0]
+            final_process = final_runtime.service.process
+            final_process.graph.start(
+                f"process:{final_case}",
+                {
+                    **initial_state(final_case, "engineer"),
+                    "stage": 3,
+                    "status": "awaiting_deliverable",
+                },
+            )
+            final_process.ensure(final_case)
+            final_input = EngineeringIntake.model_validate(
+                {
+                    **input_data,
+                    "intake_id": str(uuid4()),
+                    "case_id": final_case,
+                    "incoming_handoff_id": f"{final_case}:process:2:3",
+                }
+            )
+            for stage, package in (
+                (3, final_input.architecture),
+                (4, final_input.finops),
+            ):
+                final_process.internal(
+                    final_case,
+                    f"ready-{stage}",
+                    "deliverable.ready",
+                    revision=1,
+                    artifact_sha256=final_input.approval_digest(stage),
+                    evidence=[package.approval.reference],
+                )
+                final_process.internal(
+                    final_case,
+                    package.approval.event_id,
+                    "stage.approved",
+                    revision=1,
+                    artifact_sha256=final_input.approval_digest(stage),
+                    evidence=[package.approval.reference],
+                    actor=package.approval.actor,
+                )
+            final_receipt = service.register(final_input)
+            successful = []
+            for run_number in (124, 125):
+                clock[0] += 100
+                value = copy.deepcopy(evidence_data)
+                value.update(
+                    run_id=str(uuid4()),
+                    intake_id=str(final_input.intake_id),
+                    input_sha256=final_receipt["intake"]["input_sha256"],
+                    run_reference=f"https://github.com/{repository_name}/actions/runs/{run_number}",
+                )
+                for check in value["checks"]:
+                    check.update(
+                        status="passed",
+                        failure_origin=None,
+                        started_at=datetime.fromtimestamp(
+                            clock[0] - 20, UTC
+                        ).isoformat(),
+                        ended_at=datetime.fromtimestamp(clock[0] - 10, UTC).isoformat(),
+                    )
+                parsed = EngineeringEvidence.model_validate(value)
+                service.record_evidence(parsed)
+                successful.append(parsed)
+            release = EngineeringRelease(
+                intake_id=final_input.intake_id,
+                input_sha256=final_receipt["intake"]["input_sha256"],
+                revision=1,
+                local_run_id=successful[0].run_id,
+                ci_run_id=successful[1].run_id,
+                implementation_commit=implementation_commit,
+                implementation_tree_sha256=successful[0].implementation_tree_sha256,
+                pull_request=f"https://github.com/{repository_name}/pull/3",
+                base_branch="main",
+                merge_commit="f" * 40,
+                review_commit=implementation_commit,
+                architect="architect",
+                review_reference=f"https://github.com/{repository_name}/pull/3#pullrequestreview-1",
+                baseline_verifications=[
+                    {
+                        "module": m.model_dump(mode="json"),
+                        "verification_reference": m.approval_reference,
+                    }
+                    for m in final_input.modules
+                ],
+                branch_protection_reference=f"https://github.com/{repository_name}/settings/branches",
+                integration_reference=f"https://github.com/{repository_name}/commit/{'f' * 40}",
+                compatibility_limits=[
+                    "Datos ficticios del recorrido; no acredita compatibilidad real."
+                ],
+                approval_event_id="engineering-approved",
+            )
+            with pytest.raises(DeliveryConflict, match="aprobación registrada"):
+                service.record_release(release)
+            final_process.internal(
+                final_case,
+                "engineering-final-ready",
+                "deliverable.ready",
+                revision=1,
+                artifact_sha256=release.approval_digest(),
+                evidence=[release.review_reference],
+            )
+            final_process.internal(
+                final_case,
+                release.approval_event_id,
+                "stage.approved",
+                revision=1,
+                artifact_sha256=release.approval_digest(),
+                evidence=[release.review_reference],
+                actor="architect",
+            )
+
+            async def final_mcp_journey():
+                engineering_server = create_engineering_server(service)
+                released = (
+                    await engineering_server.call_tool(
+                        "registrar_entrega_tecnica",
+                        {"entrega": release.model_dump(mode="json")},
+                    )
+                ).structured_content
+                assert not released["blockers"]
+                assert released["catalog"]["revision"] == 2
+                assert service.record_release(release)["release"] == released["release"]
+                server = create_server(repo, "engineer", final_runtime.service)
+                generated = (
+                    await server.call_tool(
+                        "generar_informe",
+                        {
+                            "entrada": {
+                                "report_id": str(uuid4()),
+                                "case_id": final_case,
+                                "intake_id": str(final_input.intake_id),
+                            }
+                        },
+                    )
+                ).structured_content
+                assert not generated["closure_blockers"]
+                report = generated["report"]
+                common = {
+                    "version": report["version"],
+                    "sha256": report["artifact"]["sha256"],
+                    "detail": "Confirmación ficticia del recorrido de cierre",
+                }
+                await server.call_tool(
+                    "registrar_decision_informe",
+                    {
+                        "entrega_id": generated["delivery_id"],
+                        "decision": {
+                            **common,
+                            "decision_id": str(uuid4()),
+                            "action": "approve",
+                        },
+                    },
+                )
+                presentation = {
+                    **common,
+                    "decision_id": str(uuid4()),
+                    "action": "record_presentation",
+                }
+                with pytest.raises(ToolError, match="fecha, audiencia"):
+                    await server.call_tool(
+                        "registrar_decision_informe",
+                        {
+                            "entrega_id": generated["delivery_id"],
+                            "decision": presentation,
+                        },
+                    )
+                presentation["presentation"] = {
+                    "presented_at": datetime.now(UTC).isoformat(),
+                    "audience": "Dirección de prueba",
+                    "reference": "https://example.org/presentation/1",
+                }
+                from app.persistence.delivery import RunStore
+
+                save = RunStore.save_decision
+
+                def interrupted_save(self, decision_id, decision, *args):
+                    if decision["action"] == "record_presentation":
+                        raise RuntimeError(
+                            "Interrupción después del checkpoint de cierre"
+                        )
+                    return save(self, decision_id, decision, *args)
+
+                monkeypatch.setattr(RunStore, "save_decision", interrupted_save)
+                with pytest.raises(ToolError):
+                    await server.call_tool(
+                        "registrar_decision_informe",
+                        {
+                            "entrega_id": generated["delivery_id"],
+                            "decision": presentation,
+                        },
+                    )
+                assert store.get(f"process:{final_case}")["status"] == "completed"
+                assert (
+                    repo.get(generated["delivery_id"])["report"]["status"] == "approved"
+                )
+                monkeypatch.setattr(RunStore, "save_decision", save)
+                recovered_runtime = create_report_runtime(repo.dsn, url, "engineer")
+                try:
+                    recovered_runtime.service.sources.store.clock = lambda: clock[0]
+                    recovered = create_server(
+                        repo, "engineer", recovered_runtime.service
+                    )
+                    closed = (
+                        await recovered.call_tool(
+                            "registrar_decision_informe",
+                            {
+                                "entrega_id": generated["delivery_id"],
+                                "decision": presentation,
+                            },
+                        )
+                    ).structured_content
+                    assert closed["report"]["status"] == "closed"
+                    repeated = (
+                        await recovered.call_tool(
+                            "registrar_decision_informe",
+                            {
+                                "entrega_id": generated["delivery_id"],
+                                "decision": presentation,
+                            },
+                        )
+                    ).structured_content
+                    assert repeated["report"] == closed["report"]
+                    assert len(repo.report_decisions(generated["delivery_id"])) == 2
+                    content = list(await recovered.read_resource(closed["pdf_uri"]))[
+                        0
+                    ].content
+                    text = " ".join(
+                        p.extract_text() for p in PdfReader(BytesIO(content)).pages
+                    )
+                    assert "INFORME DEFINITIVO APROBADO" in text
+                    output = Path(
+                        os.getenv(
+                            "DELIVERY_TEST_OUTPUT", str(tmp_path / "report-links")
+                        )
+                    )
+                    output.mkdir(parents=True, exist_ok=True)
+                    (output / "informe-definitivo-prueba.pdf").write_bytes(content)
+                finally:
+                    recovered_runtime.close()
+
+            asyncio.run(final_mcp_journey())
+        finally:
+            final_runtime.close()
     finally:
         runtime.close()
 
@@ -922,6 +1188,7 @@ def test_report_revision_approval_and_close(
     manager = "Operador de demostración"
     case_id = "issue22-independent"
     runtime = create_report_runtime(repo.dsn, workflow_url, manager)
+    monkeypatch.setenv("WORKFLOW_DATABASE_URL", workflow_url)
     runtime.service.sources.store.clock = lambda: clock[0]
     try:
         workflow.register_project(

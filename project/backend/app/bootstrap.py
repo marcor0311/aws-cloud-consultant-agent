@@ -65,6 +65,11 @@ def create_report_runtime(delivery_url, workflow_url, operator):
                 workflow_url.replace("postgresql://", "postgresql+psycopg://", 1)
             )
             resources.callback(store.engine.dispose)
+            saver = resources.enter_context(
+                open_checkpointer(
+                    workflow_url.replace("postgresql+psycopg://", "postgresql://", 1)
+                )
+            )
             service = CaseReportService(
                 repository,
                 CaseReportSources(
@@ -77,6 +82,9 @@ def create_report_runtime(delivery_url, workflow_url, operator):
                     ),
                 ),
                 operator,
+                ProcessService(
+                    LangGraphExecution(build_process_graph(saver)), store, operator
+                ),
             )
         return SimpleNamespace(
             repository=repository,

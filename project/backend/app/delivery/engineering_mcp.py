@@ -9,7 +9,11 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import CallToolResult, TextContent
 
 from app.core.config import project_path
-from app.delivery.engineering_models import EngineeringEvidence, EngineeringIntake
+from app.delivery.engineering_models import (
+    EngineeringEvidence,
+    EngineeringIntake,
+    EngineeringRelease,
+)
 from app.persistence.delivery import DeliveryConflict
 from app.persistence.locking import Busy
 
@@ -48,6 +52,20 @@ def create_server(service):
     def consultar_ingenieria(intake_id: UUID) -> CallToolResult:
         """Consulta entrada, resultados declarados, revisiones y tiempos de fase."""
         return call(service.get, intake_id)
+
+    @server.tool()
+    def consultar_catalogo_compatibilidad(intake_id: UUID) -> CallToolResult:
+        """Lista combinaciones declaradas, versiones, fallos y límites por recepción."""
+        return call(service.catalog, intake_id)
+
+    @server.tool()
+    def registrar_entrega_tecnica(entrega: EngineeringRelease) -> CallToolResult:
+        """Registra un PR ya integrado y verifica su aprobación exacta en el proceso.
+
+        El operador confirma las referencias de GitHub y baselines; esta herramienta
+        no abre, revisa ni integra PRs y no envía notificaciones externas.
+        """
+        return call(service.record_release, entrega)
 
     @server.resource(
         "engineering://artifact/{intake_id}/{file_sha256}",

@@ -13,6 +13,7 @@ from app.core.config import project_path
 from app.delivery.engineering_models import (
     EngineeringEvidence,
     EngineeringIntake,
+    EngineeringRelease,
     digest,
 )
 from app.persistence.delivery import DeliveryConflict
@@ -21,7 +22,18 @@ from app.persistence.locking import Busy
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["manifest", "intake", "evidence", "status"])
+    parser.add_argument(
+        "command",
+        choices=[
+            "manifest",
+            "intake",
+            "evidence",
+            "status",
+            "catalog",
+            "release-manifest",
+            "release",
+        ],
+    )
     parser.add_argument("--input", type=Path)
     parser.add_argument("--intake-id", type=UUID)
     parser.add_argument(
@@ -30,17 +42,26 @@ def main():
         default=project_path("generated/engineering-inputs"),
     )
     args = parser.parse_args()
-    if args.command != "status" and args.input is None:
+    if args.command not in ("status", "catalog") and args.input is None:
         parser.error("Indicar --input")
-    if args.command == "status" and args.intake_id is None:
+    if args.command in ("status", "catalog") and args.intake_id is None:
         parser.error("Indicar --intake-id")
     try:
         value = None
         if args.input:
             model = (
-                EngineeringEvidence if args.command == "evidence" else EngineeringIntake
+                EngineeringRelease
+                if args.command in ("release", "release-manifest")
+                else (
+                    EngineeringEvidence
+                    if args.command == "evidence"
+                    else EngineeringIntake
+                )
             )
             value = model.model_validate_json(args.input.read_bytes())
+        if args.command == "release-manifest":
+            print(json.dumps({"release_sha256": value.approval_digest()}))
+            return
         if args.command == "manifest":
             print(
                 json.dumps(
@@ -58,14 +79,15 @@ def main():
             os.getenv("ENGINEERING_OPERATOR", ""),
         )
         try:
-            result = (
-                runtime.service.register(value)
-                if args.command == "intake"
-                else (
-                    runtime.service.record_evidence(value)
-                    if args.command == "evidence"
-                    else runtime.service.get(args.intake_id)
-                )
+            method = {
+                "intake": runtime.service.register,
+                "evidence": runtime.service.record_evidence,
+                "release": runtime.service.record_release,
+                "catalog": runtime.service.catalog,
+                "status": runtime.service.get,
+            }[args.command]
+            result = method(
+                args.intake_id if args.command in ("status", "catalog") else value
             )
             print(json.dumps(result, ensure_ascii=False, indent=2))
         finally:

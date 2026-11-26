@@ -257,3 +257,45 @@ class EngineeringEvidence(Contract):
                 "Una corrida exitosa requiere logs y respaldos de seguridad y políticas"
             )
         return self
+
+
+class BaselineVerification(Contract):
+    module: PinnedModule
+    verification_reference: Reference
+
+
+class EngineeringRelease(Contract):
+    """Operator-recorded final delivery, bound to a separate workflow approval."""
+
+    schema_version: Literal["1.0"] = "1.0"
+    intake_id: UUID
+    input_sha256: Digest
+    revision: int = Field(ge=1)
+    local_run_id: UUID
+    ci_run_id: UUID
+    implementation_commit: Commit
+    implementation_tree_sha256: Digest
+    pull_request: Reference
+    base_branch: Literal["main"]
+    merge_commit: Commit
+    review_commit: Commit
+    architect: Text
+    review_reference: Reference
+    baseline_verifications: list[BaselineVerification] = Field(
+        min_length=1, max_length=30
+    )
+    branch_protection_reference: Reference
+    integration_reference: Reference
+    compatibility_limits: list[Text] = Field(min_length=1, max_length=30)
+    approval_event_id: Text
+
+    def approval_digest(self):
+        return digest(self.model_dump(mode="json", exclude={"approval_event_id"}))
+
+    @model_validator(mode="after")
+    def reviewed_code(self):
+        if self.review_commit != self.implementation_commit:
+            raise ValueError("La revisión debe corresponder al commit probado")
+        if self.local_run_id == self.ci_run_id:
+            raise ValueError("La entrega requiere corridas distintas para local y CI")
+        return self

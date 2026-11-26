@@ -22,8 +22,12 @@ PDF muestra retrabajo explícito y resultados parciales/fallidos sin aprobarlos.
 Lee fuentes y mediciones existentes del
 workflow, conserva una instantánea con hash, permite corregir secciones, versionar
 y aprobar el PDF parcial. El operador debe corresponder al responsable registrado.
-Los informes parciales no cierran el expediente; faltan la integración de las
-entregas reales de Arquitectura/FinOps/Ingeniería y el cierre del proceso principal.
+Los informes parciales no cierran el expediente. Una entrega técnica definitiva
+vigente permite generar otro informe, aprobar su revisión exacta y registrar la
+presentación con fecha, audiencia y referencia. El servicio verifica las fuentes
+y completa la etapa 6 del grafo principal con recuperación ante interrupciones.
+Faltan el piloto con entregas/mediciones/aprobaciones reales y la validación del
+cliente MCP utilizado por el Engagement Manager.
 Ver [revisión, métricas y límites](../../../docs/revision-informe-ejecutivo.md).
 
 Contrato funcional: [issues.md](../../../issues.md#6-engagement-manager--informe-ejecutivo).

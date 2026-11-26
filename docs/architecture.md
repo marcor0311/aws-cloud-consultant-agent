@@ -39,7 +39,7 @@ project/
 │   ├── 3. architecture agent/   # Responsabilidad documentada; runtime pendiente
 │   ├── 4. finops agent/         # Responsabilidad documentada; runtime pendiente
 │   ├── 5. terraform agent/      # Referencia al avance en backend/app/delivery
-│   └── 6. project closure agent/ # Referencia al borrador; cierre pendiente
+│   └── 6. project closure agent/ # Informe versionado y cierre condicionado
 ├── frontend/
 │   ├── office-dashboard.html
 │   ├── src/                    # JavaScript y CSS
@@ -199,6 +199,13 @@ mantienen sus claves de deduplicación. Un envío Slack incierto exige conciliac
 La apertura de la etapa 2 está implementada por Meeting Assistant. Las etapas
 3–6 coordinan trabajo externo: todavía no implementan sus agentes ni integran PRs.
 Los webhooks aportan evidencia; un issue cerrado no aprueba etapas.
+La recepción de ingeniería conserva un catálogo con revisión/hash de las corridas
+importadas. La entrega técnica definitiva exige la aprobación exacta de etapa 5
+y referencias externas confirmadas por el operador; todavía no automatiza el
+ciclo PR/revisión/merge. El informe captura esa entrega sin modificar fuentes
+anteriores. Su presentación explícita aplica las transiciones de etapa 6 al
+grafo principal y permite recuperar un cierre interrumpido entre checkpoint e
+informe. No compone proveedores de IA, GitHub o notificaciones para este recorrido.
 El hash de un documento externo es declarado por el operador. La identidad viene
 del MCP STDIO privado o del bearer HTTP configurado; el runtime sigue siendo de
 un único operador, sin añadir autorización empresarial por puesto.

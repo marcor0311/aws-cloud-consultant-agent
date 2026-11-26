@@ -152,10 +152,51 @@ recepción conservan su identificación e idempotencia.
   muestra aparte la generación y las revisiones del PDF; no se inventa tiempo de
   lectura humana ni se infiere el LT global sumando fases.
 
-`record_presentation` devuelve conflicto para estos informes parciales. No modifica
-el estado del proceso ni fabrica una entrega aprobada de ingeniería. La selección
-de recepciones y evidencias de #21 ya está conectada; la aprobación e integración
-de la entrega técnica definitiva y el cierre del expediente siguen pendientes.
+`record_presentation` devuelve conflicto para estos informes parciales. Una entrega
+definitiva posterior no modifica sus fuentes: generar otro `report_id` para
+capturarla y someter ese documento a revisión.
+
+### Presentación y cierre del expediente
+
+Cuando la recepción tiene una `EngineeringRelease` vigente, con corridas exitosas
+local/CI y aprobación exacta de etapa 5 registrada, el nuevo informe incorpora
+esa entrega y el catálogo congelado. Si el expediente es real y no hay bloqueos
+técnicos, el PDF se identifica como definitivo. Los datos ausentes de métricas
+siguen mostrando "Sin medición"; definitivo no significa medición completa ni
+autenticación remota de las referencias confirmadas por el operador.
+
+Tras revisar y aprobar la versión/SHA-256 exactos, `record_presentation` requiere
+además de `decision_id`, `version`, `sha256`, `action` y `detail`:
+
+```json
+{
+  "presentation": {
+    "presented_at": "2026-11-25T21:00:00Z",
+    "audience": "Dirección del proyecto",
+    "reference": "https://example.org/actas/presentacion"
+  }
+}
+```
+
+Es un ejemplo de estructura; registrar la fecha y el acta reales. La fecha debe
+ser posterior a la aprobación del informe y no estar en el futuro. El servicio
+verifica los PDFs y las fuentes, vuelve a comprobar la entrega vigente y exige
+que el proceso siga en la misma iteración de etapa 6. No promueve un informe
+parcial, ficticio, desactualizado o aprobado sobre otro hash.
+
+La operación aplica `deliverable.ready` y `stage.approved` al grafo principal con
+referencias a ambos PDFs y a la presentación; completa la fase 6 y deja el proceso
+en `completed`. La entrega de informe queda `closed`. Los eventos y la decisión
+conservan identificadores estables para recuperar una interrupción entre el
+checkpoint y el guardado del informe: reintentar exactamente la misma decisión.
+Las dos bases no comparten una transacción; durante esa recuperación el proceso
+puede estar completado y el informe aún aprobado. Una decisión distinta no puede
+reemplazar la presentación ya aplicada.
+
+El mismo recorrido está disponible por MCP y por la API local de revisión cuando
+se configura `WORKFLOW_DATABASE_URL`. El Engagement Manager no necesita operar
+GitHub. Quedan por validar el cliente MCP elegido y el piloto con entregables,
+mediciones, aprobaciones y presentación reales.
 
 ## Revisar y cerrar la demostración anterior
 

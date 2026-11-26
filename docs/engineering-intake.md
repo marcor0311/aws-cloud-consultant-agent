@@ -136,6 +136,8 @@ Configurar `WORKFLOW_DATABASE_URL`, `ENGINEERING_OPERATOR` y, opcionalmente,
 | `registrar_entrada_ingenieria` | `entrada: EngineeringIntake` |
 | `registrar_evidencias_ingenieria` | `evidencia: EngineeringEvidence` |
 | `consultar_ingenieria` | `intake_id` |
+| `consultar_catalogo_compatibilidad` | `intake_id` |
+| `registrar_entrega_tecnica` | `entrega: EngineeringRelease` |
 
 El recurso `engineering://artifact/<intake_id>/<sha256>` descarga los bytes
 registrados del insumo o evidencia. Aplica el mismo control por expediente y
@@ -174,7 +176,57 @@ ni migraciones nuevas. Las exclusiones existentes coordinan recepción/proceso.
 El informe #22 ya puede consumir esta recepción con `intake_id`, conservar sus
 evidencias y mostrar las comprobaciones y métricas en un PDF parcial. Ver
 [selección y descarga desde el informe](revision-informe-ejecutivo.md).
-Continúan pendientes el catálogo versionado de compatibilidad, la aprobación e
-integración de la entrega técnica definitiva, PR/revisión/merge del proyecto y la
-notificación al Engagement Manager. Recibir evidencias o aprobar el informe parcial
-no aprueba infraestructura ni completa #21.
+Recibir evidencias o aprobar el informe parcial no aprueba infraestructura ni
+completa #21. El registro de una entrega definitiva se describe a continuación.
+
+## Catálogo y entrega definitiva
+
+`python -m app.cli.engineering catalog --intake-id <uuid>` devuelve el catálogo
+de esa recepción: revisión, SHA-256 e historial de combinaciones de módulos,
+recursos y herramientas. Incluye corridas exitosas, fallidas e incompletas y los
+límites del alcance declarado. Una combinación no observada sigue sin verificar.
+La revisión corresponde al número de corridas y su hash identifica el contenido;
+la entrega definitiva y cada informe conservan su propia copia del catálogo.
+Los registros importados siguen siendo declaraciones del operador: el catálogo
+no autentica ejecuciones externas ni acredita compatibilidad con AWS real.
+
+`EngineeringRelease` registra una entrega técnica ya revisada e integrada:
+
+- Recepción, hash de entrada, revisión y dos corridas distintas: local y CI.
+  Ambas deben informar todas las comprobaciones correctas sobre el mismo commit
+  y manifiesto de implementación. CI debe referenciar una ejecución Actions del
+  repositorio del proyecto y la entrega debe incluir la última corrida registrada.
+- PR del proyecto hacia `main`, commit probado/revisado, commit de merge y sus
+  referencias. El arquitecto debe coincidir con el de la arquitectura aprobada.
+- Confirmación de cada baseline exacto, referencia de protección de la rama y
+  límites de compatibilidad revisados por el operador.
+- ID de una decisión `stage.approved` de etapa 5 que coincida con el hash de la
+  entrega, revisión, arquitecto, iteración y referencia de revisión.
+
+Secuencia desde `project/backend`:
+
+1. Preparar `entrega.json` con los campos de `EngineeringRelease`. Consultar el
+   contrato con `python -c "from app.delivery.engineering_models import EngineeringRelease; import json; print(json.dumps(EngineeringRelease.model_json_schema(), indent=2))"`.
+2. Calcular el hash con
+   `python -m app.cli.engineering release-manifest --input entrega.json`.
+   El hash excluye únicamente `approval_event_id`, evitando una dependencia circular.
+3. Registrar `deliverable.ready` de etapa 5 con esa revisión/hash mediante el
+   proceso existente. Tras la aprobación explícita del arquitecto y la integración
+   del PR, registrar `stage.approved` con los mismos datos y la referencia de revisión.
+4. Importar con `python -m app.cli.engineering release --input entrega.json`, o
+   usar `registrar_entrega_tecnica` por MCP. Si falta la decisión exacta, se rechaza.
+5. Consultar el estado: `approved_recorded` y `merged_recorded` indican una
+   aprobación contrastada con el proceso y referencias externas confirmadas por
+   el operador. No equivalen a una consulta autenticada a GitHub.
+
+El registro definitivo es inmutable por recepción, conserva catálogo/hash y emite
+`engineering.delivery_available` en SQL para la etapa 6. Completa la fase de
+ingeniería e inicia la de informe. Los reintentos recuperan el mismo registro sin
+duplicar el evento. El handoff de etapa 5 a 6 lo crea el proceso existente.
+
+Este incremento no crea ni integra PRs, verifica GitHub remotamente ni envía avisos
+externos. Esas acciones se realizan fuera de estos comandos y se registran de
+forma explícita. Siguen pendientes el acuerdo/piloto con insumos reales de #19/#20,
+la automatización del ciclo PR/revisión/merge y el envío externo al Engagement
+Manager. Los expedientes ficticios pueden documentar el recorrido sin cerrar un
+proyecto real.

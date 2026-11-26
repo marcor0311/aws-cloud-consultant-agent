@@ -58,3 +58,13 @@ Ese mismo recorrido continúa desde la recepción #21 hasta el informe #22 por
 de retrabajo, conservación del informe previo, rechazo de recepción de otro caso
 y de respaldo alterado, descarga de fuentes/archivos por el MCP del informe,
 aprobación parcial y rechazo del cierre. Exporta ambos PDF para inspección visual.
+
+El mismo recorrido también registra una entrega definitiva con dos corridas
+exitosas declaradas, comprueba el catálogo y rechaza la entrega antes de la
+aprobación exacta de etapa 5. Continúa por MCP con informe definitivo, aprobación,
+presentación y cierre del grafo principal. Provoca una interrupción después del
+checkpoint y antes de guardar la decisión; otro runtime recupera el cierre sin
+duplicarlo. Usa un expediente adicional aislado con metadatos de producción para
+ejercitar esa condición, pero todos sus insumos, revisiones y corridas son datos
+de prueba: no acredita entregas reales ni ejecuta Terraform/GitHub/AWS. Exporta
+`informe-definitivo-prueba.pdf` para inspección visual.

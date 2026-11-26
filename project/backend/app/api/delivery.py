@@ -1,6 +1,7 @@
 """Opt-in local demo API. Does not initialize databases during import."""
 
 import os
+from contextlib import ExitStack
 from functools import lru_cache
 from typing import Annotated
 from uuid import UUID
@@ -143,10 +144,28 @@ def get_report(delivery_id: UUID, repo: Repository):
 @review_router.post("/runs/{delivery_id}/report/decisions")
 def decide_report(delivery_id: UUID, decision: ReportDecision, repo: Repository):
     try:
-        return ReportReview(repo).decide(delivery_id, decision, configured_manager())
+        operator = configured_manager()
+        with ExitStack() as resources:
+            service = None
+            row = repo.get(delivery_id)
+            if (
+                row
+                and row["request"].get("kind") == "case_report"
+                and os.getenv("WORKFLOW_DATABASE_URL")
+            ):
+                from app.bootstrap import create_report_runtime
+
+                runtime = create_report_runtime(
+                    repo.dsn, os.environ["WORKFLOW_DATABASE_URL"], operator
+                )
+                resources.callback(runtime.close)
+                service = runtime.service
+            return ReportReview(repo, operator, service).decide(
+                delivery_id, decision, operator
+            )
     except LookupError as error:
         raise HTTPException(404, str(error)) from error
-    except (DeliveryConflict, DeliveryBusy) as error:
+    except (DeliveryConflict, DeliveryBusy, Busy) as error:
         raise HTTPException(409, str(error)) from error
     except ReportAccessDenied as error:
         raise HTTPException(403, str(error)) from error

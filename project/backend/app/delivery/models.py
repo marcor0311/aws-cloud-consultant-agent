@@ -215,18 +215,27 @@ class ReportDraft(Contract):
     sections: dict[str, Text] = Field(default_factory=dict)
 
 
+class Presentation(Contract):
+    presented_at: AwareDatetime
+    audience: Text
+    reference: Annotated[str, Field(pattern=r"^https://[^\s@]+$", max_length=2000)]
+
+
 class ReportDecision(Contract):
     decision_id: UUID
     version: int = Field(ge=1)
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     action: Literal["request_changes", "revise", "approve", "record_presentation"]
     detail: Text
+    presentation: Presentation | None = None
     sections: dict[Literal["results", "risks", "next_steps"], Text] = Field(
         default_factory=dict
     )
 
     @model_validator(mode="after")
     def revision_only(self):
+        if self.presentation is not None and self.action != "record_presentation":
+            raise ValueError("Los datos de presentación requieren record_presentation")
         if self.sections and self.action != "revise":
             raise ValueError("Los cambios de contenido requieren la acción revise")
         return self

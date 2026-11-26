@@ -31,7 +31,7 @@ def create_server(repository: PostgresRepository, operator: str, case_service=No
             "operador lo confirma expresamente para esa revisión."
         ),
     )
-    service = ReportReview(repository, operator)
+    service = ReportReview(repository, operator, case_service)
 
     def call(method, *args):
         try:

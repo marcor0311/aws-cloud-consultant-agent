@@ -8,7 +8,12 @@ from typing import TypedDict
 from langgraph.graph import END, START, StateGraph
 from langsmith import tracing_context
 
-from app.delivery.engineering_models import EngineeringIntake, digest
+from app.delivery.engineering_models import (
+    EngineeringEvidence,
+    EngineeringIntake,
+    EngineeringRelease,
+    digest,
+)
 from app.delivery.metrics import case_metrics
 from app.persistence.delivery import DeliveryConflict
 
@@ -36,14 +41,19 @@ class EngineeringService:
             raise ValueError("Expediente inexistente o de otro responsable")
         return project
 
-    def _upstream(self, request):
+    def _upstream(self, request, *, delivered=False):
         store = self.repository.store
         if request.finops_architecture_sha256 != request.approval_digest(3):
             raise DeliveryConflict(
                 "FinOps no referencia el manifiesto aprobado exacto de arquitectura"
             )
         state = store.get(f"process:{request.case_id}") or {}
-        if state.get("stage") != 5 or state.get("status") != "awaiting_deliverable":
+        if not (
+            state.get("stage") == 5
+            and state.get("status") == "awaiting_deliverable"
+            or delivered
+            and state.get("stage") in (5, 6)
+        ):
             raise DeliveryConflict(
                 "El proceso no está esperando la entrega de ingeniería"
             )
@@ -225,6 +235,182 @@ class EngineeringService:
             )
         return self.get(evidence.intake_id)
 
+    def catalog(self, intake_id):
+        """Version the observed combinations, including failures; infer no support."""
+        intake = self.repository.get(intake_id)
+        if not intake or intake["operator"] != self.operator:
+            raise ValueError("Entrada inexistente o de otro responsable")
+        self._project(intake["case_id"])
+        entries = []
+        for run in self.repository.runs(intake_id):
+            evidence = run["evidence"]
+            entries.append(
+                {
+                    "run_id": run["run_id"],
+                    "evidence_sha256": run["evidence_sha256"],
+                    "modules": evidence["modules"],
+                    "resources": evidence["resources"],
+                    "versions": evidence["versions"],
+                    "implementation_commit": evidence["implementation_commit"],
+                    "implementation_tree_sha256": evidence[
+                        "implementation_tree_sha256"
+                    ],
+                    "status": run["reported_status"],
+                    "checks": evidence["checks"],
+                    "reference": evidence["run_reference"],
+                    "provenance": run["execution_verification"],
+                    "limits": [
+                        "Solo la combinación y el alcance local_emulator declarados; no acredita AWS real ni otras versiones."
+                    ],
+                }
+            )
+        content = {
+            "schema_version": "1.0",
+            "intake_id": str(intake_id),
+            "revision": len(entries),
+            "entries": entries,
+        }
+        return {**content, "sha256": digest(content)}
+
+    def _validate_release(self, intake, release):
+        request = EngineeringIntake.model_validate(intake["input"])
+        if digest(request.model_dump(mode="json")) != intake["input_sha256"]:
+            raise DeliveryConflict("El manifiesto de entrada no coincide con su hash")
+        self._upstream(request, delivered=True)
+        if release.input_sha256 != intake["input_sha256"]:
+            raise DeliveryConflict("La entrega corresponde a otra entrada")
+        expected_modules = sorted(m.model_dump_json() for m in request.modules)
+        if (
+            sorted(v.module.model_dump_json() for v in release.baseline_verifications)
+            != expected_modules
+        ):
+            raise DeliveryConflict(
+                "Verificar las aprobaciones de todos los baselines exactos"
+            )
+        if release.architect != request.architecture.approval.actor:
+            raise DeliveryConflict(
+                "La revisión no corresponde al arquitecto de la entrada"
+            )
+        prefix = f"https://github.com/{request.repository}/"
+        if not re.fullmatch(
+            re.escape(prefix) + r"pull/[1-9][0-9]*", release.pull_request
+        ):
+            raise DeliveryConflict("El PR debe pertenecer al repositorio del proyecto")
+        if not release.review_reference.startswith(release.pull_request + "#"):
+            raise DeliveryConflict("La aprobación debe referenciar la revisión del PR")
+        if release.integration_reference != prefix + "commit/" + release.merge_commit:
+            raise DeliveryConflict("La integración debe referenciar el commit de merge")
+        for run_id in (release.local_run_id, release.ci_run_id):
+            run = self.repository.evidence(run_id)
+            if (
+                not run
+                or run["intake_id"] != intake["intake_id"]
+                or run["reported_status"] != "passed"
+            ):
+                raise DeliveryConflict(
+                    "La entrega requiere evidencias local y CI completas y exitosas"
+                )
+            evidence = run["evidence"]
+            parsed = EngineeringEvidence.model_validate(evidence)
+            if (
+                not all(c.status == "passed" for c in parsed.checks)
+                or parsed.input_sha256 != intake["input_sha256"]
+                or str(parsed.intake_id) != intake["intake_id"]
+                or str(parsed.run_id) != str(run_id)
+                or run["files"] != [f.model_dump(mode="json") for f in parsed.files]
+                or sorted(m.model_dump_json() for m in parsed.modules)
+                != expected_modules
+            ):
+                raise DeliveryConflict(
+                    "El manifiesto de la corrida no corresponde a la entrega"
+                )
+            if (
+                evidence["implementation_commit"] != release.implementation_commit
+                or evidence["implementation_tree_sha256"]
+                != release.implementation_tree_sha256
+                or digest(evidence) != run["evidence_sha256"]
+            ):
+                raise DeliveryConflict(
+                    "La entrega y las corridas deben identificar el mismo código probado"
+                )
+            if run_id == release.ci_run_id and not re.fullmatch(
+                re.escape(prefix) + r"actions/runs/[1-9][0-9]*",
+                evidence["run_reference"],
+            ):
+                raise DeliveryConflict(
+                    "La evidencia CI requiere la referencia de su ejecución en el proyecto"
+                )
+            for file in run["files"]:
+                self._read_file(release.intake_id, file["sha256"])
+        if self.repository.runs(release.intake_id)[-1]["run_id"] not in {
+            str(release.local_run_id),
+            str(release.ci_run_id),
+        }:
+            raise DeliveryConflict(
+                "La entrega debe incorporar la última corrida registrada"
+            )
+        approval = next(
+            (
+                e["payload"]
+                for e in self.repository.store.case_events(intake["case_id"])
+                if e["kind"] == "process.transition"
+                and e["payload"].get("event_id") == release.approval_event_id
+            ),
+            None,
+        )
+        if (
+            not approval
+            or (
+                approval.get("kind"),
+                approval.get("from_stage"),
+                approval.get("to_stage"),
+                approval.get("from_iteration"),
+                approval.get("revision"),
+                approval.get("artifact_sha256"),
+                approval.get("actor"),
+            )
+            != (
+                "stage.approved",
+                5,
+                6,
+                intake["process_iteration"],
+                release.revision,
+                release.approval_digest(),
+                release.architect,
+            )
+            or release.review_reference not in approval.get("evidence", [])
+        ):
+            raise DeliveryConflict(
+                "Falta la aprobación registrada de la entrega exacta por el arquitecto"
+            )
+        state = self.repository.store.get(f"process:{intake['case_id']}")
+        if state["stage"] != 6 or state["iteration"] != approval["to_iteration"]:
+            raise DeliveryConflict(
+                "La entrega no corresponde al ciclo vigente del proceso"
+            )
+
+    def record_release(self, release):
+        intake = self.repository.get(release.intake_id)
+        if not intake or intake["operator"] != self.operator:
+            raise ValueError("Entrada inexistente o de otro responsable")
+        self._project(intake["case_id"])
+        with (
+            self.repository.store.lock(f"engineering:{release.intake_id}"),
+            self.repository.store.lock(f"process:{intake['case_id']}"),
+        ):
+            previous = self.repository.release(release.intake_id)
+            value = release.model_dump(mode="json")
+            if previous and previous["release"] != value:
+                raise DeliveryConflict("La recepción ya tiene otra entrega definitiva")
+            self._validate_release(intake, release)
+            if not previous:
+                self.repository.record_release(
+                    intake, release, self.operator, self.catalog(release.intake_id)
+                )
+            self.repository.store.complete_phase(intake["case_id"], "stage-5")
+            self.repository.store.phase(intake["case_id"], "stage-6", self.operator)
+        return self.get(release.intake_id)
+
     def get(self, intake_id):
         intake = self.repository.get(intake_id)
         if not intake:
@@ -233,11 +419,29 @@ class EngineeringService:
         if intake["operator"] != self.operator:
             raise ValueError("La entrada pertenece a otro responsable")
         try:
-            self._upstream(EngineeringIntake.model_validate(intake["input"]))
-            current = (
-                self.repository.store.get(f"process:{intake['case_id']}")["iteration"]
-                == intake["process_iteration"]
-            )
+            release = self.repository.release(intake_id)
+            if release:
+                parsed = EngineeringRelease.model_validate(release["release"])
+                if (
+                    parsed.approval_digest() != release["release_sha256"]
+                    or str(parsed.intake_id) != intake["intake_id"]
+                    or release["operator"] != self.operator
+                    or release["case_id"] != intake["case_id"]
+                    or release["catalog"] != self.catalog(intake_id)
+                ):
+                    raise DeliveryConflict(
+                        "El respaldo de la entrega no coincide con su hash"
+                    )
+                self._validate_release(intake, parsed)
+                current = True
+            else:
+                self._upstream(EngineeringIntake.model_validate(intake["input"]))
+                current = (
+                    self.repository.store.get(f"process:{intake['case_id']}")[
+                        "iteration"
+                    ]
+                    == intake["process_iteration"]
+                )
         except DeliveryConflict:
             current = False
         runs = self.repository.runs(intake_id)
@@ -253,12 +457,18 @@ class EngineeringService:
             "phase_metrics": next(
                 p for p in metrics["phases"] if p["phase"] == "engineering"
             ),
-            "review_status": "pending",
-            "integration_status": "no_pr",
-            "blockers": [
-                "Aprobación e integración del PR técnico pendientes.",
-                "Las referencias de aprobación de baselines requieren verificación externa.",
-            ]
+            "review_status": "approved_recorded" if release and current else "pending",
+            "integration_status": "merged_recorded" if release and current else "no_pr",
+            "release": release,
+            "catalog": self.catalog(intake_id),
+            "blockers": (
+                []
+                if release and current
+                else [
+                    "Aprobación e integración del PR técnico pendientes.",
+                    "Las referencias de aprobación de baselines requieren verificación externa.",
+                ]
+            )
             + (
                 ["Faltan evidencias técnicas."]
                 if not runs
@@ -279,6 +489,9 @@ class EngineeringService:
 
     def read_file(self, intake_id, file_sha256):
         self.get(intake_id)  # Apply the same project/operator guard as receipt queries.
+        return self._read_file(intake_id, file_sha256)
+
+    def _read_file(self, intake_id, file_sha256):
         if not re.fullmatch(r"[a-f0-9]{64}", file_sha256):
             raise ValueError("SHA-256 inválido")
         file = self.repository.file(intake_id, file_sha256)
