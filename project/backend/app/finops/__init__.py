@@ -4,7 +4,7 @@ from app.finops.analysis import FinOpsEconomicAnalysis, FinOpsEconomicAnalyzer
 from app.finops.calculator import CalculatorPreparation, PricingCalculatorPreparer
 from app.finops.evidence import PricingCalculatorEvidence, S3ExportEvidenceBuilder
 from app.finops.models import FinOpsEvaluationDecision, FinOpsIntake
-from app.finops.service import FinOpsIntakeService
+from app.finops.service import FinOpsIntakeService, FinOpsService
 
 __all__ = [
     "CalculatorPreparation",
@@ -13,6 +13,7 @@ __all__ = [
     "FinOpsEconomicAnalyzer",
     "FinOpsIntake",
     "FinOpsIntakeService",
+    "FinOpsService",
     "PricingCalculatorPreparer",
     "PricingCalculatorEvidence",
     "S3ExportEvidenceBuilder",
