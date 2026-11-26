@@ -5,6 +5,11 @@ El escenario de integración usa el S3 del catálogo al commit que fija
 creada en la misma simulación. El repositorio consumidor aporta región,
 etiquetas y estado. El baseline sigue pendiente de aprobación.
 
+El nuevo [ingreso de ingeniería](engineering-intake.md) registra paquetes aprobados,
+evidencias existentes y sus métricas en el workflow. Usa un contrato independiente;
+el runner de esta guía conserva `DemoRequest` y no se conecta automáticamente a
+una recepción real ni autentica las corridas importadas.
+
 | Alcance | Comprobación |
 | --- | --- |
 | S3 | Bucket, acceso público bloqueado, ownership, política TLS, versionado y cifrado KMS |

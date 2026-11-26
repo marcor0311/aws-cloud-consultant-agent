@@ -2,7 +2,8 @@
 
 El informe por expediente consolida registros existentes sin ejecutar ingeniería.
 Puede generarse antes de completar #21: los faltantes se muestran y bloquean el
-cierre real. La entrega técnica de demostración es opcional y conserva su
+cierre real. Permite seleccionar una recepción de ingeniería por `intake_id`.
+La entrega técnica de demostración es opcional y conserva su
 identificación de arquitectura y FinOps simulados. El recorrido anterior de
 ingeniería e informe continúa disponible exclusivamente como demostración.
 
@@ -55,9 +56,11 @@ El MCP no compone proveedores de Google, Slack o IA ni inicia workers.
    }
    ```
 
-3. Opcionalmente añadir `engineering_delivery_id` con una entrega persistida del
-   mismo `project_id`. Se verifican sus archivos por hash y se mantiene su procedencia
-   simulada. Nunca se vuelve a ejecutar el nodo de ingeniería.
+3. Opcionalmente añadir `intake_id` con una recepción de ingeniería del mismo
+   expediente. También se conserva `engineering_delivery_id` para la entrega
+   anterior de demostración del mismo `project_id`. Elegir uno de los dos campos;
+   ambos juntos se rechazan. Se verifican los archivos por hash y se mantiene
+   su procedencia. Nunca se vuelve a ejecutar el nodo de ingeniería.
 4. Consultar el informe y descargar `pdf_uri` y `sources_uri`. Este último recurso
    JSON contiene proyecto, presupuesto de dirección si existe, decisiones,
    manifiesto, entrega adjunta y mediciones que respaldan el documento. El PDF
@@ -81,6 +84,56 @@ solo se montan en la demostración de loopback, igual que las decisiones existen
 La lectura, decisión y descarga de un informe por expediente exigen el operador
 local con que se creó. No exponer esta API fuera de loopback.
 
+### Adjuntar una recepción de ingeniería
+
+Usar el `intake_id` devuelto por `registrar_entrada_ingenieria` del MCP de #21:
+
+```json
+{
+  "entrada": {
+    "report_id": "f8374064-478b-43b4-a222-b7c9e55ce161",
+    "case_id": "expediente-existente",
+    "intake_id": "f4c5253d-69a0-4716-942d-b783c3d5e10a"
+  }
+}
+```
+
+El operador local del informe debe ser el mismo responsable registrado de la
+recepción. Se conserva el modelo actual de un único operador; esto no añade
+transferencias de identidad entre cuentas de ingeniero y Engagement Manager.
+
+La captura lee únicamente PostgreSQL: no necesita los archivos del directorio de
+ingreso, no importa corridas nuevas y no ejecuta Terraform ni inferencia. Rechaza
+recepciones de otro expediente y manifiestos o respaldos cuyos hashes no coincidan.
+Las exclusiones de ingeniería/proceso protegen la lectura de recepción, corridas
+y mediciones durante la captura.
+
+El resultado contiene `engineering`, además del `handoff` anterior. Una recepción
+no es una entrega técnica aprobada: el `handoff` permanece vacío cuando solo se
+selecciona `intake_id`. `report.intake_id` identifica la recepción; el manifiesto de
+fuentes identifica las corridas y hashes. `engineering.selected_run_id` señala la
+última corrida importada al corte, usada en la tabla de comprobaciones, versiones
+y recursos. Se conserva también el historial de corridas y archivos respaldados.
+
+El PDF incorpora presupuesto y estimación de FinOps con moneda/periodo explícitos,
+calculadora, referencia del Excel, módulos y commits, estados de comprobaciones,
+pendientes e integridad de respaldos. Distingue resultados declarados por el
+operador de una ejecución autenticada. Una recepción sin corridas, con fallos o
+de una iteración anterior puede documentarse como borrador parcial; esos pendientes
+no se convierten en aprobación técnica.
+
+`sources_uri` permite descargar el JSON congelado. Cada archivo de
+`engineering.files` incluye un `uri` servido por el mismo MCP del informe:
+`delivery://engineering/<report_id>/<sha256>`. Solo permite descargar archivos
+incluidos en esa instantánea y vuelve a comprobar sus bytes. Un informe anterior
+no obtiene acceso automático a los archivos de corridas posteriores.
+
+Para incluir una corrida nueva de la misma recepción, generar otro `report_id`.
+La misma petición recupera sus fuentes y PDF originales, incluso si ahora hay más
+resultados o cambió la vigencia del proceso. Las revisiones y aprobaciones de ese
+informe usan la instantánea congelada. Los informes anteriores sin selección de
+recepción conservan su identificación e idempotencia.
+
 ### Métricas y límites
 
 - LT se obtiene de límites registrados de cada fase; las fases abiertas se marcan
@@ -89,8 +142,10 @@ local con que se creó. No exponer esta API fuera de loopback.
   La duración activa une todos los intervalos, sin sumar dos veces fases de detalle.
 - Se muestran esfuerzo humano/agente, sesiones abiertas, ciclos de cambios y
   espera entre creación y recepción de cada handoff, con recepción pendiente explícita.
-- El workflow actual no etiqueta intervalos como espera o retrabajo: esas duraciones
-  de fase quedan sin medición. El tiempo restante se conserva sin clasificar.
+- Los intervalos técnicos importados desde #21 aportan esfuerzo y retrabajo
+  explícitamente clasificado. El PDF muestra ese retrabajo como parcial cuando
+  otros intervalos de la fase siguen sin clasificar. La espera de fase sin registro
+  continúa sin medición; el tiempo restante no se convierte en espera.
 - El presupuesto de dirección no declara periodo. No se compara automáticamente
   con la estimación mensual simulada de FinOps. El gasto real sigue sin información.
 - `metrics` es la instantánea del expediente al corte. `report_activity_metrics`
@@ -98,8 +153,9 @@ local con que se creó. No exponer esta API fuera de loopback.
   lectura humana ni se infiere el LT global sumando fases.
 
 `record_presentation` devuelve conflicto para estos informes parciales. No modifica
-el estado del proceso ni fabrica una entrega aprobada de ingeniería. La conexión
-de la entrega real de #21 y el cierre definitivo del expediente siguen pendientes.
+el estado del proceso ni fabrica una entrega aprobada de ingeniería. La selección
+de recepciones y evidencias de #21 ya está conectada; la aprobación e integración
+de la entrega técnica definitiva y el cierre del expediente siguen pendientes.
 
 ## Revisar y cerrar la demostración anterior
 

@@ -13,6 +13,7 @@ from app.delivery.report import ReportAccessDenied, require_report_owner
 from app.delivery.review import ReportReview, configured_manager
 from app.delivery.workflow import DeliveryWorkflow, public_result
 from app.persistence.delivery import DeliveryBusy, DeliveryConflict, PostgresRepository
+from app.persistence.locking import Busy
 
 router = APIRouter(prefix="/delivery", tags=["Entrega 1 local"])
 review_router = APIRouter(prefix="/delivery", tags=["Revisión ejecutiva local"])
@@ -61,7 +62,7 @@ def create_case_report(
 ):
     try:
         return service.generate(request)
-    except (DeliveryConflict, DeliveryBusy) as error:
+    except (DeliveryConflict, DeliveryBusy, Busy) as error:
         raise HTTPException(409, str(error)) from error
     except ValueError as error:
         raise HTTPException(400, str(error)) from error

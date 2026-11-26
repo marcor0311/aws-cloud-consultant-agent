@@ -31,6 +31,7 @@ def case_result(row):
         "case_id": snapshot["case_id"],
         "status": row["status"],
         "handoff": snapshot["technical"],
+        "engineering": snapshot.get("engineering"),
         "report": row["report"],
         "error": row["error"],
         "metrics": snapshot["metrics"],
@@ -61,7 +62,11 @@ class CaseReportService:
     def generate(self, request):
         identity = {
             "kind": "case_report",
-            "input": request.model_dump(mode="json"),
+            # Preserve request hashes of reports created before intake selection.
+            "input": request.model_dump(
+                mode="json",
+                exclude={"intake_id"} if request.intake_id is None else set(),
+            ),
             "operator": self.operator,
         }
         digest = sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
@@ -85,11 +90,17 @@ class CaseReportService:
                 snapshot = store.get()["request"]["snapshot"]
                 started = datetime.now(UTC)
                 sections = {
-                    "results": snapshot["technical"]["summary"]
+                    "results": snapshot["engineering"]["summary"]
+                    if snapshot.get("engineering")
+                    else snapshot["technical"]["summary"]
                     if snapshot["technical"]
                     else "Entrega técnica pendiente. Este informe consolida los registros disponibles del expediente.",
-                    "risks": "El informe es parcial. Los faltantes y las fuentes simuladas requieren conciliación antes del cierre.",
-                    "next_steps": "Completar arquitectura, FinOps y entrega técnica aprobada; revisar las mediciones y presentar el informe definitivo a dirección.",
+                    "risks": " ".join(snapshot["engineering"]["blockers"])
+                    if snapshot.get("engineering")
+                    else "El informe es parcial. Los faltantes y las fuentes simuladas requieren conciliación antes del cierre.",
+                    "next_steps": "Revisar los resultados importados, resolver fallos o pendientes, verificar baselines y obtener revisión e integración del PR de ingeniería."
+                    if snapshot.get("engineering")
+                    else "Completar arquitectura, FinOps y entrega técnica aprobada; revisar las mediciones y presentar el informe definitivo a dirección.",
                 }
                 with store.conn.transaction():
                     source = store.put_artifact(
@@ -114,6 +125,7 @@ class CaseReportService:
                         handoff_id=snapshot["technical"]["handoff_id"]
                         if snapshot["technical"]
                         else None,
+                        intake_id=request.intake_id,
                         artifact=artifact,
                         sources=source,
                         sections=sections,
@@ -142,3 +154,17 @@ class CaseReportService:
                     store.failed()
                 raise
             return case_result(store.get())
+
+    def read_engineering_file(self, report_id, file_sha256):
+        row = self.repository.get(report_id)
+        if not row or row["request"].get("kind") != "case_report":
+            raise LookupError("Informe por expediente no encontrado")
+        require_report_owner(row, self.operator)
+        engineering = row["request"]["snapshot"].get("engineering")
+        if not engineering or not any(
+            f["sha256"] == file_sha256 for f in engineering["files"]
+        ):
+            raise LookupError("Archivo no incluido en las fuentes de este informe")
+        return self.sources.engineering.read_file(
+            engineering["intake"]["intake_id"], file_sha256
+        )
