@@ -744,6 +744,21 @@ entregará al MCP del agente 5. La etapa 4 solo terminará cuando Ingeniería co
 la recepción de la revisión exacta. Reintentos no crearán issues ni handoffs
 duplicados.
 
+#### Resultado del incremento 15.7
+
+Implementados `EngineeringIssuePlan 1.0`, `EngineeringIssueReceipt 1.0`,
+`FinOpsEngineeringHandoff 1.0` y `EngineeringHandoffAcceptance 1.0`. Las tools MCP
+`preparar_issue_ingenieria`, `registrar_issue_ingenieria`,
+`obtener_handoff_ingenieria` y `registrar_aceptacion_handoff_ingenieria` separan el
+plan, la operación GitHub ejecutada por Codex y la recepción del agente 5.
+
+El issue y el handoff conservan arquitectura, revisión, SHA-256, issue y PR FinOps,
+merge commit, URLs verificadas de AWS Pricing Calculator, `forecast.xlsx`,
+manifiesto, resultado presupuestario, decisión y autorización. La entrega solo se
+libera después de registrar el issue correcto. El handoff durable stage 4 → stage
+5 es idempotente y la fase FinOps no se completa hasta recibir la aceptación exacta
+de Ingeniería.
+
 ### 15.8 — Webhooks, PostgreSQL y métricas
 
 FastAPI recibirá webhooks firmados de GitHub y los almacenará como observaciones.
@@ -755,6 +770,21 @@ Se medirán Lead Time y Process Time de FinOps, separando trabajo del agente,
 trabajo humano, espera y retrabajo. Los cierres con `requiere-ajustes` se
 registrarán como devolución; la fase termina solo al integrar los documentos
 aprobados y confirmar el handoff a Ingeniería.
+
+#### Resultado parcial 15.8
+
+El `WorkflowStore` compartido registra la fase 4, sesiones humanas y del agente,
+espera, retrabajo y el handoff stage 4 → stage 5. Las tools MCP
+`iniciar_trabajo_finops`, `finalizar_trabajo_finops` y
+`consultar_metricas_finops` exponen Lead Time, Process Time registrado, tiempo no
+registrado o de espera y ciclos de retrabajo sin inferir actividad desde GitHub.
+
+FastAPI entrega los webhooks GitHub firmados tanto a Arquitectura como a FinOps.
+FinOps vincula los eventos con sus PR e issues y los persiste como observaciones
+con `transitioned: false`; un webhook aislado nunca aprueba, integra ni completa la
+fase. Las pruebas actuales demuestran SQLite, reinicio local, firma y enrutamiento
+FastAPI. La validación contra una instancia PostgreSQL aislada continúa pendiente
+para el Paso 16 y no se presenta como completada.
 
 ### 15.9 — Pruebas y condiciones de aceptación
 

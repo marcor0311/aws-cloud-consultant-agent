@@ -140,4 +140,14 @@ async def github_event(request: Request, runtime: Runtime):
         if architecture is not None
         else {"status": "not_configured", "approved": False}
     )
-    return {"process": process_result, "architecture": architecture_result}
+    finops = getattr(runtime, "finops", None)
+    finops_result = (
+        finops.observe_github_event(delivery, url, kind, body.get("action"))
+        if finops is not None
+        else {"status": "not_configured", "transitioned": False}
+    )
+    return {
+        "process": process_result,
+        "architecture": architecture_result,
+        "finops": finops_result,
+    }

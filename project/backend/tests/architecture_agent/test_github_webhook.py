@@ -30,6 +30,15 @@ class ObservedArchitecture:
         return {"status": "linked", "approved": False}
 
 
+class ObservedFinOps:
+    def __init__(self):
+        self.calls = []
+
+    def observe_github_event(self, *args):
+        self.calls.append(args)
+        return {"status": "linked", "transitioned": False}
+
+
 def signed_headers(secret, payload, event, delivery="delivery-1"):
     raw = json.dumps(payload, separators=(",", ":")).encode()
     signature = "sha256=" + hmac.new(
@@ -47,12 +56,14 @@ def test_signed_review_and_check_webhooks_are_observed_without_approval():
     secret = "s" * 32
     process = ObservedProcess()
     architecture = ObservedArchitecture()
+    finops = ObservedFinOps()
     runtime = SimpleNamespace(
         settings=SimpleNamespace(
             github_secret=secret, github_repositories=["example/project"]
         ),
         process=process,
         architecture=architecture,
+        finops=finops,
     )
     app = FastAPI()
     app.include_router(router)
@@ -90,6 +101,11 @@ def test_signed_review_and_check_webhooks_are_observed_without_approval():
         "pull_request_review",
         "check_suite",
     ]
+    assert [call[2] for call in finops.calls] == [
+        "pull_request_review",
+        "check_suite",
+    ]
+    assert response.json()["finops"]["transitioned"] is False
     # observe_github records evidence only; it has no approval transition argument.
     assert all(len(call) == 7 for call in process.calls)
 

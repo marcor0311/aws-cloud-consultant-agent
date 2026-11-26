@@ -2,6 +2,12 @@
 
 from app.finops.analysis import FinOpsEconomicAnalysis, FinOpsEconomicAnalyzer
 from app.finops.calculator import CalculatorPreparation, PricingCalculatorPreparer
+from app.finops.engineering_delivery import (
+    EngineeringHandoffAcceptance,
+    EngineeringIssuePlan,
+    EngineeringIssueReceipt,
+    FinOpsEngineeringHandoff,
+)
 from app.finops.evidence import PricingCalculatorEvidence, S3ExportEvidenceBuilder
 from app.finops.github_delivery import (
     FinOpsCorrectionGitHubPlan,
@@ -22,11 +28,15 @@ from app.finops.workbook import ForecastWorkbookArtifact, ForecastWorkbookGenera
 
 __all__ = [
     "CalculatorPreparation",
+    "EngineeringHandoffAcceptance",
+    "EngineeringIssuePlan",
+    "EngineeringIssueReceipt",
     "FinOpsChatAuthorization",
     "FinOpsCorrectionGitHubPlan",
     "FinOpsCorrectionGitHubReceipt",
     "FinOpsCommentRequest",
     "FinOpsEvaluationDecision",
+    "FinOpsEngineeringHandoff",
     "FinOpsEconomicAnalysis",
     "FinOpsEconomicAnalyzer",
     "FinOpsIntake",

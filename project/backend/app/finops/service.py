@@ -12,6 +12,12 @@ from app.architecture.models import ArchitectureFinOpsHandoff
 from app.architecture.service import ArchitectureService
 from app.finops.analysis import FinOpsEconomicAnalyzer
 from app.finops.calculator import PricingCalculatorPreparer
+from app.finops.engineering_delivery import (
+    EngineeringHandoffAcceptance,
+    EngineeringIssuePlan,
+    EngineeringIssueReceipt,
+    FinOpsEngineeringHandoff,
+)
 from app.finops.evidence import PricingCalculatorEvidence
 from app.finops.github_delivery import (
     FinOpsCorrectionGitHubPlan,
@@ -103,6 +109,7 @@ class FinOpsIntakeService:
                 "artifact_sha256": handoff.artifact_sha256,
             },
         )
+        self.store.phase(case_id, "stage-4", self.actor_id)
         return {"duplicate": False, "intake": payload}
 
     def get(self, case_id, revision):
@@ -495,7 +502,7 @@ class FinOpsService:
                 f"finops-correction:{case_id}:{revision}:{request.request_id}",
                 case_id,
                 "finops.architecture_correction_requested",
-                payload,
+                {**payload, "requires_rework": True},
             )
         return {
             "duplicate": bool(previous),
@@ -587,6 +594,20 @@ class FinOpsService:
             raise ValueError("La corrección ya tiene otro recibo GitHub.")
         if not previous:
             self.store.put(receipt_key, "finops_correction_github_receipt", payload)
+            for url, kind in (
+                (validated.finops_issue_url, "finops_issue"),
+                (validated.correction_issue_url, "architecture_correction_issue"),
+            ):
+                self.store.put(
+                    "finops-github-url:" + hashlib.sha256(url.encode()).hexdigest(),
+                    "finops_github_link",
+                    {
+                        "case_id": case_id,
+                        "revision": revision,
+                        "url": url,
+                        "kind": kind,
+                    },
+                )
             self.store.event(
                 receipt_key,
                 case_id,
@@ -714,7 +735,291 @@ class FinOpsService:
             raise ValueError("La revisión FinOps ya tiene otro PR.")
         if not previous:
             self.store.put(key, "finops_github_pr", payload)
+            self.store.put(
+                "finops-github-url:"
+                + hashlib.sha256(validated.pull_request_url.encode()).hexdigest(),
+                "finops_github_link",
+                {
+                    "case_id": case_id,
+                    "revision": revision,
+                    "url": validated.pull_request_url,
+                    "kind": "pull_request",
+                },
+            )
         return {"duplicate": bool(previous), "receipt": payload}
+
+    def prepare_engineering_issue(self, case_id, revision, engineer):
+        intake = FinOpsIntake.model_validate(self.intakes.get(case_id, revision))
+        issue = self.store.get(f"finops-issue:{case_id}:{revision}")
+        plan = self.store.get(f"finops-github-plan:{case_id}:{revision}")
+        merge = self.store.get(f"finops-github-merge:{case_id}:{revision}")
+        workbook = self.store.get(f"finops-workbook-current:{case_id}:{revision}")
+        if not issue or not plan or not merge or not workbook:
+            raise ValueError("FinOps todavía no tiene publicación y merge completos.")
+        publication = plan["plan"]
+        decision = self.store.get(
+            f"finops-decision:{case_id}:{revision}:{publication['decision_id']}"
+        )
+        analysis = self.result(case_id, revision)["analysis"]
+        if (
+            not decision
+            or decision["contract_version"] != "1.1"
+            or decision["decision"] != "approved"
+            or not decision.get("authorization")
+            or analysis["operational_status"] != "ready_for_decision"
+            or not analysis["coverage"]["complete"]
+            or analysis["budget_result"] == "not_evaluable"
+            or workbook["status"] != "generated"
+        ):
+            raise ValueError(
+                "La entrega a Ingeniería requiere evaluación completa y autorizada."
+            )
+        estimate_urls = sorted(
+            {
+                evidence["estimate_url"]
+                for evidence in self._evidences(case_id, revision)
+                if evidence.get("status") == "verified" and evidence.get("estimate_url")
+            }
+        )
+        if not estimate_urls:
+            raise ValueError("La entrega a Ingeniería requiere estimaciones verificadas.")
+        manifest = next(
+            item for item in publication["files"] if item["path"].endswith("manifest.json")
+        )
+        body = (
+            f"FinOps completó la revisión {revision} del proyecto "
+            f"`{intake.project_id}`.\n\n"
+            f"Issue FinOps: {issue['issue_url']}\n\n"
+            f"PR de costos: {merge['pull_request_url']}\n\n"
+            f"Merge commit: `{merge['merge_commit_sha']}`\n\n"
+            f"Arquitectura: {issue['architecture_issue_url']}\n\n"
+            f"SHA-256 de Arquitectura: `{intake.handoff.artifact_sha256}`\n\n"
+            f"AWS Pricing Calculator: {', '.join(estimate_urls)}\n\n"
+            f"Forecast: `{workbook['relative_path']}` "
+            f"(`{workbook['file_sha256']}`)\n\n"
+            f"Resultado presupuestario: `{analysis['budget_result']}`."
+        )
+        issue_plan = EngineeringIssuePlan(
+            case_id=case_id,
+            project_id=intake.project_id,
+            architecture_revision=revision,
+            architecture_sha256=intake.handoff.artifact_sha256,
+            repository_url=issue["repository_url"],
+            finops_issue_url=issue["issue_url"],
+            finops_pull_request_url=merge["pull_request_url"],
+            finops_merge_commit_sha=merge["merge_commit_sha"],
+            engineer_github_username=engineer,
+            title=f"[Ingeniería] {intake.project_id} arquitectura y costos aprobados",
+            body=body,
+            body_sha256=hashlib.sha256(body.encode()).hexdigest(),
+            labels=["engineering", "finops-approved"],
+            assignees=[engineer],
+        ).model_dump(mode="json")
+        record = {"plan_sha256": self._digest(issue_plan), "plan": issue_plan}
+        key = f"finops-engineering-issue-plan:{case_id}:{revision}"
+        previous = self.store.get(key)
+        if previous and previous != record:
+            raise ValueError("El plan del issue de Ingeniería es inmutable.")
+        if not previous:
+            self.store.put(key, "finops_engineering_issue_plan", record)
+            self.store.put(
+                f"finops-engineering-manifest:{case_id}:{revision}",
+                "finops_current",
+                {"path": manifest["path"], "sha256": manifest["sha256"]},
+            )
+        return {"duplicate": bool(previous), **record}
+
+    def register_engineering_issue(self, case_id, revision, receipt):
+        validated = EngineeringIssueReceipt.model_validate(receipt)
+        record = self.store.get(f"finops-engineering-issue-plan:{case_id}:{revision}")
+        if not record:
+            raise ValueError("Primero se debe preparar el issue de Ingeniería.")
+        plan = record["plan"]
+        if (
+            validated.plan_sha256 != record["plan_sha256"]
+            or validated.issue_url
+            != f"{plan['repository_url']}/issues/{validated.issue_number}"
+            or validated.body_sha256 != plan["body_sha256"]
+            or validated.assignees != plan["assignees"]
+        ):
+            raise ValueError("El issue creado no corresponde al plan de Ingeniería.")
+        payload = validated.model_dump(mode="json")
+        key = f"finops-engineering-issue:{case_id}:{revision}"
+        previous = self.store.get(key)
+        if previous and previous != payload:
+            raise ValueError("La revisión ya tiene otro issue de Ingeniería.")
+        handoff_key = f"finops-engineering-handoff:{case_id}:{revision}"
+        if not previous:
+            self.store.put(key, "finops_engineering_issue", payload)
+            handoff = self._build_engineering_handoff(case_id, revision, payload)
+            self.store.put(
+                handoff_key,
+                "finops_engineering_handoff",
+                handoff,
+            )
+            self.store.create_handoff(
+                f"{case_id}:stage-4:stage-5:v{revision}",
+                case_id,
+                self.actor_id,
+                "engineering-agent",
+                "stage-4",
+                "stage-5",
+                revision=revision,
+                artifact_sha256=handoff["forecast_sha256"],
+            )
+            self.store.event(
+                f"finops-engineering-ready:{case_id}:{revision}",
+                case_id,
+                "finops.engineering_handoff_ready",
+                {"revision": revision, "issue_url": validated.issue_url},
+            )
+        return {
+            "duplicate": bool(previous),
+            "receipt": payload,
+            "handoff": self.store.get(handoff_key),
+        }
+
+    def _build_engineering_handoff(self, case_id, revision, issue_receipt):
+        intake = FinOpsIntake.model_validate(self.intakes.get(case_id, revision))
+        issue = self.store.get(f"finops-issue:{case_id}:{revision}")
+        merge = self.store.get(f"finops-github-merge:{case_id}:{revision}")
+        publication = self.store.get(f"finops-github-plan:{case_id}:{revision}")["plan"]
+        workbook = self.store.get(f"finops-workbook-current:{case_id}:{revision}")
+        analysis = self.result(case_id, revision)["analysis"]
+        manifest = self.store.get(f"finops-engineering-manifest:{case_id}:{revision}")
+        decision = self.store.get(
+            f"finops-decision:{case_id}:{revision}:{publication['decision_id']}"
+        )
+        return FinOpsEngineeringHandoff(
+            case_id=case_id,
+            project_id=intake.project_id,
+            architecture_revision=revision,
+            architecture_sha256=intake.handoff.artifact_sha256,
+            finops_issue_url=issue["issue_url"],
+            engineering_issue_url=issue_receipt["issue_url"],
+            finops_pull_request_url=merge["pull_request_url"],
+            finops_merge_commit_sha=merge["merge_commit_sha"],
+            estimate_urls=sorted(
+                evidence["estimate_url"]
+                for evidence in self._evidences(case_id, revision)
+                if evidence.get("status") == "verified" and evidence.get("estimate_url")
+            ),
+            forecast_path=workbook["relative_path"],
+            forecast_sha256=workbook["file_sha256"],
+            manifest_path=manifest["path"],
+            budget_result=analysis["budget_result"],
+            decision_id=decision["decision_id"],
+            authorization_id=decision["authorization"]["authorization_id"],
+            created_at=datetime.fromtimestamp(self.store.clock(), timezone.utc),
+        ).model_dump(mode="json")
+
+    def get_engineering_handoff(self, case_id, revision):
+        payload = self.store.get(f"finops-engineering-handoff:{case_id}:{revision}")
+        if not payload:
+            raise ValueError("La entrega a Ingeniería todavía no existe.")
+        return FinOpsEngineeringHandoff.model_validate(payload).model_dump(mode="json")
+
+    def accept_engineering_handoff(self, case_id, revision, receipt):
+        validated = EngineeringHandoffAcceptance.model_validate(receipt)
+        handoff = FinOpsEngineeringHandoff.model_validate(
+            self.get_engineering_handoff(case_id, revision)
+        )
+        if (
+            validated.case_id != case_id
+            or validated.architecture_revision != revision
+            or validated.architecture_sha256 != handoff.architecture_sha256
+        ):
+            raise ValueError("La aceptación corresponde a otra entrega de Ingeniería.")
+        key = f"finops-engineering-acceptance:{case_id}:{revision}"
+        payload = validated.model_dump(mode="json")
+        previous = self.store.get(key)
+        if previous and previous != payload:
+            raise ValueError("La entrega ya tiene otra aceptación de Ingeniería.")
+        if not previous:
+            self.store.accept_handoff(
+                f"{case_id}:stage-4:stage-5:v{revision}",
+                validated.accepted_by,
+                validated.accepted_at.timestamp(),
+                acting_for="engineering-agent",
+            )
+            self.store.put(key, "finops_engineering_acceptance", payload)
+            self.store.complete_phase(case_id, "stage-4")
+            self.store.event(
+                f"finops-engineering-accepted:{case_id}:{revision}",
+                case_id,
+                "finops.engineering_handoff_accepted",
+                payload,
+            )
+        return {"duplicate": bool(previous), "acceptance": payload}
+
+    def start_work(self, case_id, actor, actor_type):
+        self.intakes.get(case_id, self._current_revision(case_id))
+        return {
+            "session_id": self.store.start_work(
+                case_id, "stage-4", actor, actor_type
+            )
+        }
+
+    def stop_work(self, session_id, actor):
+        self.store.stop_work(session_id, actor)
+        return {"session_id": session_id, "status": "closed"}
+
+    def metrics(self, case_id):
+        stored = self.store.metrics(case_id)
+        phase = next(
+            (item for item in stored["phases"] if item["phase"] == "stage-4"),
+            None,
+        )
+        handoffs = [
+            item
+            for item in stored["handoffs"]
+            if item["from_phase"] == "stage-4" and item["to_phase"] == "stage-5"
+        ]
+        return {
+            "contract_version": "1.0",
+            "case_id": case_id,
+            "lead_time_seconds": phase["lead_seconds"] if phase else 0.0,
+            "process_time_seconds": (
+                phase["recorded_effort_seconds"]
+                if phase
+                else {"agent": 0.0, "human": 0.0}
+            ),
+            "wait_time_seconds": phase["unrecorded_or_wait_seconds"] if phase else 0.0,
+            "in_progress": phase["in_progress"] if phase else True,
+            "rework_cycles": stored["rework_cycles"],
+            "engineering_handoffs": handoffs,
+            "coverage": "recorded_intervals_only; no inferred activity from GitHub",
+        }
+
+    def observe_github_event(self, delivery_id, url, kind, action):
+        link = self.store.get(
+            "finops-github-url:" + hashlib.sha256(url.encode()).hexdigest()
+        )
+        if not link:
+            return {"status": "unlinked", "transitioned": False}
+        payload = {
+            "delivery_id": delivery_id,
+            "url": url,
+            "event": kind,
+            "action": action,
+            "signature_verified": True,
+            "transitioned": False,
+        }
+        self.store.event(
+            f"finops-github-webhook:{delivery_id}:{link['case_id']}",
+            link["case_id"],
+            "finops.github_webhook_observed",
+            payload,
+        )
+        return {"status": "linked", **payload, **link}
+
+    def _current_revision(self, case_id):
+        intakes = [
+            item for item in self.store.list("finops_intake") if item["case_id"] == case_id
+        ]
+        if not intakes:
+            raise ValueError("El expediente no tiene recepción FinOps.")
+        return max(item["handoff"]["revision"] for item in intakes)
 
     def register_github_merge(self, case_id, revision, receipt):
         validated = FinOpsGitHubMergeReceipt.model_validate(receipt)

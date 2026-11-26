@@ -195,6 +195,54 @@ def create_server(service):
         return call(service.register_github_merge, expediente_id, revision, recibo)
 
     @server.tool()
+    def preparar_issue_ingenieria(
+        expediente_id: str, revision: int, responsable_github: str
+    ) -> dict[str, Any]:
+        """Prepara el issue para Ingeniería únicamente después del merge FinOps."""
+        return call(
+            service.prepare_engineering_issue,
+            expediente_id,
+            revision,
+            responsable_github,
+        )
+
+    @server.tool()
+    def registrar_issue_ingenieria(
+        expediente_id: str, revision: int, recibo: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Valida el issue creado por Codex y libera el handoff a Ingeniería."""
+        return call(service.register_engineering_issue, expediente_id, revision, recibo)
+
+    @server.tool()
+    def obtener_handoff_ingenieria(expediente_id: str, revision: int) -> dict:
+        """Entrega a Codex el contrato exacto listo para el MCP de Ingeniería."""
+        return call(service.get_engineering_handoff, expediente_id, revision)
+
+    @server.tool()
+    def registrar_aceptacion_handoff_ingenieria(
+        expediente_id: str, revision: int, recibo: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Registra la recepción exacta y completa la etapa FinOps."""
+        return call(service.accept_engineering_handoff, expediente_id, revision, recibo)
+
+    @server.tool()
+    def iniciar_trabajo_finops(
+        expediente_id: str, actor: str, tipo_actor: str
+    ) -> dict[str, Any]:
+        """Inicia un intervalo medido de trabajo humano o del agente."""
+        return call(service.start_work, expediente_id, actor, tipo_actor)
+
+    @server.tool()
+    def finalizar_trabajo_finops(session_id: str, actor: str) -> dict[str, Any]:
+        """Cierra un intervalo medido sin inferir actividad no registrada."""
+        return call(service.stop_work, session_id, actor)
+
+    @server.tool()
+    def consultar_metricas_finops(expediente_id: str) -> dict:
+        """Consulta Lead Time, Process Time, espera, retrabajo y handoffs."""
+        return call(service.metrics, expediente_id)
+
+    @server.tool()
     def consultar_historial_finops(expediente_id: str, revision: int) -> dict:
         """Consulta recepción, plan, evidencias, análisis, decisiones y correcciones."""
         return call(service.history, expediente_id, revision)

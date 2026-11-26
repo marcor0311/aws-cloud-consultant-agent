@@ -300,6 +300,12 @@ def create_runtime(
             architect_id="cloud-solutions-architect",
             github_required=True,
         )
+        from app.finops.service import FinOpsService
+
+        finops = FinOpsService(
+            store,
+            output_dir=(settings.documents_dir or project_path("data")) / "finops",
+        )
         from app.integrations.processed_documents import ProcessedDocuments
         from app.preparation.processing import ProcessedMeeting
 
@@ -339,6 +345,7 @@ def create_runtime(
             worker_lock=LocalWorkerLock(settings.database_url),
             resources=resources,
             architecture=architecture,
+            finops=finops,
             mock_clock=mock_clock,
             client_lookup=client_lookup,
         )

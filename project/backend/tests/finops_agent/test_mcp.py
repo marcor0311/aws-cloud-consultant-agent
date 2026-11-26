@@ -236,6 +236,13 @@ def test_dedicated_finops_server_exposes_only_finops_tools(tmp_path):
             "preparar_publicacion_finops_github",
             "registrar_pr_finops_github",
             "registrar_merge_finops_github",
+            "preparar_issue_ingenieria",
+            "registrar_issue_ingenieria",
+            "obtener_handoff_ingenieria",
+            "registrar_aceptacion_handoff_ingenieria",
+            "iniciar_trabajo_finops",
+            "finalizar_trabajo_finops",
+            "consultar_metricas_finops",
             "consultar_historial_finops",
         }
     finally:
@@ -420,6 +427,148 @@ def test_finops_blocks_cost_pr_while_evaluation_is_partial(tmp_path):
         store.engine.dispose()
 
 
+def test_finops_delivers_merged_costs_to_engineering_and_measures_work(tmp_path):
+    database, store, service, handoff = service_at(tmp_path)
+    try:
+        service.receive_handoff("block-c-s3", handoff)
+        seed_finops_issue(store, service, handoff)
+        service.register_evidence(
+            "block-c-s3", 1, json.loads(EVIDENCE.read_text("utf-8"))
+        )
+        analysis_record = service.run_analysis("block-c-s3", 1)
+        workbook = service.generate_workbook("block-c-s3", 1)["workbook"]
+
+        complete = analysis_record["analysis"]
+        complete["operational_status"] = "ready_for_decision"
+        complete["budget_result"] = "within_budget"
+        complete["coverage"] = {
+            **complete["coverage"],
+            "verified_resources": complete["coverage"]["expected_resources"],
+            "resource_coverage_percent": "100.00",
+            "verified_dimensions": complete["coverage"]["expected_dimensions"],
+            "dimension_coverage_percent": "100.00",
+            "pending_resources": [],
+            "pending_dimensions": [],
+            "excluded_costs": [],
+            "complete": True,
+        }
+        store.put(
+            "finops-current-analysis:block-c-s3:1",
+            "finops_current",
+            {**analysis_record, "analysis": complete},
+        )
+        store.put(
+            "finops-workbook-current:block-c-s3:1",
+            "finops_current",
+            {**workbook, "status": "generated", "pending_resources": []},
+        )
+        decision = {
+            "contract_version": "1.1",
+            "decision_id": "decision-engineering-ready",
+            "case_id": "block-c-s3",
+            "project_id": handoff["architecture"]["project_id"],
+            "architecture_revision": 1,
+            "architecture_sha256": handoff["artifact_sha256"],
+            "evaluation_reference": analysis_record["reference"],
+            "budget_result": "within_budget",
+            "decision": "approved",
+            "rationale": "Fixture de integración para el handoff a Ingeniería.",
+            "decided_by": "finops-analyst",
+            "decided_at": datetime.now(timezone.utc).isoformat(),
+            "authorization_reference": None,
+            "authorization": {
+                "contract_version": "1.0",
+                "authorization_id": "authorization-engineering-ready",
+                "case_id": "block-c-s3",
+                "project_id": handoff["architecture"]["project_id"],
+                "architecture_revision": 1,
+                "architecture_sha256": handoff["artifact_sha256"],
+                "evaluation_reference": analysis_record["reference"],
+                "authorized_by": "finops-analyst",
+                "authorized_at": datetime.now(timezone.utc).isoformat(),
+                "conversation_reference": "codex://threads/finops-engineering",
+                "statement_sha256": "d" * 64,
+            },
+        }
+        store.put(
+            "finops-decision:block-c-s3:1:decision-engineering-ready",
+            "finops_evaluation_decision",
+            decision,
+        )
+        manifest_path = "docs/04-finops/versions/v001/manifest.json"
+        store.put(
+            "finops-github-plan:block-c-s3:1",
+            "finops_github_plan",
+            {
+                "plan_sha256": "e" * 64,
+                "plan": {
+                    "decision_id": "decision-engineering-ready",
+                    "authorization_id": "authorization-engineering-ready",
+                    "files": [{"path": manifest_path, "sha256": "f" * 64}],
+                },
+            },
+        )
+        store.put(
+            "finops-github-merge:block-c-s3:1",
+            "finops_github_merge",
+            {
+                "pull_request_url": "https://github.com/example/project/pull/20",
+                "merge_commit_sha": "1" * 40,
+            },
+        )
+
+        work = service.start_work("block-c-s3", "finops-agent", "agent")
+        service.stop_work(work["session_id"], "finops-agent")
+        plan = service.prepare_engineering_issue(
+            "block-c-s3", 1, "infrastructure-engineer"
+        )
+        receipt = {
+            "plan_sha256": plan["plan_sha256"],
+            "issue_url": "https://github.com/example/project/issues/22",
+            "issue_number": 22,
+            "body_sha256": plan["plan"]["body_sha256"],
+            "assignees": ["infrastructure-engineer"],
+            "state": "open",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        registered = service.register_engineering_issue("block-c-s3", 1, receipt)
+        assert registered["duplicate"] is False
+        assert registered["handoff"]["forecast_path"] == workbook["relative_path"]
+        assert service.register_engineering_issue("block-c-s3", 1, receipt)[
+            "duplicate"
+        ] is True
+        acceptance = {
+            "case_id": "block-c-s3",
+            "architecture_revision": 1,
+            "architecture_sha256": handoff["artifact_sha256"],
+            "accepted_by": "codex-engineering",
+            "accepted_at": datetime.now(timezone.utc).isoformat(),
+            "engineering_reference": "engineering://block-c-s3/intakes/1",
+        }
+        assert service.accept_engineering_handoff(
+            "block-c-s3", 1, acceptance
+        )["duplicate"] is False
+        assert service.accept_engineering_handoff(
+            "block-c-s3", 1, acceptance
+        )["duplicate"] is True
+        metrics = service.metrics("block-c-s3")
+        assert metrics["in_progress"] is False
+        assert metrics["process_time_seconds"]["agent"] >= 0
+        assert metrics["engineering_handoffs"][0]["pending_acceptance"] is False
+        store.engine.dispose()
+        restarted_store = WorkflowStore(database)
+        restarted = FinOpsService(
+            restarted_store, output_dir=tmp_path / "artifacts"
+        )
+        assert restarted.get_engineering_handoff("block-c-s3", 1) == registered[
+            "handoff"
+        ]
+        assert restarted.metrics("block-c-s3")["in_progress"] is False
+        restarted_store.engine.dispose()
+    finally:
+        store.engine.dispose()
+
+
 async def protocol_exchange(database, handoff):
     parameters = StdioServerParameters(
         command=sys.executable,
@@ -528,6 +677,13 @@ def test_real_stdio_protocol_initializes_lists_and_calls_tool(tmp_path):
         "preparar_publicacion_finops_github",
         "registrar_pr_finops_github",
         "registrar_merge_finops_github",
+        "preparar_issue_ingenieria",
+        "registrar_issue_ingenieria",
+        "obtener_handoff_ingenieria",
+        "registrar_aceptacion_handoff_ingenieria",
+        "iniciar_trabajo_finops",
+        "finalizar_trabajo_finops",
+        "consultar_metricas_finops",
         "ejecutar_analisis_finops",
         "emitir_decision_finops",
     }
