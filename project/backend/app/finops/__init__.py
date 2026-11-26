@@ -3,6 +3,13 @@
 from app.finops.analysis import FinOpsEconomicAnalysis, FinOpsEconomicAnalyzer
 from app.finops.calculator import CalculatorPreparation, PricingCalculatorPreparer
 from app.finops.evidence import PricingCalculatorEvidence, S3ExportEvidenceBuilder
+from app.finops.github_delivery import (
+    FinOpsCorrectionGitHubPlan,
+    FinOpsCorrectionGitHubReceipt,
+    FinOpsGitHubMergeReceipt,
+    FinOpsGitHubPublicationPlan,
+    FinOpsGitHubPullRequestReceipt,
+)
 from app.finops.models import (
     FinOpsChatAuthorization,
     FinOpsCommentRequest,
@@ -16,6 +23,8 @@ from app.finops.workbook import ForecastWorkbookArtifact, ForecastWorkbookGenera
 __all__ = [
     "CalculatorPreparation",
     "FinOpsChatAuthorization",
+    "FinOpsCorrectionGitHubPlan",
+    "FinOpsCorrectionGitHubReceipt",
     "FinOpsCommentRequest",
     "FinOpsEvaluationDecision",
     "FinOpsEconomicAnalysis",
@@ -23,6 +32,9 @@ __all__ = [
     "FinOpsIntake",
     "FinOpsIssueSnapshot",
     "FinOpsIntakeService",
+    "FinOpsGitHubMergeReceipt",
+    "FinOpsGitHubPublicationPlan",
+    "FinOpsGitHubPullRequestReceipt",
     "FinOpsService",
     "PricingCalculatorPreparer",
     "PricingCalculatorEvidence",

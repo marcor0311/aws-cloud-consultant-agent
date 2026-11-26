@@ -693,6 +693,17 @@ Si el diseño requiere cambios:
 Los MCP no se invocarán directamente entre sí: Codex transportará la solicitud y
 los recibos sin recalcular costos.
 
+#### Resultado del incremento 15.5
+
+Implementados los contratos `FinOpsCorrectionGitHubPlan 1.0` y
+`FinOpsCorrectionGitHubReceipt 1.0`, junto con las tools MCP
+`preparar_devolucion_github` y `registrar_devolucion_github`. El plan exige cerrar
+el issue FinOps con `requiere-ajustes`, conservar el comentario y la evaluación y
+crear en el mismo repositorio un issue asignado al arquitecto con recursos,
+revisión, SHA-256 y enlaces anteriores. Codex ejecutará esas acciones mediante
+GitHub MCP y devolverá el recibo exacto. Planes y recibos son inmutables e
+idempotentes; no existe comunicación directa entre los dos agentes.
+
 ### 15.6 — Autorizar, publicar e integrar el PR de costos
 
 Si la cobertura está completa y el análisis es coherente, la persona de FinOps
@@ -705,6 +716,21 @@ si los checks y las reglas de la rama lo permiten. No se exigirá revisión del
 arquitecto para el PR FinOps y no se intentará registrar una autoaprobación de
 GitHub, porque GitHub no permite aprobar el PR propio. El merge y los archivos se
 confirmarán mediante un recibo verificable antes de avanzar.
+
+#### Resultado parcial 15.6
+
+Implementados los contratos de plan de publicación, archivos, PR, checks y merge,
+y las tools MCP `preparar_publicacion_finops_github`,
+`registrar_pr_finops_github` y `registrar_merge_finops_github`. El plan publica
+`forecast.xlsx`, análisis, evidencias y manifiesto bajo la revisión versionada y
+valida ruta, contenido y SHA-256. Solo acepta una decisión 1.1 `approved` con
+autorización de chat tipada, cobertura completa y workbook completo. El recibo de
+merge exige checks exitosos, issue cerrado y `github_self_approval: false`.
+
+El caso actual S3 + KMS pendiente queda bloqueado antes de crear el plan de PR,
+como corresponde. La ejecución real del PR y merge permanece pendiente de una
+evaluación completa, credenciales, reglas de rama y autorización para operar
+GitHub; no se presenta la prueba negativa actual como una publicación remota.
 
 ### 15.7 — Cerrar FinOps y entregar a Ingeniería
 

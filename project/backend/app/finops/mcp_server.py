@@ -132,6 +132,69 @@ def create_server(service):
         return call(service.correction_request, expediente_id, revision, solicitud)
 
     @server.tool()
+    def preparar_devolucion_github(
+        expediente_id: str,
+        revision: int,
+        solicitud_id: str,
+        arquitecto_github: str,
+    ) -> dict[str, Any]:
+        """Prepara cierre requiere-ajustes y nuevo issue; Codex ejecuta el plan."""
+        return call(
+            service.prepare_correction_github,
+            expediente_id,
+            revision,
+            solicitud_id,
+            arquitecto_github,
+        )
+
+    @server.tool()
+    def registrar_devolucion_github(
+        expediente_id: str,
+        revision: int,
+        solicitud_id: str,
+        recibo: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Valida el cierre FinOps y el issue de corrección creados por Codex."""
+        return call(
+            service.register_correction_github,
+            expediente_id,
+            revision,
+            solicitud_id,
+            recibo,
+        )
+
+    @server.tool()
+    def preparar_publicacion_finops_github(
+        expediente_id: str, revision: int, decision_id: str
+    ) -> dict[str, Any]:
+        """Prepara archivos y PR solo para una evaluación completa autorizada."""
+        return call(
+            service.prepare_github_publication,
+            expediente_id,
+            revision,
+            decision_id,
+        )
+
+    @server.tool()
+    def registrar_pr_finops_github(
+        expediente_id: str, revision: int, recibo: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Valida el PR abierto por Codex contra archivos y hashes planificados."""
+        return call(
+            service.register_github_pull_request,
+            expediente_id,
+            revision,
+            recibo,
+        )
+
+    @server.tool()
+    def registrar_merge_finops_github(
+        expediente_id: str, revision: int, recibo: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Valida checks, merge y cierre del issue sin autoaprobación GitHub."""
+        return call(service.register_github_merge, expediente_id, revision, recibo)
+
+    @server.tool()
     def consultar_historial_finops(expediente_id: str, revision: int) -> dict:
         """Consulta recepción, plan, evidencias, análisis, decisiones y correcciones."""
         return call(service.history, expediente_id, revision)

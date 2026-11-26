@@ -231,6 +231,11 @@ def test_dedicated_finops_server_exposes_only_finops_tools(tmp_path):
             "preparar_comentario_finops",
             "emitir_decision_finops",
             "generar_solicitud_correccion_arquitectura",
+            "preparar_devolucion_github",
+            "registrar_devolucion_github",
+            "preparar_publicacion_finops_github",
+            "registrar_pr_finops_github",
+            "registrar_merge_finops_github",
             "consultar_historial_finops",
         }
     finally:
@@ -317,6 +322,100 @@ def test_finops_generates_one_versioned_workbook_and_comment_draft(tmp_path):
                 "architect_github_username": "cloud-architect",
             },
         )["duplicate"] is True
+    finally:
+        store.engine.dispose()
+
+
+def test_finops_prepares_and_registers_github_correction_without_duplicates(tmp_path):
+    _, store, service, handoff = service_at(tmp_path)
+    try:
+        service.receive_handoff("block-c-s3", handoff)
+        seed_finops_issue(store, service, handoff)
+        service.register_evidence(
+            "block-c-s3", 1, json.loads(EVIDENCE.read_text("utf-8"))
+        )
+        analysis = service.run_analysis("block-c-s3", 1)
+        decision = decision_payload(
+            analysis["reference"],
+            handoff,
+            "architecture_correction_required",
+            "decision-github-correction",
+        )
+        service.decide("block-c-s3", 1, decision)
+        request = {
+            "request_id": "correction-github-kms",
+            "architecture_id": "block-c-s3",
+            "project_id": handoff["architecture"]["project_id"],
+            "source_revision": 1,
+            "reason": "KMS no tiene una estimación completa.",
+            "affected_resources": ["documents-key"],
+            "affected_dimensions": [
+                {"resource_id": "documents-key", "dimension_id": "customer-key"}
+            ],
+            "requested_changes": ["Confirmar consumo y configuración de KMS."],
+            "new_constraints": ["Conservar cifrado en reposo."],
+            "finops_evaluation_reference": analysis["reference"],
+            "requested_at": datetime.now(timezone.utc).isoformat(),
+            "requested_by": "finops-agent",
+            "origin": "finops",
+        }
+        service.correction_request("block-c-s3", 1, request)
+
+        prepared = service.prepare_correction_github(
+            "block-c-s3", 1, "correction-github-kms", "cloud-architect"
+        )
+        assert prepared["plan"]["close_with_label"] == "requiere-ajustes"
+        assert prepared["plan"]["correction_issue_assignees"] == [
+            "cloud-architect"
+        ]
+        assert handoff["source_issue"] in prepared["plan"]["correction_issue_body"]
+        receipt = {
+            "plan_sha256": prepared["plan_sha256"],
+            "finops_issue_url": prepared["plan"]["finops_issue_url"],
+            "finops_issue_state": "closed",
+            "finops_issue_labels": ["finops", "requiere-ajustes"],
+            "finops_closing_comment_sha256": prepared["plan"][
+                "closing_comment_sha256"
+            ],
+            "correction_issue_url": "https://github.com/example/project/issues/21",
+            "correction_issue_number": 21,
+            "correction_issue_body_sha256": prepared["plan"][
+                "correction_issue_body_sha256"
+            ],
+            "correction_issue_assignees": ["cloud-architect"],
+            "executed_at": datetime.now(timezone.utc).isoformat(),
+        }
+        assert service.register_correction_github(
+            "block-c-s3", 1, "correction-github-kms", receipt
+        )["duplicate"] is False
+        assert service.register_correction_github(
+            "block-c-s3", 1, "correction-github-kms", receipt
+        )["duplicate"] is True
+    finally:
+        store.engine.dispose()
+
+
+def test_finops_blocks_cost_pr_while_evaluation_is_partial(tmp_path):
+    _, store, service, handoff = service_at(tmp_path)
+    try:
+        service.receive_handoff("block-c-s3", handoff)
+        seed_finops_issue(store, service, handoff)
+        service.register_evidence(
+            "block-c-s3", 1, json.loads(EVIDENCE.read_text("utf-8"))
+        )
+        analysis = service.run_analysis("block-c-s3", 1)
+        service.generate_workbook("block-c-s3", 1)
+        decision = decision_payload(
+            analysis["reference"],
+            handoff,
+            "information_required",
+            "decision-partial-information",
+        )
+        service.decide("block-c-s3", 1, decision)
+        with pytest.raises(ValueError, match="evaluación completa y autorizada"):
+            service.prepare_github_publication(
+                "block-c-s3", 1, "decision-partial-information"
+            )
     finally:
         store.engine.dispose()
 
@@ -422,6 +521,13 @@ def test_real_stdio_protocol_initializes_lists_and_calls_tool(tmp_path):
         "recibir_handoff_arquitectura",
         "validar_issue_finops",
         "generar_estimacion_aws",
+        "generar_excel_costos",
+        "preparar_comentario_finops",
+        "preparar_devolucion_github",
+        "registrar_devolucion_github",
+        "preparar_publicacion_finops_github",
+        "registrar_pr_finops_github",
+        "registrar_merge_finops_github",
         "ejecutar_analisis_finops",
         "emitir_decision_finops",
     }

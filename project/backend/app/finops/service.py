@@ -1,5 +1,6 @@
 """Intake boundary for the Cloud FinOps Agent."""
 
+import base64
 import hashlib
 import json
 from datetime import datetime, timezone
@@ -12,6 +13,14 @@ from app.architecture.service import ArchitectureService
 from app.finops.analysis import FinOpsEconomicAnalyzer
 from app.finops.calculator import PricingCalculatorPreparer
 from app.finops.evidence import PricingCalculatorEvidence
+from app.finops.github_delivery import (
+    FinOpsCorrectionGitHubPlan,
+    FinOpsCorrectionGitHubReceipt,
+    FinOpsGitHubFile,
+    FinOpsGitHubMergeReceipt,
+    FinOpsGitHubPublicationPlan,
+    FinOpsGitHubPullRequestReceipt,
+)
 from app.finops.models import (
     FinOpsCommentRequest,
     FinOpsEvaluationDecision,
@@ -496,6 +505,244 @@ class FinOpsService:
             "target_tool": "solicitar_correccion_finops",
         }
 
+    def prepare_correction_github(self, case_id, revision, request_id, architect):
+        intake = FinOpsIntake.model_validate(self.intakes.get(case_id, revision))
+        issue = self.store.get(f"finops-issue:{case_id}:{revision}")
+        request = self.store.get(f"finops-correction:{case_id}:{revision}:{request_id}")
+        if not issue or not request:
+            raise ValueError("Faltan el issue FinOps o la solicitud de corrección.")
+        analysis = self.result(case_id, revision)
+        affected = ", ".join(request["affected_resources"])
+        closing = (
+            f"Se requiere ajustar la Arquitectura. Solicitud: `{request_id}`.\n\n"
+            f"Motivo: {request['reason']}\n\n"
+            f"Evaluación: {analysis['reference']}"
+        )
+        body = (
+            f"@{architect} FinOps solicita una nueva revisión de Arquitectura.\n\n"
+            f"Issue FinOps cerrado: {issue['issue_url']}\n\n"
+            f"Issue de Arquitectura anterior: {issue['architecture_issue_url']}\n\n"
+            f"Revisión afectada: {revision}; SHA-256: "
+            f"`{issue['architecture_sha256']}`\n\n"
+            f"Recursos afectados: {affected}\n\n"
+            f"Motivo: {request['reason']}\n\n"
+            "Cambios solicitados:\n- "
+            + "\n- ".join(request["requested_changes"])
+            + f"\n\nEvaluación: {analysis['reference']}"
+        )
+        plan = FinOpsCorrectionGitHubPlan(
+            case_id=case_id,
+            project_id=intake.project_id,
+            architecture_revision=revision,
+            architecture_sha256=issue["architecture_sha256"],
+            correction_request_id=request_id,
+            repository_url=issue["repository_url"],
+            finops_issue_url=issue["issue_url"],
+            closing_comment=closing,
+            closing_comment_sha256=hashlib.sha256(closing.encode()).hexdigest(),
+            architect_github_username=architect,
+            correction_issue_title=(
+                f"[Arquitectura] Corrección FinOps v{revision:03d}"
+            ),
+            correction_issue_body=body,
+            correction_issue_labels=["architecture", "architecture-correction"],
+            correction_issue_assignees=[architect],
+            correction_issue_body_sha256=hashlib.sha256(body.encode()).hexdigest(),
+        ).model_dump(mode="json")
+        record = {"plan_sha256": self._digest(plan), "plan": plan}
+        key = f"finops-correction-github-plan:{case_id}:{revision}:{request_id}"
+        previous = self.store.get(key)
+        if previous and previous != record:
+            raise ValueError("El plan GitHub de corrección es inmutable.")
+        if not previous:
+            self.store.put(key, "finops_correction_github_plan", record)
+        return {"duplicate": bool(previous), **record}
+
+    def register_correction_github(self, case_id, revision, request_id, receipt):
+        validated = FinOpsCorrectionGitHubReceipt.model_validate(receipt)
+        key = f"finops-correction-github-plan:{case_id}:{revision}:{request_id}"
+        record = self.store.get(key)
+        if not record:
+            raise ValueError("Primero se debe preparar el plan GitHub de corrección.")
+        plan = record["plan"]
+        if (
+            validated.plan_sha256 != record["plan_sha256"]
+            or validated.finops_issue_url != plan["finops_issue_url"]
+            or "requiere-ajustes" not in validated.finops_issue_labels
+            or validated.finops_closing_comment_sha256
+            != plan["closing_comment_sha256"]
+            or validated.correction_issue_body_sha256
+            != plan["correction_issue_body_sha256"]
+            or validated.correction_issue_assignees
+            != plan["correction_issue_assignees"]
+            or not validated.correction_issue_url.startswith(
+                plan["repository_url"] + "/issues/"
+            )
+        ):
+            raise ValueError("El recibo GitHub no corresponde al plan de corrección.")
+        payload = validated.model_dump(mode="json")
+        receipt_key = f"finops-correction-github:{case_id}:{revision}:{request_id}"
+        previous = self.store.get(receipt_key)
+        if previous and previous != payload:
+            raise ValueError("La corrección ya tiene otro recibo GitHub.")
+        if not previous:
+            self.store.put(receipt_key, "finops_correction_github_receipt", payload)
+            self.store.event(
+                receipt_key,
+                case_id,
+                "finops.correction_published",
+                payload,
+            )
+        return {"duplicate": bool(previous), "receipt": payload}
+
+    def prepare_github_publication(self, case_id, revision, decision_id):
+        issue = self.store.get(f"finops-issue:{case_id}:{revision}")
+        analysis_record = self.result(case_id, revision)
+        workbook = self.store.get(f"finops-workbook-current:{case_id}:{revision}")
+        decision = self.store.get(f"finops-decision:{case_id}:{revision}:{decision_id}")
+        if not issue or not workbook or not decision:
+            raise ValueError("Faltan issue, forecast.xlsx o decisión FinOps.")
+        analysis = analysis_record["analysis"]
+        if (
+            decision["contract_version"] != "1.1"
+            or decision["decision"] != "approved"
+            or not decision.get("authorization")
+            or analysis["operational_status"] != "ready_for_decision"
+            or not analysis["coverage"]["complete"]
+            or analysis["budget_result"] == "not_evaluable"
+            or workbook["status"] != "generated"
+        ):
+            raise ValueError("La publicación exige evaluación completa y autorizada.")
+        prefix = f"docs/04-finops/versions/v{revision:03d}"
+        workbook_path = self.output_dir / workbook["relative_path"]
+        if not workbook_path.is_file():
+            raise ValueError("forecast.xlsx no existe en la ruta persistida.")
+        workbook_raw = workbook_path.read_bytes()
+        if hashlib.sha256(workbook_raw).hexdigest() != workbook["file_sha256"]:
+            raise ValueError("forecast.xlsx no coincide con su registro persistido.")
+        analysis_raw = (json.dumps(analysis_record, ensure_ascii=False, indent=2) + "\n").encode()
+        evidence_raw = (
+            json.dumps(self._evidences(case_id, revision), ensure_ascii=False, indent=2)
+            + "\n"
+        ).encode()
+        raw_files = {
+            "forecast.xlsx": workbook_raw,
+            "analysis.json": analysis_raw,
+            "pricing-evidence.json": evidence_raw,
+        }
+        manifest = {
+            "contract_version": "1.0",
+            "project_id": analysis["project_id"],
+            "architecture_revision": revision,
+            "architecture_sha256": analysis["architecture_sha256"],
+            "decision_id": decision_id,
+            "authorization_id": decision["authorization"]["authorization_id"],
+            "files": [
+                {"path": name, "sha256": hashlib.sha256(raw).hexdigest()}
+                for name, raw in sorted(raw_files.items())
+            ],
+        }
+        raw_files["manifest.json"] = (
+            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n"
+        ).encode()
+        files = [
+            FinOpsGitHubFile(
+                path=f"{prefix}/{name}",
+                encoding="base64" if name.endswith(".xlsx") else "utf-8",
+                content=(
+                    base64.b64encode(raw).decode()
+                    if name.endswith(".xlsx")
+                    else raw.decode()
+                ),
+                sha256=hashlib.sha256(raw).hexdigest(),
+            ).model_dump(mode="json")
+            for name, raw in sorted(raw_files.items())
+        ]
+        plan = FinOpsGitHubPublicationPlan(
+            case_id=case_id,
+            project_id=analysis["project_id"],
+            architecture_revision=revision,
+            architecture_sha256=analysis["architecture_sha256"],
+            decision_id=decision_id,
+            authorization_id=decision["authorization"]["authorization_id"],
+            repository_url=issue["repository_url"],
+            source_issue_url=issue["issue_url"],
+            base_commit=issue["architecture_merge_commit_sha"],
+            branch=f"agent4/{analysis['project_id']}/finops-v{revision:03d}",
+            commit_message=f"docs(finops): publish revision {revision}",
+            pull_request_title=f"[FinOps] {analysis['project_id']} v{revision:03d}",
+            pull_request_body=(
+                f"Publica costos FinOps autorizados para la revisión {revision}.\n\n"
+                f"Issue: {issue['issue_url']}\n\n"
+                f"Arquitectura: `{analysis['architecture_sha256']}`\n\n"
+                f"Autorización FinOps: `{decision['authorization']['authorization_id']}`\n\n"
+                "No requiere revisión del arquitecto. El merge exige checks exitosos."
+            ),
+            files=files,
+        ).model_dump(mode="json")
+        record = {"plan_sha256": self._digest(plan), "plan": plan}
+        key = f"finops-github-plan:{case_id}:{revision}"
+        previous = self.store.get(key)
+        if previous and previous != record:
+            raise ValueError("El plan GitHub FinOps de la revisión es inmutable.")
+        if not previous:
+            self.store.put(key, "finops_github_plan", record)
+        return {"duplicate": bool(previous), **record}
+
+    def register_github_pull_request(self, case_id, revision, receipt):
+        validated = FinOpsGitHubPullRequestReceipt.model_validate(receipt)
+        record = self.store.get(f"finops-github-plan:{case_id}:{revision}")
+        if not record or validated.plan_sha256 != record["plan_sha256"]:
+            raise ValueError("El PR no corresponde al plan FinOps vigente.")
+        plan = record["plan"]
+        expected = {item["path"]: item["sha256"] for item in plan["files"]}
+        actual = {item.get("path"): item.get("sha256") for item in validated.files}
+        if (
+            validated.repository_url != plan["repository_url"]
+            or validated.branch != plan["branch"]
+            or validated.base_branch != plan["base_branch"]
+            or validated.base_commit != plan["base_commit"]
+            or validated.pull_request_url
+            != f"{plan['repository_url']}/pull/{validated.pull_request_number}"
+            or actual != expected
+        ):
+            raise ValueError("El PR no contiene la publicación FinOps planificada.")
+        payload = validated.model_dump(mode="json")
+        key = f"finops-github-pr:{case_id}:{revision}"
+        previous = self.store.get(key)
+        if previous and previous != payload:
+            raise ValueError("La revisión FinOps ya tiene otro PR.")
+        if not previous:
+            self.store.put(key, "finops_github_pr", payload)
+        return {"duplicate": bool(previous), "receipt": payload}
+
+    def register_github_merge(self, case_id, revision, receipt):
+        validated = FinOpsGitHubMergeReceipt.model_validate(receipt)
+        plan = self.store.get(f"finops-github-plan:{case_id}:{revision}")
+        pr = self.store.get(f"finops-github-pr:{case_id}:{revision}")
+        if not plan or not pr:
+            raise ValueError("Primero se debe registrar el PR FinOps.")
+        expected = plan["plan"]
+        if (
+            validated.plan_sha256 != plan["plan_sha256"]
+            or validated.authorization_id != expected["authorization_id"]
+            or validated.repository_url != expected["repository_url"]
+            or validated.pull_request_number != pr["pull_request_number"]
+            or validated.pull_request_url != pr["pull_request_url"]
+            or validated.head_sha != pr["commit_sha"]
+            or validated.source_issue_url != expected["source_issue_url"]
+        ):
+            raise ValueError("El merge no corresponde al PR FinOps autorizado.")
+        payload = validated.model_dump(mode="json")
+        key = f"finops-github-merge:{case_id}:{revision}"
+        previous = self.store.get(key)
+        if previous and previous != payload:
+            raise ValueError("La revisión FinOps ya tiene otro merge.")
+        if not previous:
+            self.store.put(key, "finops_github_merge", payload)
+            self.store.event(key, case_id, "finops.github_pr_merged", payload)
+        return {"duplicate": bool(previous), "receipt": payload}
+
     def history(self, case_id, revision):
         return {
             "case_id": case_id,
@@ -530,6 +777,15 @@ class FinOpsService:
                 if item["architecture_id"] == case_id
                 and item["source_revision"] == revision
             ],
+            "github_publication_plan": self.store.get(
+                f"finops-github-plan:{case_id}:{revision}"
+            ),
+            "github_pull_request": self.store.get(
+                f"finops-github-pr:{case_id}:{revision}"
+            ),
+            "github_merge": self.store.get(
+                f"finops-github-merge:{case_id}:{revision}"
+            ),
         }
 
     @staticmethod
