@@ -53,6 +53,10 @@ class ArchitectureNodes:
             "artifact_sha256": state["artifact_sha256"],
             "decision": decision,
             "feedback": response.get("feedback", ""),
+            "architect": response.get("architect", ""),
+            "decided_at": response.get("decided_at"),
+            "confirmation_source": response.get("confirmation_source", ""),
+            "confirmation_reference": response.get("confirmation_reference", ""),
         }
         revision_record = {
             "revision": state["revision"],

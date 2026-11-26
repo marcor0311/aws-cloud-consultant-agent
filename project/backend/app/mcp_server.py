@@ -383,6 +383,17 @@ def create_server(service, runtime=None):
             )
 
         @server.tool()
+        def registrar_decision_arquitecto(
+            expediente_id: str, recibo: dict[str, Any]
+        ) -> dict:
+            """Registra la confirmación humana tipada de la revisión exacta."""
+            return call(
+                runtime.architecture.record_architect_decision,
+                expediente_id,
+                recibo,
+            )
+
+        @server.tool()
         def agente_preparacion(proyecto_id: str = "") -> dict:
             """Entrada para Stuart: pregunta por el proyecto; al elegirlo, entrega sus insumos ya preparados."""
             return call(runtime.open_preparation, proyecto_id)

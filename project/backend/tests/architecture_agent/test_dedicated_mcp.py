@@ -30,6 +30,7 @@ def test_dedicated_mcp_has_only_architecture_tools(tmp_path):
             "registrar_aceptacion_handoff_finops",
             "corregir_arquitectura",
             "revisar_arquitectura",
+            "registrar_decision_arquitecto",
             "solicitar_correccion_finops",
             "aplicar_correccion_finops",
         }

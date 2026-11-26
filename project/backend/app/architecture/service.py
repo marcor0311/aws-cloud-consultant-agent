@@ -17,6 +17,7 @@ from app.architecture.github_delivery import (
 from app.architecture.metrics import FinOpsHandoffAcceptance
 from app.architecture.models import ArchitecturePackage
 from app.architecture.project_repository import ProjectRepositoryBridge
+from app.architecture.review import ArchitectureReviewDecision
 
 
 class ArchitectureService:
@@ -342,6 +343,7 @@ class ArchitectureService:
             artifact_sha256=state["artifact_sha256"],
             repository_url=context["repository_url"].removesuffix(".git"),
             source_issue_url=context["architecture_issue_url"],
+            required_reviewer=context.get("architect", self.architect_id),
             base_commit=context["source_commit"],
             branch=f"agent3/{package.project_id}/architecture-v{revision:03d}",
             commit_message=f"docs(architecture): publish revision {revision}",
@@ -350,6 +352,7 @@ class ArchitectureService:
                 f"Publica la revisión {revision} de Arquitectura.\n\n"
                 f"Issue de origen: {package.source_issue}\n\n"
                 f"SHA-256 del artefacto: `{state['artifact_sha256']}`\n\n"
+                f"Revisor requerido: `@{context.get('architect', self.architect_id)}`\n\n"
                 "Requiere aprobación humana explícita; cerrar el PR no sustituye la revisión."
             ),
             files=files,
@@ -377,6 +380,8 @@ class ArchitectureService:
             or validated.branch != plan["branch"]
             or validated.base_branch != plan["base_branch"]
             or validated.base_commit != plan["base_commit"]
+            or plan["required_reviewer"].casefold()
+            not in {reviewer.casefold() for reviewer in validated.requested_reviewers}
             or not validated.pull_request_url.startswith(
                 plan["repository_url"] + "/pull/"
             )
@@ -751,6 +756,13 @@ class ArchitectureService:
             return {"duplicate": False, **self.get(case_id)}
 
     def review(self, case_id, revision, artifact_sha256, decision, feedback=""):
+        _, context = self._project_context(case_id) if (
+            self.store and self.store.get(f"architecture-project-context:{case_id}")
+        ) else (None, None)
+        if context and context.get("contract_version") == "1.3":
+            raise ValueError(
+                "La entrega 1.3 requiere un recibo tipado de decisión del arquitecto."
+            )
         if decision not in {"approve", "revise"}:
             raise ValueError("La decisión debe ser approve o revise.")
         if decision == "revise" and not feedback.strip():
@@ -774,6 +786,60 @@ class ArchitectureService:
             )
             self._sync(case_id)
             return self.get(case_id)
+
+    def record_architect_decision(self, case_id, receipt):
+        decision = ArchitectureReviewDecision.model_validate(receipt)
+        if decision.case_id != case_id:
+            raise ValueError("La decisión corresponde a otro expediente.")
+        _, context = self._project_context(case_id)
+        if context.get("contract_version") != "1.3":
+            raise ValueError("El recibo tipado requiere una entrega 1.3.")
+        if decision.architect.casefold() != context["architect"].casefold():
+            raise ValueError("La decisión no fue emitida por el arquitecto asignado.")
+        with (
+            self.lock,
+            self.store.lock(f"architecture:{case_id}") if self.store else nullcontext(),
+            self._agent_work(case_id, "human-review-recording"),
+        ):
+            current = self.get(case_id)
+            state = current["state"]
+            payload = decision.model_dump(mode="json")
+            previous = next(
+                (
+                    item
+                    for item in state.get("approval_history", [])
+                    if item["revision"] == decision.revision
+                    and item["artifact_sha256"] == decision.artifact_sha256
+                ),
+                None,
+            )
+            if previous:
+                comparable = {
+                    key: previous.get(key)
+                    for key in (
+                        "revision",
+                        "artifact_sha256",
+                        "decision",
+                        "feedback",
+                        "architect",
+                        "decided_at",
+                        "confirmation_source",
+                        "confirmation_reference",
+                    )
+                }
+                expected = {key: payload[key] for key in comparable}
+                if comparable != expected:
+                    raise ValueError("La revisión ya conserva otra decisión humana.")
+                return {"duplicate": True, **current}
+            if (
+                state.get("status") != "awaiting_review"
+                or state["revision"] != decision.revision
+                or state["artifact_sha256"] != decision.artifact_sha256
+            ):
+                raise ValueError("Decidir únicamente sobre la revisión pendiente exacta.")
+            self.graph.resume(self.thread_id(case_id), payload)
+            self._sync(case_id)
+            return {"duplicate": False, **self.get(case_id)}
 
     def _sync(self, case_id):
         if not self.store:
@@ -816,7 +882,7 @@ class ArchitectureService:
                 f"{approval['artifact_sha256']}",
                 case_id,
                 "approval.decided",
-                {"actor": self.architect_id, **approval},
+                {"actor": approval.get("architect") or self.architect_id, **approval},
             )
         for handoff_payload in state.get("handoff_history", []):
             key = f"architecture-handoff:{case_id}:{handoff_payload['revision']}"

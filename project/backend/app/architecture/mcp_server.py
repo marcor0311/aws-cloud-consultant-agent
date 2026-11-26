@@ -73,7 +73,7 @@ def create_server(service):
             "solo con requisitos y evidencia disponibles; registra preguntas para "
             "datos faltantes y nunca inventes aprobación, precios, commits o recursos. "
             "No generes Terraform. Presenta la revisión al arquitecto y llama "
-            "revisar_arquitectura únicamente después de su decisión explícita."
+            "registrar_decision_arquitecto únicamente después de su decisión explícita."
         ),
     )
 
@@ -234,6 +234,13 @@ def create_server(service):
             decision,
             comentarios,
         )
+
+    @server.tool()
+    def registrar_decision_arquitecto(
+        expediente_id: str, recibo: dict[str, Any]
+    ) -> dict:
+        """Registra la confirmación humana tipada para la revisión y SHA exactos."""
+        return call(service.record_architect_decision, expediente_id, recibo)
 
     return server
 

@@ -354,12 +354,40 @@ consumos. El arquitecto decidirá `approve` o `revise`. Codex registrará esa de
 mediante el MCP para la revisión y SHA-256 exactos. LangGraph continuará o abrirá
 una nueva revisión.
 
+### Resultado del Paso 9
+
+Implementado `registrar_decision_arquitecto` con el contrato tipado
+`ArchitectureReviewDecision 1.0`. Codex debe registrar expediente, revisión,
+SHA-256, decisión, comentarios, arquitecto, fecha y referencia de la confirmación
+en la conversación. Para entregas 1.3, el método anterior sin recibo ya no puede
+aprobar ni solicitar cambios.
+
+El servicio verifica que el actor sea el arquitecto asignado y que la revisión y el
+hash sigan pendientes. El recibo es idempotente e inmutable. `revise` exige
+comentarios; `approve` continúa LangGraph, pero no sustituye la revisión del PR.
+
 ## Paso 10 — Publicar en GitHub mediante Codex
 
 El agente 3 preparará el plan de publicación. Codex utilizará Git local o GitHub
 MCP para crear rama, commit y PR, solicitar revisión y devolver los recibos al MCP.
 El agente 3 quedará esperando la aprobación; no invocará directamente GitHub ni
 FinOps.
+
+### Resultado del Paso 10
+
+El plan existente de publicación quedó vinculado al recibo humano tipado. Incluye
+repositorio, base `main`, merge commit aprobado, rama determinista, archivos con
+SHA-256, mensaje de commit, título/cuerpo del PR y revisor requerido. Codex puede
+ejecutar ese plan con Git local o GitHub MCP y devolver el recibo mediante
+`registrar_pull_request_github`.
+
+El recibo del PR debe enumerar los revisores solicitados y contener al arquitecto
+requerido; crear el PR sin solicitar esa revisión se rechaza.
+
+Preparar el plan no crea ramas, commits ni PR por sí solo. El plan y el recibo son
+idempotentes; se rechazan repositorios, ramas, commits o archivos diferentes. Un PR
+abierto registrado tampoco libera FinOps: el agente 3 permanece esperando la
+aprobación y el merge verificables del Paso 11.
 
 ## Paso 11 — Validar el PR y los webhooks
 

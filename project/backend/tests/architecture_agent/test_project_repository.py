@@ -531,6 +531,103 @@ def test_workflow_13_requires_evidence_then_interrupts_for_architect(tmp_path):
         connection.close()
 
 
+def test_contract_13_records_human_decision_and_prepares_codex_pr_plan(tmp_path):
+    repo = tmp_path / "project"
+    repo.mkdir()
+    commit, _ = project_repository(repo)
+    git(repo, "remote", "add", "origin", "https://github.com/example/agent2-project")
+    delivery, snapshot = handoff_v13(repo, commit)
+    connection, store, service = service_at(tmp_path / "state")
+    service.github_required = True
+    package = json.loads(DEFAULT_INPUT.read_text(encoding="utf-8"))
+    package["project_id"] = delivery["project_id"]
+    package["source_issue"] = delivery["architecture_issue"]["url"]
+    package["requirements"][0]["source"] = delivery["inputs"][0]["path"]
+    try:
+        service.read_project_handoff(delivery)
+        service.bind_project_repository("project-case", str(repo))
+        service.validate_architecture_issue("project-case", snapshot)
+        service.validate_project_evidence("project-case")
+        started = service.start("project-case", commit, package)["state"]
+        receipt = {
+            "contract_version": "1.0",
+            "case_id": "project-case",
+            "revision": 1,
+            "artifact_sha256": started["artifact_sha256"],
+            "decision": "approve",
+            "feedback": "",
+            "architect": "cloud-architect",
+            "decided_at": "2026-11-25T14:00:00-06:00",
+            "confirmation_source": "codex_conversation",
+            "confirmation_reference": "codex-thread-step-9-message-1",
+        }
+        with pytest.raises(ValueError, match="recibo tipado"):
+            service.review(
+                "project-case", 1, started["artifact_sha256"], "approve"
+            )
+        wrong_actor = {**receipt, "architect": "another-user"}
+        with pytest.raises(ValueError, match="arquitecto asignado"):
+            service.record_architect_decision("project-case", wrong_actor)
+        wrong_revision = {**receipt, "artifact_sha256": "0" * 64}
+        with pytest.raises(ValueError, match="revisión pendiente exacta"):
+            service.record_architect_decision("project-case", wrong_revision)
+
+        recorded = service.record_architect_decision("project-case", receipt)
+        assert recorded["duplicate"] is False
+        assert recorded["state"]["status"] == "ready_for_finops"
+        assert service.record_architect_decision("project-case", receipt)[
+            "duplicate"
+        ] is True
+        changed_decision = {**receipt, "confirmation_reference": "another-message"}
+        with pytest.raises(ValueError, match="otra decisión humana"):
+            service.record_architect_decision("project-case", changed_decision)
+        with pytest.raises(ValueError, match="espera aprobación"):
+            service.get_finops_handoff("project-case", 1)
+
+        branches_before = git(repo, "branch", "--format=%(refname:short)")
+        publication = service.prepare_github_publication("project-case")
+        plan = publication["plan"]
+        assert plan["required_reviewer"] == "cloud-architect"
+        assert plan["base_commit"] == commit
+        assert plan["branch"] == "agent3/agent2-project/architecture-v001"
+        assert "@cloud-architect" in plan["pull_request_body"]
+        assert service.prepare_github_publication("project-case") == publication
+        assert git(repo, "branch", "--format=%(refname:short)") == branches_before
+
+        pr_receipt = {
+            "contract_version": "1.0",
+            "plan_sha256": publication["plan_sha256"],
+            "repository_url": plan["repository_url"],
+            "branch": plan["branch"],
+            "base_branch": plan["base_branch"],
+            "base_commit": plan["base_commit"],
+            "commit_sha": "a" * 40,
+            "files": [
+                {"path": item["path"], "sha256": item["sha256"]}
+                for item in plan["files"]
+            ],
+            "pull_request_number": 10,
+            "pull_request_url": plan["repository_url"] + "/pull/10",
+            "requested_reviewers": ["cloud-architect"],
+            "state": "open",
+            "created_at": "2026-11-25T14:05:00-06:00",
+        }
+        wrong_reviewer = {**pr_receipt, "requested_reviewers": ["another-user"]}
+        with pytest.raises(ValueError, match="repositorio y rama planificados"):
+            service.register_github_pull_request("project-case", wrong_reviewer)
+        assert service.register_github_pull_request("project-case", pr_receipt)[
+            "duplicate"
+        ] is False
+        assert service.register_github_pull_request("project-case", pr_receipt)[
+            "duplicate"
+        ] is True
+        with pytest.raises(ValueError, match="espera aprobación"):
+            service.get_finops_handoff("project-case", 1)
+    finally:
+        store.engine.dispose()
+        connection.close()
+
+
 def test_reads_pinned_agent_2_inputs_and_publishes_approved_revision(tmp_path):
     repo = tmp_path / "project"
     repo.mkdir()
@@ -889,6 +986,7 @@ def test_codex_github_boundary_requires_exact_pr_before_finops(tmp_path):
         ],
         "pull_request_number": 7,
         "pull_request_url": "https://github.com/example/documentos-demo/pull/7",
+        "requested_reviewers": [plan["required_reviewer"]],
         "state": "open",
         "created_at": "2026-11-08T18:00:00-06:00",
     }

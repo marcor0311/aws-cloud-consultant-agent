@@ -51,6 +51,7 @@ class GitHubPublicationPlan(GitHubContract):
     source_issue_url: str = Field(
         pattern=r"^https://github\.com/[^/]+/[^/]+/issues/[0-9]+$"
     )
+    required_reviewer: str = Field(min_length=1, max_length=200)
     base_branch: Literal["main"] = "main"
     base_commit: str = Field(pattern=r"^[0-9a-f]{40}$")
     branch: str = Field(pattern=r"^agent3/[a-z0-9][a-z0-9-]*/architecture-v[0-9]{3}$")
@@ -73,6 +74,7 @@ class GitHubPullRequestReceipt(GitHubContract):
     pull_request_url: str = Field(
         pattern=r"^https://github\.com/[^/]+/[^/]+/pull/[0-9]+$"
     )
+    requested_reviewers: list[str] = Field(min_length=1, max_length=20)
     state: Literal["open"]
     created_at: AwareDatetime
 
