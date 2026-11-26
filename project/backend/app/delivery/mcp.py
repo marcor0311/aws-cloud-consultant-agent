@@ -13,6 +13,7 @@ from app.delivery.models import CaseReportRequest, DemoRequest, ReportDecision
 from app.delivery.review import ReportReview, configured_manager
 from app.delivery.workflow import DeliveryWorkflow
 from app.persistence.delivery import DeliveryBusy, DeliveryConflict, PostgresRepository
+from app.persistence.locking import Busy
 
 
 def pdf_uri(delivery_id, artifact_id):
@@ -35,7 +36,7 @@ def create_server(repository: PostgresRepository, operator: str, case_service=No
     def call(method, *args):
         try:
             result = method(*args)
-        except (ValueError, LookupError, DeliveryBusy, DeliveryConflict) as error:
+        except (ValueError, LookupError, DeliveryBusy, DeliveryConflict, Busy) as error:
             raise ToolError(str(error)) from error
         if report := result.get("report"):
             artifact = report.get("approved_document") or report["artifact"]
@@ -56,7 +57,8 @@ def create_server(repository: PostgresRepository, operator: str, case_service=No
     def generar_informe(entrada: CaseReportRequest | DemoRequest) -> CallToolResult:
         """Con report_id y case_id consolida un expediente sin ejecutar ingeniería.
 
-        engineering_delivery_id adjunta una entrega existente opcional. La entrada
+        intake_id adjunta una recepción y sus evidencias importadas. También se
+        conserva engineering_delivery_id para la entrega de demostración. La entrada
         anterior con mode=demo conserva exclusivamente el recorrido de demostración.
         """
         if isinstance(entrada, CaseReportRequest):
@@ -103,6 +105,16 @@ def create_server(repository: PostgresRepository, operator: str, case_service=No
     def fuentes_informe(entrega_id: str, archivo_id: str) -> bytes:
         """Descarga la instantánea con fuentes y mediciones que respaldan el PDF."""
         return read_artifact(entrega_id, archivo_id, "application/json")
+
+    @server.resource(
+        "delivery://engineering/{entrega_id}/{file_sha256}",
+        mime_type="application/octet-stream",
+    )
+    def respaldo_ingenieria(entrega_id: str, file_sha256: str) -> bytes:
+        """Descarga un respaldo incluido en la instantánea de fuentes del informe."""
+        if case_service is None:
+            raise ValueError("El lector de expedientes no está configurado")
+        return case_service.read_engineering_file(UUID(entrega_id), file_sha256)
 
     def read_artifact(entrega_id, archivo_id, media_type):
         from app.delivery.report import require_report_owner

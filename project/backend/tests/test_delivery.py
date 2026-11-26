@@ -372,6 +372,18 @@ def test_handoff_report_download_and_idempotency(client, repo, payload, tmp_path
         )
         assert base64.b64decode(archived["content_base64"]) == original
 
+        early_report_runtime = create_report_runtime(repo.dsn, url, "engineer")
+        early_request = CaseReportRequest(
+            report_id=uuid4(), case_id=case_id, intake_id=intake.intake_id
+        )
+        try:
+            early_report_runtime.service.sources.store.clock = lambda: clock[0]
+            early_report = early_report_runtime.service.generate(early_request)
+            assert early_report["engineering"]["evidence_status"] == "not_received"
+            assert early_report["report"]["intake_id"] == str(intake.intake_id)
+        finally:
+            early_report_runtime.close()
+
         start = clock[0]
         code = file("implementation", "main.tf", implementation_commit)
         logs = [
@@ -504,6 +516,168 @@ def test_handoff_report_download_and_idempotency(client, repo, payload, tmp_path
                 snapshot["measurements"]["technical_evidence"][0]["evidence_sha256"]
                 == result["evidence"][0]["evidence_sha256"]
             )
+
+            # Continue the same journey: receipts -> report -> partial approval,
+            # preserving the earlier report even after evidence has arrived.
+            preserved = report_runtime.service.generate(early_request)
+            assert preserved["report"]["artifact"] == early_report["report"]["artifact"]
+            assert preserved["engineering"]["selected_run_id"] is None
+            with pytest.raises(LookupError, match="no incluido"):
+                report_runtime.service.read_engineering_file(
+                    early_request.report_id, code["sha256"]
+                )
+            store.register_project(
+                "other-case",
+                "other-project",
+                "Otro expediente ficticio",
+                "Empresa ficticia",
+                "engineer",
+                is_fictitious=True,
+            )
+            with pytest.raises(ValueError, match="otro expediente"):
+                report_runtime.service.generate(
+                    CaseReportRequest(
+                        report_id=uuid4(),
+                        case_id="other-case",
+                        intake_id=intake.intake_id,
+                    )
+                )
+            source_key = f"engineering-file:{intake.intake_id}:{intake.architecture.files[1].sha256}"
+            store.put(
+                source_key,
+                "engineering-file",
+                {
+                    **archived,
+                    "content_base64": base64.b64encode(b"corrupted archive").decode(),
+                },
+            )
+            try:
+                with pytest.raises(DeliveryConflict, match="hash"):
+                    report_runtime.service.generate(
+                        CaseReportRequest(
+                            report_id=uuid4(),
+                            case_id=case_id,
+                            intake_id=intake.intake_id,
+                        )
+                    )
+            finally:
+                store.put(source_key, "engineering-file", archived)
+
+            async def verify_report_from_intake():
+                server = create_server(repo, "engineer", report_runtime.service)
+                request_data = {
+                    "report_id": str(uuid4()),
+                    "case_id": case_id,
+                    "intake_id": str(intake.intake_id),
+                }
+                response = await server.call_tool(
+                    "generar_informe", {"entrada": request_data}
+                )
+                generated = response.structured_content
+                assert generated["engineering"]["selected_run_id"] == str(
+                    evidence.run_id
+                )
+                assert generated["engineering"]["evidence_status"] == "failed"
+                assert (
+                    generated["handoff"] is None
+                )  # A receipt is not an approved handoff.
+                phase = next(
+                    p
+                    for p in generated["metrics"]["phases"]
+                    if p["phase"] == "engineering"
+                )
+                assert phase["process_time_seconds"] == 70
+                assert phase["recorded_rework_effort_seconds"] == 10
+                report = generated["report"]
+
+                def decision(action):
+                    return {
+                        "decision_id": str(uuid4()),
+                        "version": report["version"],
+                        "sha256": report["artifact"]["sha256"],
+                        "action": action,
+                        "detail": "Confirmado para el informe parcial ficticio",
+                    }
+
+                approved = (
+                    await server.call_tool(
+                        "registrar_decision_informe",
+                        {
+                            "entrega_id": generated["delivery_id"],
+                            "decision": decision("approve"),
+                        },
+                    )
+                ).structured_content
+                with pytest.raises(ToolError, match="cerrar"):
+                    await server.call_tool(
+                        "registrar_decision_informe",
+                        {
+                            "entrega_id": generated["delivery_id"],
+                            "decision": decision("record_presentation"),
+                        },
+                    )
+                content = list(await server.read_resource(approved["pdf_uri"]))[
+                    0
+                ].content
+                text = " ".join(
+                    " ".join(
+                        p.extract_text() for p in PdfReader(BytesIO(content)).pages
+                    ).split()
+                )
+                for expected in (
+                    "INFORME PARCIAL APROBADO",
+                    "Fallida informada",
+                    "No ejecutada",
+                    "Retrabajo",
+                    "10.0 s (parcial)",
+                    implementation_commit,
+                    str(evidence.run_id),
+                ):
+                    assert expected in text
+                source = list(await server.read_resource(approved["sources_uri"]))[
+                    0
+                ].content
+                source = source.encode() if isinstance(source, str) else source
+                assert (
+                    sha256(source).hexdigest()
+                    == approved["report"]["sources"]["sha256"]
+                )
+                captured = json.loads(source)
+                assert (
+                    captured["engineering"]["intake"]["input_sha256"]
+                    == receipt["intake"]["input_sha256"]
+                )
+                assert (
+                    captured["engineering"]["evidence"][0]["evidence_sha256"]
+                    == result["evidence"][0]["evidence_sha256"]
+                )
+                backup = next(
+                    f
+                    for f in captured["engineering"]["files"]
+                    if f["path"] == "design.md"
+                )
+                assert (
+                    list(await server.read_resource(backup["uri"]))[0].content
+                    == original
+                )
+                output = Path(
+                    os.getenv("DELIVERY_TEST_OUTPUT", str(tmp_path / "report-links"))
+                )
+                output.mkdir(parents=True, exist_ok=True)
+                (output / "informe-con-recepcion.pdf").write_bytes(content)
+                (output / "fuentes-con-recepcion.json").write_bytes(source)
+                early_pdf = repo.artifact(
+                    early_request.report_id,
+                    early_report["report"]["artifact"]["artifact_id"],
+                )
+                (output / "informe-sin-corridas.pdf").write_bytes(
+                    bytes(early_pdf["content"])
+                )
+                assert store.get(f"process:{case_id}")["stage"] == 5
+                return generated
+
+            generated = asyncio.run(verify_report_from_intake())
+            assert generated["engineering"]["upstream_current"]
         finally:
             reopened.close()
             report_runtime.close()

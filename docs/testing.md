@@ -52,3 +52,9 @@ duplicación, recuperación desde otro runtime, consulta MCP y lectura de las mi
 mediciones por #22. Las entradas y corridas son ficticias y no ejecutan Terraform,
 emuladores ni servicios externos. Se amplía el recorrido existente, sin añadir
 casos unitarios o matrices de comprobaciones.
+
+Ese mismo recorrido continúa desde la recepción #21 hasta el informe #22 por
+`intake_id`: captura sin corridas, informe posterior con corrida fallida y medición
+de retrabajo, conservación del informe previo, rechazo de recepción de otro caso
+y de respaldo alterado, descarga de fuentes/archivos por el MCP del informe,
+aprobación parcial y rechazo del cierre. Exporta ambos PDF para inspección visual.

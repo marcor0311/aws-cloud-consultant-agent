@@ -171,6 +171,10 @@ La recepción y evidencias se guardan en `workflow_records`, los eventos en
 `workflow_events` y las mediciones en `workflow_work_sessions`. No se crean tablas
 ni migraciones nuevas. Las exclusiones existentes coordinan recepción/proceso.
 
-Continúan pendientes el catálogo versionado de compatibilidad, la conexión del
-paquete técnico definitivo con #22, PR/revisión/merge del proyecto y la notificación
-al Engagement Manager. Este incremento no aprueba infraestructura ni completa #21.
+El informe #22 ya puede consumir esta recepción con `intake_id`, conservar sus
+evidencias y mostrar las comprobaciones y métricas en un PDF parcial. Ver
+[selección y descarga desde el informe](revision-informe-ejecutivo.md).
+Continúan pendientes el catálogo versionado de compatibilidad, la aprobación e
+integración de la entrega técnica definitiva, PR/revisión/merge del proyecto y la
+notificación al Engagement Manager. Recibir evidencias o aprobar el informe parcial
+no aprueba infraestructura ni completa #21.

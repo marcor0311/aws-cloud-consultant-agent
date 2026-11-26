@@ -459,3 +459,13 @@ intervalo técnico conserva su referencia y clasificación; el cálculo por expe
 une intervalos por actor y distingue retrabajo medido de tiempo desconocido.
 El proceso permanece en etapa 5, pendiente de revisión/entrega definitiva.
 Ver [contratos, operación y límites de ingeniería](engineering-intake.md).
+
+El informe #22 puede seleccionar esa recepción mediante `CaseReportRequest.intake_id`,
+excluyente con la entrega demo anterior. La composición inyecta un lector de
+ingeniería sobre el mismo workflow; la captura contrasta identidad y hashes,
+conserva las corridas/archivos y las mediciones bajo exclusión, y fija la corrida
+seleccionada al corte. Una recepción parcial o fallida conserva sus pendientes.
+El PDF muestra comprobaciones, versiones, módulos, respaldos y retrabajo medido,
+sin convertir una recepción en un handoff aprobado. Los archivos congelados se
+descargan desde un recurso del MCP del informe, con control de operador y hash.
+Las fuentes, aprobaciones y PDFs anteriores no cambian con nuevas corridas.

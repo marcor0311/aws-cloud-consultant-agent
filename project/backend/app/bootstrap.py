@@ -45,9 +45,12 @@ def create_report_runtime(delivery_url, workflow_url, operator):
     """Reports read local workflow records without composing providers or workers."""
     from types import SimpleNamespace
 
+    from app.delivery.engineering import EngineeringService
     from app.delivery.report import CaseReportService
+    from app.integrations.engineering_files import EngineeringFiles
     from app.integrations.report_sources import CaseReportSources
     from app.persistence.delivery import PostgresRepository
+    from app.persistence.engineering import EngineeringRepository
 
     resources = ExitStack()
     try:
@@ -63,7 +66,17 @@ def create_report_runtime(delivery_url, workflow_url, operator):
             )
             resources.callback(store.engine.dispose)
             service = CaseReportService(
-                repository, CaseReportSources(store, repository), operator
+                repository,
+                CaseReportSources(
+                    store,
+                    repository,
+                    EngineeringService(
+                        EngineeringRepository(store),
+                        EngineeringFiles(project_path("generated/engineering-inputs")),
+                        operator,
+                    ),
+                ),
+                operator,
             )
         return SimpleNamespace(
             repository=repository,
