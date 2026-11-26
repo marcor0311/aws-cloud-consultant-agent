@@ -411,6 +411,132 @@ class ProjectRepositoryBridge:
             "architecture_approved": False,
         }
 
+    def validate_evidence(self, context):
+        if context.get("contract_version") != "1.3":
+            raise ValueError("La validación incremental aplica al contrato 1.3.")
+        if context.get("input_status") not in {
+            "ready_for_evidence_validation",
+            "evidence_validated",
+        }:
+            raise ValueError("Primero deben validarse el repositorio y el issue.")
+        root = self._root(context["repository_path"])
+        commit = context["source_commit"]
+        documents = []
+        discovery = [
+            item
+            for item in context["approved_inputs"]
+            if item["path"].startswith("docs/01-discovery/")
+        ]
+        if len(discovery) not in {3, 5, 6}:
+            raise ValueError("La entrega debe conservar tres, cinco o seis insumos discovery.")
+        for approved in context["approved_inputs"]:
+            raw = self._git(root, "show", f"{commit}:{approved['path']}")
+            if len(raw) > 20_000_000:
+                raise ValueError("Una evidencia supera el límite de 20 MB.")
+            digest = hashlib.sha256(raw).hexdigest()
+            if digest != approved["sha256"]:
+                raise ValueError("Una evidencia no coincide con su SHA-256 aprobado.")
+            binary = approved["media_type"] == "application/pdf"
+            content = None
+            if not binary:
+                try:
+                    content = raw.decode("utf-8")
+                except UnicodeDecodeError as error:
+                    raise ValueError("Las evidencias textuales deben ser UTF-8.") from error
+                if approved["media_type"] == "application/json":
+                    try:
+                        json.loads(content)
+                    except json.JSONDecodeError as error:
+                        raise ValueError("La evidencia JSON no es válida.") from error
+            documents.append(
+                {
+                    "document_type": "board_record"
+                    if approved["path"].startswith("docs/02-board/")
+                    else "discovery_evidence",
+                    "path": approved["path"],
+                    "sha256": digest,
+                    "media_type": approved["media_type"],
+                    "size_bytes": len(raw),
+                    "content": content,
+                    "binary_omitted": binary,
+                }
+            )
+
+        package = context["approved_package"]
+        manifest_validation = None
+        if package.get("path"):
+            raw = self._git(root, "show", f"{commit}:{package['path']}")
+            if hashlib.sha256(raw).hexdigest() != package["sha256"]:
+                raise ValueError("El manifiesto no coincide con su SHA-256 aprobado.")
+            try:
+                manifest = json.loads(raw.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                raise ValueError("El manifiesto aprobado no es JSON UTF-8 válido.") from error
+            expected_files = sorted(
+                [
+                    {
+                        "name": PurePosixPath(item["path"]).name,
+                        "sha256": item["sha256"],
+                    }
+                    for item in discovery
+                ],
+                key=lambda item: item["name"],
+            )
+            manifest_files = manifest.get("files")
+            if not isinstance(manifest_files, list) or any(
+                not isinstance(item, dict)
+                or set(item) != {"name", "sha256"}
+                or not isinstance(item["name"], str)
+                or not isinstance(item["sha256"], str)
+                for item in manifest_files
+            ):
+                raise ValueError("El manifiesto no contiene una lista válida de archivos.")
+            actual_files = sorted(manifest_files, key=lambda item: item["name"])
+            files_sha256 = hashlib.sha256(
+                json.dumps(actual_files, sort_keys=True).encode()
+            ).hexdigest()
+            if (
+                manifest.get("case_id") != context["case_id"]
+                or manifest.get("revision") != package["revision"]
+                or actual_files != expected_files
+                or files_sha256 != package["files_sha256"]
+            ):
+                raise ValueError("El manifiesto no corresponde al paquete aprobado.")
+            manifest_validation = {
+                "path": package["path"],
+                "sha256": package["sha256"],
+                "files_sha256": files_sha256,
+                "revision": package["revision"],
+            }
+
+        evidence_sha256 = hashlib.sha256(
+            json.dumps(
+                [
+                    {key: item[key] for key in ("path", "sha256", "size_bytes")}
+                    for item in sorted(documents, key=lambda item: item["path"])
+                ],
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+        result = {
+            **context,
+            "documents": documents,
+            "evidence_manifest": {
+                "source_commit": commit,
+                "evidence_sha256": evidence_sha256,
+                "document_count": len(documents),
+                "discovery_count": len(discovery),
+                "binary_count": sum(item["binary_omitted"] for item in documents),
+                "manifest": manifest_validation,
+            },
+            "input_status": "evidence_validated",
+        }
+        previous = context.get("evidence_manifest")
+        if previous and previous != result["evidence_manifest"]:
+            raise ValueError("El expediente ya conserva otra validación de evidencias.")
+        return result
+
     def read(self, handoff):
         if handoff.get("contract_version") == "1.3":
             delivery = ArchitectureProjectDelivery.model_validate(handoff)
@@ -427,6 +553,7 @@ class ProjectRepositoryBridge:
                 ),
                 "approved_revision": delivery.approved_package.revision,
                 "approved_artifact_sha256": delivery.approved_package.artifact_sha256,
+                "approved_package": delivery.approved_package.model_dump(mode="json"),
                 "request_sha256": delivery.request_sha256,
                 "architect": delivery.architect,
                 "approval": delivery.approval.model_dump(mode="json"),

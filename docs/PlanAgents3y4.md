@@ -298,6 +298,22 @@ formatos PDF, HTML, Markdown, JSON y manifiesto. Verificará bytes y SHA-256 des
 commit aprobado. Los binarios se referenciarán por ruta, tipo, tamaño y hash; no se
 transportarán completos mediante MCP.
 
+### Resultado del Paso 7
+
+Implementada `validar_evidencias_proyecto`. La herramienta exige que repositorio e
+issue estén validados y lee cada archivo con `git show <merge-commit>:<ruta>`, nunca
+desde los bytes mutables del árbol de trabajo. Comprueba:
+
+- contratos de tres, cinco y seis evidencias discovery;
+- SHA-256, tamaño máximo de 20 MB y tipo declarado;
+- UTF-8 para Markdown, HTML y JSON, incluida sintaxis JSON;
+- PDF por ruta, tamaño y hash, con `content: null` y `binary_omitted: true`;
+- manifiesto opcional, revisión, archivos y `files_sha256`;
+- un digest determinista del conjunto completo de evidencias.
+
+El resultado queda en `evidence_validated`. Una modificación local posterior al
+commit no cambia los documentos leídos ni su resultado.
+
 ## Paso 8 — Ejecutar el workflow especializado de Arquitectura
 
 El LangGraph del agente 3 controlará:
@@ -315,6 +331,21 @@ validar entrada
 
 Codex puede construir y explicar la propuesta, pero el MCP valida el modelo,
 persiste la revisión, calcula su hash y rechaza decisiones obsoletas.
+
+### Resultado del Paso 8
+
+El inicio del workflow 1.3 quedó conectado a la validación anterior. Antes de
+`evidence_validated`, `iniciar_arquitectura` rechaza la propuesta. Después:
+
+1. verifica commit, proyecto, issue y procedencia de cada requisito;
+2. entrega al LangGraph el recibo de validación y el digest de evidencias;
+3. el nodo `validate_architecture` vuelve a validar `ArchitecturePackage` y módulos;
+4. genera los artefactos deterministas de la revisión 1;
+5. se interrumpe en `architect_review` con revisión y SHA-256 exactos.
+
+El paso no registra `approve` ni `revise`: esa autoridad continúa reservada al
+arquitecto en el Paso 9. Los flujos anteriores sin contrato 1.3 mantienen su
+compatibilidad mediante `input_validation: not_required`.
 
 ## Paso 9 — Registrar la decisión del arquitecto
 

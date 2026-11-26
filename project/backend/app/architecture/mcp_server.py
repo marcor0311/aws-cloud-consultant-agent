@@ -108,6 +108,11 @@ def create_server(service):
         return call(service.validate_architecture_issue, expediente_id, issue_snapshot)
 
     @server.tool()
+    def validar_evidencias_proyecto(expediente_id: str) -> dict:
+        """Lee y verifica las evidencias desde el merge commit; no usa el árbol mutable."""
+        return call(service.validate_project_evidence, expediente_id)
+
+    @server.tool()
     def publicar_arquitectura_local(expediente_id: str) -> dict:
         """Publica la revisión aprobada bajo docs/03-architecture sin hacer commit."""
         return call(service.publish_to_project, expediente_id)

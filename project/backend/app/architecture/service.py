@@ -128,6 +128,11 @@ class ArchitectureService:
         updated = self.project_repository.validate_issue(context, snapshot)
         return self._replace_project_context(key, context, updated)
 
+    def validate_project_evidence(self, case_id):
+        key, context = self._project_context(case_id)
+        updated = self.project_repository.validate_evidence(context)
+        return self._replace_project_context(key, context, updated)
+
     def publish_to_project(self, case_id):
         state = self.get(case_id)["state"]
         if state.get("status") != "ready_for_finops":
@@ -530,6 +535,13 @@ class ArchitectureService:
                 else self.project_contexts.get(context_key)
             )
             if context:
+                if (
+                    context.get("contract_version") == "1.3"
+                    and context.get("input_status") != "evidence_validated"
+                ):
+                    raise ValueError(
+                        "La entrega 1.3 todavía no validó sus evidencias aprobadas."
+                    )
                 if input_id != context["input_id"]:
                     raise ValueError("La entrada no corresponde al commit aprobado.")
                 if validated.project_id != context["project_id"]:
@@ -565,6 +577,15 @@ class ArchitectureService:
                     "input_hash": fingerprint,
                     "package": payload,
                     "artifact_sha256": fingerprint,
+                    "input_validation": {
+                        "status": "validated"
+                        if context
+                        and context.get("input_status") == "evidence_validated"
+                        else "not_required",
+                        "evidence_sha256": (context or {})
+                        .get("evidence_manifest", {})
+                        .get("evidence_sha256", ""),
+                    },
                 },
             )
             self._sync(case_id)

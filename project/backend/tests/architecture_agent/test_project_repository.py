@@ -60,6 +60,10 @@ def project_repository(root):
     requirements = root / "docs/01-discovery/requirements.md"
     decision = root / "docs/02-board/decision.md"
     constraints = root / "docs/01-discovery/constraints.md"
+    html_summary = root / "docs/01-discovery/summary.html"
+    metadata = root / "docs/01-discovery/metadata.json"
+    evidence_pdf = root / "docs/01-discovery/evidence.pdf"
+    notes = root / "docs/01-discovery/notes.md"
     budget = root / "docs/02-board/budget.json"
     requirements.write_text(
         "# Requisitos\n\nAlmacenar documentos privados cifrados.\n",
@@ -70,6 +74,10 @@ def project_repository(root):
         encoding="utf-8",
     )
     constraints.write_text("# Restricciones\n\nRegión us-east-1.\n", encoding="utf-8")
+    html_summary.write_text("<h1>Resumen aprobado</h1>\n", encoding="utf-8")
+    metadata.write_text('{"approved": true}\n', encoding="utf-8")
+    evidence_pdf.write_bytes(b"%PDF-1.4\n% approved test evidence\n")
+    notes.write_text("# Notas\n\nEvidencia complementaria.\n", encoding="utf-8")
     budget.write_text(
         '{"amount":"75.00","currency":"USD","period":"month"}\n',
         encoding="utf-8",
@@ -127,12 +135,17 @@ def handoff(root, commit, inputs):
     }
 
 
-def handoff_v13(root, commit):
+def handoff_v13(root, commit, discovery_count=3):
     repository_url = "https://github.com/example/agent2-project"
     document_path = "docs/01-discovery/requirements.md"
-    document_sha256 = hashlib.sha256(
-        git_bytes(root, "show", f"{commit}:{document_path}")
-    ).hexdigest()
+    evidence_paths = [
+        (document_path, "text/markdown"),
+        ("docs/01-discovery/summary.html", "text/html"),
+        ("docs/01-discovery/evidence.pdf", "application/pdf"),
+        ("docs/01-discovery/metadata.json", "application/json"),
+        ("docs/01-discovery/constraints.md", "text/markdown"),
+        ("docs/01-discovery/notes.md", "text/markdown"),
+    ][:discovery_count]
     request_sha256 = "1" * 64
     decision_digest = "2" * 64
     body = (
@@ -185,10 +198,13 @@ def handoff_v13(root, commit):
         },
         "inputs": [
             {
-                "path": document_path,
-                "sha256": document_sha256,
-                "media_type": "text/markdown",
+                "path": path,
+                "sha256": hashlib.sha256(
+                    git_bytes(root, "show", f"{commit}:{path}")
+                ).hexdigest(),
+                "media_type": media_type,
             }
+            for path, media_type in evidence_paths
         ],
         "budget": {
             "currency": "USD",
@@ -385,6 +401,131 @@ def test_service_persists_repository_and_issue_validation_steps(tmp_path):
         validated = service.validate_architecture_issue("project-case", snapshot)
         assert validated["input_status"] == "ready_for_evidence_validation"
         assert store.get("architecture-project-context:project-case") == validated
+    finally:
+        store.engine.dispose()
+        connection.close()
+
+
+@pytest.mark.parametrize("discovery_count", [3, 5, 6])
+def test_contract_13_reads_supported_evidence_counts_from_exact_commit(
+    tmp_path, discovery_count
+):
+    repo = tmp_path / f"project-{discovery_count}"
+    repo.mkdir()
+    commit, _ = project_repository(repo)
+    git(repo, "remote", "add", "origin", "https://github.com/example/agent2-project")
+    delivery, snapshot = handoff_v13(repo, commit, discovery_count)
+    bridge = ProjectRepositoryBridge()
+    context = bridge.validate_issue(
+        bridge.bind_repository(bridge.read(delivery), str(repo)), snapshot
+    )
+
+    # A mutable working-tree edit must not affect evidence read from the approved commit.
+    (repo / "docs/01-discovery/requirements.md").write_text(
+        "contenido local no aprobado", encoding="utf-8"
+    )
+    validated = bridge.validate_evidence(context)
+
+    assert validated["input_status"] == "evidence_validated"
+    assert validated["evidence_manifest"]["discovery_count"] == discovery_count
+    assert len(validated["documents"]) == discovery_count
+    pdf = next(
+        item for item in validated["documents"] if item["media_type"] == "application/pdf"
+    )
+    assert pdf["content"] is None and pdf["binary_omitted"] is True
+    assert pdf["size_bytes"] > 0
+    requirement = next(
+        item
+        for item in validated["documents"]
+        if item["path"].endswith("requirements.md")
+    )
+    assert "Almacenar documentos" in requirement["content"]
+    assert "contenido local" not in requirement["content"]
+
+
+def test_contract_13_rejects_evidence_hash_mismatch(tmp_path):
+    commit, _ = project_repository(tmp_path)
+    git(tmp_path, "remote", "add", "origin", "https://github.com/example/agent2-project")
+    delivery, snapshot = handoff_v13(tmp_path, commit)
+    delivery["inputs"][0]["sha256"] = "0" * 64
+    bridge = ProjectRepositoryBridge()
+    context = bridge.validate_issue(
+        bridge.bind_repository(bridge.read(delivery), str(tmp_path)), snapshot
+    )
+
+    with pytest.raises(ValueError, match="SHA-256 aprobado"):
+        bridge.validate_evidence(context)
+
+
+def test_contract_13_validates_delivery_manifest(tmp_path):
+    commit, _ = project_repository(tmp_path)
+    delivery, _ = handoff_v13(tmp_path, commit)
+    files = [
+        {"name": Path(item["path"]).name, "sha256": item["sha256"]}
+        for item in delivery["inputs"]
+    ]
+    manifest = {
+        "case_id": delivery["case_id"],
+        "revision": 5,
+        "files": files,
+        "presentation_approval": {"revision": 4, "artifact_sha256": "6" * 64},
+    }
+    manifest_path = tmp_path / "docs/01-discovery/manifest.json"
+    manifest_path.write_text(
+        json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2),
+        encoding="utf-8",
+    )
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "Add approved manifest")
+    commit = git(tmp_path, "rev-parse", "HEAD")
+    git(tmp_path, "remote", "add", "origin", "https://github.com/example/agent2-project")
+    delivery, snapshot = handoff_v13(tmp_path, commit)
+    raw = git_bytes(tmp_path, "show", f"{commit}:docs/01-discovery/manifest.json")
+    delivery["approved_package"].update(
+        {
+            "path": "docs/01-discovery/manifest.json",
+            "sha256": hashlib.sha256(raw).hexdigest(),
+            "files_sha256": hashlib.sha256(
+                json.dumps(sorted(files, key=lambda item: item["name"]), sort_keys=True).encode()
+            ).hexdigest(),
+        }
+    )
+    bridge = ProjectRepositoryBridge()
+    context = bridge.validate_issue(
+        bridge.bind_repository(bridge.read(delivery), str(tmp_path)), snapshot
+    )
+
+    validated = bridge.validate_evidence(context)
+
+    assert validated["evidence_manifest"]["manifest"]["revision"] == 5
+
+
+def test_workflow_13_requires_evidence_then_interrupts_for_architect(tmp_path):
+    repo = tmp_path / "project"
+    repo.mkdir()
+    commit, _ = project_repository(repo)
+    git(repo, "remote", "add", "origin", "https://github.com/example/agent2-project")
+    delivery, snapshot = handoff_v13(repo, commit)
+    connection, store, service = service_at(tmp_path / "state")
+    package = json.loads(DEFAULT_INPUT.read_text(encoding="utf-8"))
+    package["project_id"] = delivery["project_id"]
+    package["source_issue"] = delivery["architecture_issue"]["url"]
+    package["requirements"][0]["source"] = delivery["inputs"][0]["path"]
+    try:
+        service.read_project_handoff(delivery)
+        service.bind_project_repository("project-case", str(repo))
+        service.validate_architecture_issue("project-case", snapshot)
+        with pytest.raises(ValueError, match="todavía no validó"):
+            service.start("project-case", commit, package)
+
+        context = service.validate_project_evidence("project-case")
+        started = service.start("project-case", commit, package)
+
+        assert context["input_status"] == "evidence_validated"
+        assert started["state"]["status"] == "awaiting_review"
+        assert started["state"]["input_validation"]["status"] == "validated"
+        assert started["pending"][0]["action"] == "architect_review"
+        assert "decision" not in started["state"] or not started["state"]["decision"]
     finally:
         store.engine.dispose()
         connection.close()

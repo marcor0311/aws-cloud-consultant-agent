@@ -14,6 +14,7 @@ class ArchitectureState(TypedDict, total=False):
     decision: str
     feedback: str
     artifact_sha256: str
+    input_validation: dict
     handoff: dict
     parent_revision: int | None
     correction_request_id: str

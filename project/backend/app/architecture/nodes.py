@@ -10,6 +10,9 @@ class ArchitectureNodes:
         self.catalog = catalog
 
     def validate(self, state):
+        validation = state.get("input_validation") or {"status": "not_required"}
+        if validation.get("status") not in {"validated", "not_required"}:
+            raise ValueError("La entrada del proyecto no fue validada.")
         package = ArchitecturePackage.model_validate(state["package"])
         self.catalog.validate(package.baselines)
         return {

@@ -223,6 +223,11 @@ def create_server(service, runtime=None):
             )
 
         @server.tool()
+        def validar_evidencias_proyecto(expediente_id: str) -> dict:
+            """Verifica bytes y hashes desde el merge commit aprobado."""
+            return call(runtime.architecture.validate_project_evidence, expediente_id)
+
+        @server.tool()
         def publicar_arquitectura_local(expediente_id: str) -> dict:
             """Publica la revisión aprobada localmente sin commit ni push."""
             return call(runtime.architecture.publish_to_project, expediente_id)

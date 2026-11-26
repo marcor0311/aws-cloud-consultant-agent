@@ -15,6 +15,7 @@ def test_dedicated_mcp_has_only_architecture_tools(tmp_path):
             "leer_entrega_agente_2",
             "vincular_repositorio_proyecto",
             "validar_issue_arquitectura",
+            "validar_evidencias_proyecto",
             "publicar_arquitectura_local",
             "preparar_publicacion_github",
             "registrar_pull_request_github",
