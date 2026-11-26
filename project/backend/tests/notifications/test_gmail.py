@@ -11,6 +11,7 @@ import httpx
 import pytest
 
 from app.cli import authorize_gmail
+from app.integrations.errors import ConfigurationError
 from app.notifications import gmail as gmail_mailer
 from app.notifications.gmail import GMAIL_SEND_SCOPE, GmailMailer, GmailSettings
 from app.notifications.provider import EnvironmentMailer
@@ -86,7 +87,7 @@ def test_calendar_token_cannot_be_relabelled_to_send_mail(gmail, monkeypatch, sc
     mailer.settings.token_file.write_text(json.dumps({"scopes": scopes}))
     network = Mock(side_effect=AssertionError("Must not send"))
     monkeypatch.setattr(httpx, "post", network)
-    with pytest.raises(RuntimeError, match="no está autorizado"):
+    with pytest.raises(ConfigurationError, match="gmail_credentials_unavailable"):
         mailer.send_code("recipient@example.com", "", "003120", 5)
     network.assert_not_called()
 
@@ -152,7 +153,7 @@ def test_missing_oauth_does_not_send(tmp_path, monkeypatch):
     mailer = GmailMailer(GmailSettings("sender@example.com", tmp_path / "absent.json"))
     post = Mock()
     monkeypatch.setattr(httpx, "post", post)
-    with pytest.raises(RuntimeError, match="no está autorizado"):
+    with pytest.raises(ConfigurationError, match="gmail_credentials_unavailable"):
         mailer.send_code("recipient@example.com", "", "003120", 5)
     post.assert_not_called()
 
