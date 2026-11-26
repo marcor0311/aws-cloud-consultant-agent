@@ -79,9 +79,18 @@ class GitHubPullRequestReceipt(GitHubContract):
     created_at: AwareDatetime
 
 
+class GitHubCheckReceipt(GitHubContract):
+    name: str = Field(min_length=1, max_length=200)
+    status: Literal["completed"]
+    conclusion: Literal["success"]
+    details_url: str = Field(min_length=1, max_length=1000)
+
+
 class GitHubApprovalReceipt(GitHubContract):
     contract_version: Literal["1.0"] = "1.0"
     plan_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    repository_url: str = Field(pattern=r"^https://github\.com/[^/]+/[^/]+$")
+    pull_request_number: int = Field(ge=1)
     pull_request_url: str = Field(
         pattern=r"^https://github\.com/[^/]+/[^/]+/pull/[0-9]+$"
     )
@@ -90,12 +99,34 @@ class GitHubApprovalReceipt(GitHubContract):
     reviewer: str = Field(min_length=1, max_length=200)
     review_id: str = Field(min_length=1, max_length=200)
     reviewed_at: AwareDatetime
+    checks: list[GitHubCheckReceipt] = Field(min_length=1, max_length=100)
+    pull_request_state: Literal["closed"]
+    merged: Literal[True]
+    merged_at: AwareDatetime
     merge_commit_sha: str = Field(pattern=r"^[0-9a-f]{40}$")
     source_issue_url: str = Field(
         pattern=r"^https://github\.com/[^/]+/[^/]+/issues/[0-9]+$"
     )
     source_issue_state: Literal["closed"]
     source_issue_closed_at: AwareDatetime
+    evidence_source: Literal["github_mcp", "github_webhook"]
+    observed_at: AwareDatetime
+    github_delivery_id: str | None = Field(default=None, min_length=1, max_length=150)
+    webhook_signature_verified: bool = False
+
+    @model_validator(mode="after")
+    def evidence_and_times_are_coherent(self):
+        if self.evidence_source == "github_webhook":
+            if not self.github_delivery_id or not self.webhook_signature_verified:
+                raise ValueError("La evidencia webhook requiere entrega y firma verificadas.")
+        elif self.github_delivery_id or self.webhook_signature_verified:
+            raise ValueError("La consulta GitHub MCP no debe presentarse como webhook.")
+        if not (
+            self.reviewed_at <= self.merged_at <= self.observed_at
+            and self.source_issue_closed_at <= self.observed_at
+        ):
+            raise ValueError("Las fechas de revisión, merge y observación no son coherentes.")
+        return self
 
 
 class GitHubFinOpsIssueReceipt(GitHubContract):

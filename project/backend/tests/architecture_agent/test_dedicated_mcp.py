@@ -9,7 +9,8 @@ def test_dedicated_mcp_has_only_architecture_tools(tmp_path):
         checkpoint_path=tmp_path / "checkpoints.sqlite3",
     )
     try:
-        tools = set(create_server(service)._tool_manager._tools)
+        registered = create_server(service)._tool_manager._tools
+        tools = set(registered)
         assert tools == {
             "consultar_catalogo_baselines",
             "leer_entrega_agente_2",
@@ -34,5 +35,9 @@ def test_dedicated_mcp_has_only_architecture_tools(tmp_path):
             "solicitar_correccion_finops",
             "aplicar_correccion_finops",
         }
+        assert registered["obtener_handoff_finops"].output_schema["type"] == "object"
+        assert registered["registrar_aceptacion_handoff_finops"].output_schema[
+            "type"
+        ] == "object"
     finally:
         resources.close()

@@ -53,7 +53,7 @@ def create_server(service):
     @server.tool()
     def recibir_handoff_arquitectura(
         expediente_id: str, handoff: dict[str, Any]
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Valida y recibe una revisión exacta; devuelve el recibo para Codex."""
         return call(service.receive_handoff, expediente_id, handoff)
 

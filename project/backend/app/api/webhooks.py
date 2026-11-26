@@ -105,26 +105,39 @@ async def github_event(request: Request, runtime: Runtime):
     kind = request.headers.get("x-github-event", "")
     if not delivery or len(delivery) > 150:
         raise HTTPException(400, "Falta ID de entrega.")
-    if kind not in {"issues", "pull_request"}:
+    if kind not in {"issues", "pull_request", "pull_request_review", "check_suite"}:
         return {"status": "ignored"}
     try:
         body = json.loads(raw)
         repository = body["repository"]["full_name"]
-        issue = body["issue" if kind == "issues" else "pull_request"]
+        if kind == "issues":
+            issue = body["issue"]
+        elif kind in {"pull_request", "pull_request_review"}:
+            issue = body["pull_request"]
+        else:
+            issue = body["check_suite"]["pull_requests"][0]
         url = issue["html_url"]
-    except (ValueError, KeyError, TypeError):
+    except (ValueError, KeyError, TypeError, IndexError):
         raise HTTPException(400, "Evento GitHub inválido.") from None
     if repository not in settings.github_repositories:
         raise HTTPException(403, "Repositorio no autorizado.")
-    return runtime.process.observe_github(
+    process_result = runtime.process.observe_github(
         delivery,
         url,
         kind,
         body.get("action"),
         issue.get("created_at"),
         issue.get("closed_at"),
-        body.get("action") == "closed"
+        kind in {"issues", "pull_request"}
+        and body.get("action") == "closed"
         and any(
             label.get("name") == "requiere-ajustes" for label in issue.get("labels", [])
         ),
     )
+    architecture = getattr(runtime, "architecture", None)
+    architecture_result = (
+        architecture.observe_github_event(delivery, url, kind, body.get("action"))
+        if architecture is not None
+        else {"status": "not_configured", "approved": False}
+    )
+    return {"process": process_result, "architecture": architecture_result}

@@ -400,7 +400,42 @@ class ArchitectureService:
             raise ValueError("La revisión ya tiene otro PR registrado.")
         if not previous:
             self.store.put(key, "architecture_github_pr", payload)
+            self.store.put(
+                "architecture-github-pr-url:"
+                + hashlib.sha256(validated.pull_request_url.encode()).hexdigest(),
+                "architecture_github_pr_link",
+                {
+                    "case_id": case_id,
+                    "revision": plan["revision"],
+                    "pull_request_url": validated.pull_request_url,
+                },
+            )
         return {"duplicate": bool(previous), "receipt": payload}
+
+    def observe_github_event(self, delivery_id, url, kind, action):
+        """Persist signed webhook evidence without inferring an approval transition."""
+        if not self.store:
+            raise ValueError("La evidencia GitHub requiere persistencia.")
+        link = self.store.get(
+            "architecture-github-pr-url:" + hashlib.sha256(url.encode()).hexdigest()
+        )
+        if not link or link["pull_request_url"] != url:
+            return {"status": "unlinked", "approved": False}
+        payload = {
+            "delivery_id": delivery_id,
+            "pull_request_url": url,
+            "event": kind,
+            "action": action,
+            "signature_verified": True,
+            "approved": False,
+        }
+        self.store.event(
+            f"architecture-github-webhook:{delivery_id}:{link['case_id']}",
+            link["case_id"],
+            "architecture.github_webhook_observed",
+            payload,
+        )
+        return {"status": "linked", "approved": False, **link}
 
     def register_github_approval(self, case_id, receipt):
         validated = GitHubApprovalReceipt.model_validate(receipt)
@@ -411,8 +446,12 @@ class ArchitectureService:
             raise ValueError("Primero se debe registrar el PR de Arquitectura.")
         if (
             validated.plan_sha256 != plan["plan_sha256"]
+            or validated.repository_url != plan["plan"]["repository_url"]
+            or validated.pull_request_number != pr["pull_request_number"]
             or validated.pull_request_url != pr["pull_request_url"]
             or validated.head_sha != pr["commit_sha"]
+            or validated.reviewer.casefold()
+            != plan["plan"]["required_reviewer"].casefold()
             or validated.source_issue_url != plan["plan"]["source_issue_url"]
         ):
             raise ValueError("La aprobación no corresponde al PR y commit exactos.")
@@ -423,6 +462,12 @@ class ArchitectureService:
             raise ValueError("La revisión ya tiene otra aprobación GitHub.")
         if not previous:
             self.store.put(key, "architecture_github_approval", payload)
+            self.store.event(
+                f"architecture-github-approved:{case_id}:{revision}",
+                case_id,
+                "architecture.github_pr_approved",
+                payload,
+            )
         self._sync(case_id)
         return {"duplicate": bool(previous), "receipt": payload}
 
@@ -438,7 +483,7 @@ class ArchitectureService:
                 "El PR de Arquitectura todavía no está aprobado y fusionado."
             )
         package = state["package"]
-        handoff = self.get_finops_handoff(case_id, revision)
+        handoff = self._current_finops_handoff(case_id, revision)
         budget = package["economic_contract"]["budget"]
         assumptions = "; ".join(
             f"{item['resource_id']}: {', '.join(item['sizing_assumptions'])}"
@@ -499,9 +544,16 @@ class ArchitectureService:
             raise ValueError("La revisión ya tiene otro issue FinOps.")
         if not previous:
             self.store.put(key, "architecture_finops_issue", payload)
+            self.store.event(
+                f"architecture-finops-issue:{case_id}:{revision}",
+                case_id,
+                "architecture.finops_issue_created",
+                payload,
+            )
+        self._sync(case_id)
         return {"duplicate": bool(previous), "receipt": payload}
 
-    def get_finops_handoff(self, case_id, revision):
+    def _current_finops_handoff(self, case_id, revision):
         state = self.get(case_id)["state"]
         handoff = next(
             (
@@ -517,12 +569,21 @@ class ArchitectureService:
             raise ValueError("Solo se entrega la revisión vigente aprobada.")
         if handoff["handoff_status"] != "ready":
             raise ValueError("El handoff tiene insumos económicos pendientes.")
+        return handoff
+
+    def get_finops_handoff(self, case_id, revision):
+        handoff = self._current_finops_handoff(case_id, revision)
         if self.github_required and self.store:
             approval = self.store.get(
                 f"architecture-github-approval:{case_id}:{revision}"
             )
             if not approval:
                 raise ValueError("El handoff espera aprobación y merge del PR GitHub.")
+            if not self.store.get(f"architecture-finops-issue:{case_id}:{revision}"):
+                raise ValueError("El handoff espera la creación del issue FinOps.")
+            persisted = self.store.handoff(f"{case_id}:stage-3:stage-4:v{revision}")
+            if not persisted or persisted["artifact_sha256"] != handoff["artifact_sha256"]:
+                raise ValueError("El handoff durable a FinOps todavía no está disponible.")
         return handoff
 
     def start(self, case_id, input_id, package):
@@ -901,6 +962,10 @@ class ArchitectureService:
         if state["status"] == "ready_for_finops":
             if self.github_required and not self.store.get(
                 f"architecture-github-approval:{case_id}:{revision}"
+            ):
+                return
+            if self.github_required and not self.store.get(
+                f"architecture-finops-issue:{case_id}:{revision}"
             ):
                 return
             self.store.complete_phase(case_id, "stage-3")

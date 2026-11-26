@@ -180,14 +180,14 @@ def create_server(service):
         return call(service.metrics, expediente_id)
 
     @server.tool()
-    def obtener_handoff_finops(expediente_id: str, revision: int) -> dict:
+    def obtener_handoff_finops(expediente_id: str, revision: int) -> dict[str, Any]:
         """Entrega a Codex el contrato económico aprobado de la revisión vigente."""
         return call(service.get_finops_handoff, expediente_id, revision)
 
     @server.tool()
     def registrar_aceptacion_handoff_finops(
         expediente_id: str, recibo: dict[str, Any]
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Registra el recibo tipado devuelto por el MCP de FinOps vía Codex."""
         return call(service.accept_finops_handoff, expediente_id, recibo)
 

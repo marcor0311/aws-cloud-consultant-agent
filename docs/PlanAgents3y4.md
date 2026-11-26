@@ -399,6 +399,23 @@ aprobación inferida.
 El flujo inicial puede consultar el PR mediante Codex antes de automatizar el
 webhook, sin cambiar el contrato interno.
 
+### Resultado del Paso 11
+
+El recibo `GitHubApprovalReceipt` ahora exige repositorio, PR, head commit, revisor
+requerido, revisión aprobada, al menos un check exitoso, PR cerrado, merge confirmado,
+merge commit, issue de origen cerrado y fechas coherentes. La evidencia puede venir
+de una consulta GitHub MCP o de un webhook firmado; ambas procedencias quedan
+explícitas y no pueden confundirse.
+
+FastAPI acepta eventos firmados `pull_request`, `pull_request_review`, `check_suite`
+e `issues`. Los eventos se registran como observaciones y nunca emiten por sí solos
+`stage.approved`. Codex debe consolidar la evidencia remota y devolver el recibo
+tipado al MCP de Arquitectura.
+
+Cuando el PR ya fue registrado, los webhooks se vinculan con expediente y revisión
+y quedan auditados con firma verificada y `approved: false` hasta recibir el recibo
+consolidado completo.
+
 ## Paso 12 — Transportar el handoff 3 → 4
 
 Con la revisión aprobada e integrada:
@@ -410,6 +427,26 @@ Con la revisión aprobada e integrada:
 5. Codex invoca `recibir_handoff_arquitectura` en el MCP FinOps.
 6. FinOps devuelve `FinOpsHandoffAcceptance`.
 7. Codex registra la aceptación en ambos lados.
+
+### Resultado del Paso 12
+
+El orden del handoff quedó cerrado de forma transaccional e idempotente:
+
+1. la aprobación y merge válidos habilitan preparar el issue FinOps;
+2. Codex crea el issue y devuelve su recibo;
+3. solo entonces LangGraph avanza a etapa 4 y `WorkflowStore` crea el handoff durable;
+4. `obtener_handoff_finops` expone la revisión exacta a Codex;
+5. el MCP FinOps valida el contrato y devuelve `FinOpsHandoffAcceptance`;
+6. Codex registra ese recibo en Arquitectura sin recalcular el contenido.
+
+Un PR aprobado sin issue FinOps, un issue sin handoff durable o una aceptación para
+otra revisión/SHA permanecen bloqueados. La prueba integrada usa ambos servicios
+con el almacén compartido, pero no se presenta como una invocación STDIO real; esa
+demostración corresponde al Paso 13.
+
+Las herramientas críticas `obtener_handoff_finops`,
+`registrar_aceptacion_handoff_finops` y `recibir_handoff_arquitectura` declaran
+salida MCP estructurada para que Codex transporte el contrato sin analizar texto.
 
 ## Paso 13 — Probar por niveles
 

@@ -23,6 +23,7 @@ from app.architecture.project_repository import (
 )
 from app.architecture.service import ArchitectureService
 from app.core.architecture_delivery import ArchitectureProjectDelivery
+from app.finops.service import FinOpsService
 from app.integrations.langgraph import LangGraphExecution
 from app.persistence.workflow import WorkflowStore
 
@@ -1001,24 +1002,64 @@ def test_codex_github_boundary_requires_exact_pr_before_finops(tmp_path):
         service.register_github_pull_request("project-case", receipt)["duplicate"]
         is True
     )
+    observed = service.observe_github_event(
+        "delivery-review-7",
+        receipt["pull_request_url"],
+        "pull_request_review",
+        "submitted",
+    )
+    assert observed["status"] == "linked" and observed["approved"] is False
+    assert not store.get("architecture-github-approval:project-case:1")
     approval = {
         "contract_version": "1.0",
         "plan_sha256": publication["plan_sha256"],
+        "repository_url": plan["repository_url"],
+        "pull_request_number": receipt["pull_request_number"],
         "pull_request_url": receipt["pull_request_url"],
         "head_sha": receipt["commit_sha"],
         "decision": "approved",
-        "reviewer": "cloud-architect",
+        "reviewer": plan["required_reviewer"],
         "review_id": "review-7",
         "reviewed_at": "2026-11-08T18:10:00-06:00",
+        "checks": [
+            {
+                "name": "architecture-tests",
+                "status": "completed",
+                "conclusion": "success",
+                "details_url": receipt["pull_request_url"] + "/checks/1",
+            }
+        ],
+        "pull_request_state": "closed",
+        "merged": True,
+        "merged_at": "2026-11-08T18:11:00-06:00",
         "merge_commit_sha": "b" * 40,
         "source_issue_url": plan["source_issue_url"],
         "source_issue_state": "closed",
         "source_issue_closed_at": "2026-11-08T18:12:00-06:00",
+        "evidence_source": "github_mcp",
+        "observed_at": "2026-11-08T18:13:00-06:00",
+        "github_delivery_id": None,
+        "webhook_signature_verified": False,
     }
+    wrong_reviewer_approval = {**approval, "reviewer": "another-user"}
+    with pytest.raises(ValueError, match="PR y commit exactos"):
+        service.register_github_approval("project-case", wrong_reviewer_approval)
+    failed_checks = deepcopy(approval)
+    failed_checks["checks"][0]["conclusion"] = "failure"
+    with pytest.raises(ValidationError, match="success"):
+        service.register_github_approval("project-case", failed_checks)
+    unsigned_webhook = {
+        **approval,
+        "evidence_source": "github_webhook",
+        "github_delivery_id": "delivery-7",
+    }
+    with pytest.raises(ValidationError, match="firma verificadas"):
+        service.register_github_approval("project-case", unsigned_webhook)
     assert (
         service.register_github_approval("project-case", approval)["duplicate"] is False
     )
-    assert service.get_finops_handoff("project-case", 1)["revision"] == 1
+    with pytest.raises(ValueError, match="creación del issue FinOps"):
+        service.get_finops_handoff("project-case", 1)
 
     draft = service.prepare_finops_issue("project-case", "finops-owner")
     assert approval["pull_request_url"] in draft["body"]
@@ -1038,6 +1079,18 @@ def test_codex_github_boundary_requires_exact_pr_before_finops(tmp_path):
     assert (
         service.register_finops_issue("project-case", issue_receipt)["duplicate"]
         is True
+    )
+    finops_handoff = service.get_finops_handoff("project-case", 1)
+    received = FinOpsService(store).receive_handoff("project-case", finops_handoff)
+    acceptance = received["intake"]["acceptance"]
+    assert service.accept_finops_handoff("project-case", acceptance)[
+        "duplicate"
+    ] is False
+    assert service.accept_finops_handoff("project-case", acceptance)[
+        "duplicate"
+    ] is True
+    assert store.handoff("project-case:stage-3:stage-4:v1")["accepted_by"] == (
+        "finops-agent"
     )
     store.engine.dispose()
     connection.close()
