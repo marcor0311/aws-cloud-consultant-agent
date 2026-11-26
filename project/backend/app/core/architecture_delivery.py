@@ -51,6 +51,14 @@ class DeliveryBudget(DeliveryContract):
         return self
 
 
+class ArchitectureWork(DeliveryContract):
+    context: str = Field(min_length=1, max_length=12000)
+    scope: str = Field(min_length=1, max_length=12000)
+    restrictions: str = Field(min_length=1, max_length=12000)
+    deliverables: str = Field(min_length=1, max_length=12000)
+    acceptance: str = Field(min_length=1, max_length=12000)
+
+
 class DirectionDecision(DeliveryContract):
     kind: Literal["direction_decision"]
     id: str = Field(min_length=1, max_length=120)
@@ -103,6 +111,7 @@ class PullRequestReceipt(DeliveryContract):
 class ArchitectureIssueReceipt(DeliveryContract):
     number: int = Field(ge=1)
     url: str = Field(pattern=r"^https://github\.com/[^/]+/[^/]+/issues/[0-9]+$")
+    title: str = Field(min_length=1, max_length=500)
     assignee: str = Field(min_length=1, max_length=39)
     assignment_pending: Literal[False]
     template_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -138,6 +147,7 @@ class ArchitectureProjectDelivery(DeliveryContract):
     approved_package: DeliveryManifest
     inputs: list[DeliveryFile] = Field(min_length=1, max_length=100)
     budget: DeliveryBudget
+    work: ArchitectureWork
     approval: OpeningDecision
     handoff: WorkflowHandoffReceipt
     is_fictitious: bool

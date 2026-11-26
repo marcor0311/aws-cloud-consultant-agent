@@ -161,6 +161,7 @@ class GitHub:
             {
                 "url": record["repository"]["url"] + "/issues/1",
                 "number": 1,
+                "title": "[Arquitectura] " + record["title"],
                 "assignee": record.get("issue_assignee") or record["architect"],
                 "assignment_pending": False,
                 "template_sha256": hashlib.sha256(template.encode()).hexdigest(),

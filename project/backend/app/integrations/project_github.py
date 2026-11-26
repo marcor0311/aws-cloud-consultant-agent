@@ -344,6 +344,7 @@ class ProjectGitHub:
         return {
             "url": issue["html_url"],
             "number": issue["number"],
+            "title": "[Arquitectura] " + record["title"],
             "assignee": None if pending else assignee_login,
             "assignment_pending": pending,
             "template_sha256": hashlib.sha256(template.encode()).hexdigest(),

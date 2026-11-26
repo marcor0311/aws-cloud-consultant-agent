@@ -418,6 +418,7 @@ class ProjectOpeningRepository:
             },
             "inputs": inputs,
             "budget": record["budget"],
+            "work": record["work"],
             "approval": approval,
             "handoff": {
                 key: handoff[key]

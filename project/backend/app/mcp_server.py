@@ -201,6 +201,28 @@ def create_server(service, runtime=None):
             return call(runtime.architecture.read_project_handoff, entrega)
 
         @server.tool()
+        def vincular_repositorio_proyecto(
+            expediente_id: str, repositorio_local: str
+        ) -> dict:
+            """Valida el checkout localizado o clonado por Codex."""
+            return call(
+                runtime.architecture.bind_project_repository,
+                expediente_id,
+                repositorio_local,
+            )
+
+        @server.tool()
+        def validar_issue_arquitectura(
+            expediente_id: str, issue_snapshot: dict[str, Any]
+        ) -> dict:
+            """Valida evidencia GitHub del encargo sin aprobar la arquitectura."""
+            return call(
+                runtime.architecture.validate_architecture_issue,
+                expediente_id,
+                issue_snapshot,
+            )
+
+        @server.tool()
         def publicar_arquitectura_local(expediente_id: str) -> dict:
             """Publica la revisión aprobada localmente sin commit ni push."""
             return call(runtime.architecture.publish_to_project, expediente_id)

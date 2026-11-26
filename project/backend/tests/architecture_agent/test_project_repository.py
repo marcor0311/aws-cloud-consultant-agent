@@ -54,7 +54,9 @@ def git_bytes(root, *args):
 
 def project_repository(root):
     for directory in ProjectRepositoryBridge.REQUIRED_DIRECTORIES:
-        (root / directory).mkdir(parents=True, exist_ok=True)
+        path = root / directory
+        path.mkdir(parents=True, exist_ok=True)
+        (path / ".gitkeep").touch()
     requirements = root / "docs/01-discovery/requirements.md"
     decision = root / "docs/02-board/decision.md"
     constraints = root / "docs/01-discovery/constraints.md"
@@ -135,7 +137,13 @@ def handoff_v13(root, commit):
     decision_digest = "2" * 64
     body = (
         "# Encargo de Arquitectura\n\n"
-        f"USD 75.00\n\n[{document_path}]({repository_url}/blob/{commit}/{document_path})\n\n"
+        "Contexto aprobado.\n\n"
+        "USD 75.00\n\n- AWS: USD 75.00\n\n"
+        "Diseñar almacenamiento privado.\n\n"
+        "Usar us-east-1.\n\n"
+        "Arquitectura y ADR.\n\n"
+        "Revisión explícita del arquitecto.\n\n"
+        f"[{document_path}]({repository_url}/blob/{commit}/{document_path})\n\n"
         f"<!-- meeting-assistant:project-case:{request_sha256} -->"
     )
     delivery = {
@@ -164,6 +172,7 @@ def handoff_v13(root, commit):
         "architecture_issue": {
             "number": 2,
             "url": f"{repository_url}/issues/2",
+            "title": "[Arquitectura] AWS Cloud Consulting Project Demo",
             "assignee": "cloud-architect",
             "assignment_pending": False,
             "template_sha256": "3" * 64,
@@ -187,6 +196,13 @@ def handoff_v13(root, commit):
             "accepted": True,
             "lines": [{"name": "AWS", "amount": "75.00"}],
             "conditions": "Límite aprobado por Dirección.",
+        },
+        "work": {
+            "context": "Contexto aprobado.",
+            "scope": "Diseñar almacenamiento privado.",
+            "restrictions": "Usar us-east-1.",
+            "deliverables": "Arquitectura y ADR.",
+            "acceptance": "Revisión explícita del arquitecto.",
         },
         "approval": {
             "kind": "direction_decision",
@@ -213,12 +229,15 @@ def handoff_v13(root, commit):
         "is_fictitious": False,
     }
     snapshot = {
+        "provider": "github",
         "repository_url": repository_url,
         "number": 2,
         "url": f"{repository_url}/issues/2",
+        "title": "[Arquitectura] AWS Cloud Consulting Project Demo",
         "state": "open",
         "assignees": ["cloud-architect"],
         "body": body,
+        "retrieved_at": "2026-11-25T12:00:00-06:00",
     }
     return delivery, snapshot
 
@@ -288,6 +307,54 @@ def test_agent2_handoff_13_distinguishes_simulated_board_record(tmp_path):
     assert validated.approval.signature_verification == "declared_by_source"
 
 
+def test_agent2_handoff_13_binds_checkout_and_validates_issue_snapshot(tmp_path):
+    commit, _ = project_repository(tmp_path)
+    git(tmp_path, "remote", "add", "origin", "git@github.com:example/agent2-project.git")
+    delivery, snapshot = handoff_v13(tmp_path, commit)
+    context = ProjectRepositoryBridge().read(delivery)
+
+    bound = ProjectRepositoryBridge().bind_repository(context, str(tmp_path))
+    validated = ProjectRepositoryBridge.validate_issue(bound, snapshot)
+
+    assert bound["input_status"] == "awaiting_issue_validation"
+    assert bound["repository_binding"]["validation"] == "remote_commit_and_paths"
+    assert bound["repository_binding"]["working_tree_modified"] is False
+    assert validated["input_status"] == "ready_for_evidence_validation"
+    assert validated["architecture_approved"] is False
+    assert validated["issue_snapshot"]["state"] == "open"
+
+
+def test_agent2_handoff_13_rejects_wrong_checkout_and_issue_evidence(tmp_path):
+    commit, _ = project_repository(tmp_path)
+    delivery, snapshot = handoff_v13(tmp_path, commit)
+    context = ProjectRepositoryBridge().read(delivery)
+    git(tmp_path, "remote", "add", "origin", "https://github.com/example/other.git")
+    with pytest.raises(ValueError, match="otro repositorio"):
+        ProjectRepositoryBridge().bind_repository(context, str(tmp_path))
+
+    git(tmp_path, "remote", "set-url", "origin", delivery["repository"]["url"])
+    bound = ProjectRepositoryBridge().bind_repository(context, str(tmp_path))
+    wrong_assignee = {**snapshot, "assignees": ["another-architect"]}
+    with pytest.raises(ValueError, match="arquitecto esperado"):
+        ProjectRepositoryBridge.validate_issue(bound, wrong_assignee)
+    changed = {**snapshot, "body": snapshot["body"] + "\nAlterado"}
+    with pytest.raises(ValueError, match="cuerpo del issue cambió"):
+        ProjectRepositoryBridge.validate_issue(bound, changed)
+
+
+def test_closed_issue_is_evidence_but_not_architecture_approval(tmp_path):
+    commit, _ = project_repository(tmp_path)
+    git(tmp_path, "remote", "add", "origin", "https://github.com/example/agent2-project")
+    delivery, snapshot = handoff_v13(tmp_path, commit)
+    bridge = ProjectRepositoryBridge()
+    bound = bridge.bind_repository(bridge.read(delivery), str(tmp_path))
+
+    validated = bridge.validate_issue(bound, {**snapshot, "state": "closed"})
+
+    assert validated["issue_snapshot"]["state"] == "closed"
+    assert validated["architecture_approved"] is False
+
+
 def service_at(root):
     root.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(root / "checkpoints.sqlite3", check_same_thread=False)
@@ -299,6 +366,28 @@ def service_at(root):
         store,
     )
     return connection, store, service
+
+
+def test_service_persists_repository_and_issue_validation_steps(tmp_path):
+    repo = tmp_path / "project"
+    repo.mkdir()
+    commit, _ = project_repository(repo)
+    git(repo, "remote", "add", "origin", "https://github.com/example/agent2-project")
+    delivery, snapshot = handoff_v13(repo, commit)
+    connection, store, service = service_at(tmp_path / "state")
+    try:
+        assert service.read_project_handoff(delivery)["input_status"] == (
+            "awaiting_repository_validation"
+        )
+        assert service.bind_project_repository("project-case", str(repo))[
+            "input_status"
+        ] == "awaiting_issue_validation"
+        validated = service.validate_architecture_issue("project-case", snapshot)
+        assert validated["input_status"] == "ready_for_evidence_validation"
+        assert store.get("architecture-project-context:project-case") == validated
+    finally:
+        store.engine.dispose()
+        connection.close()
 
 
 def test_reads_pinned_agent_2_inputs_and_publishes_approved_revision(tmp_path):

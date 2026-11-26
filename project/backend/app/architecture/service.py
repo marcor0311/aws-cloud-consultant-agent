@@ -93,6 +93,41 @@ class ArchitectureService:
                 self.project_contexts[key] = context
         return context
 
+    def _project_context(self, case_id):
+        key = f"architecture-project-context:{case_id}"
+        context = self.store.get(key) if self.store else self.project_contexts.get(key)
+        if not context:
+            raise ValueError("El expediente no tiene una entrega del agente 2.")
+        return key, context
+
+    def _replace_project_context(self, key, previous, updated):
+        immutable = (
+            "case_id",
+            "project_id",
+            "repository_url",
+            "source_commit",
+            "published_commit",
+            "request_sha256",
+            "approved_artifact_sha256",
+        )
+        if any(previous.get(field) != updated.get(field) for field in immutable):
+            raise ValueError("La validación intentó cambiar la identidad de la entrega.")
+        if self.store:
+            self.store.put(key, "architecture_project_context", updated)
+        else:
+            self.project_contexts[key] = updated
+        return updated
+
+    def bind_project_repository(self, case_id, repository_path):
+        key, context = self._project_context(case_id)
+        updated = self.project_repository.bind_repository(context, repository_path)
+        return self._replace_project_context(key, context, updated)
+
+    def validate_architecture_issue(self, case_id, snapshot):
+        key, context = self._project_context(case_id)
+        updated = self.project_repository.validate_issue(context, snapshot)
+        return self._replace_project_context(key, context, updated)
+
     def publish_to_project(self, case_id):
         state = self.get(case_id)["state"]
         if state.get("status") != "ready_for_finops":

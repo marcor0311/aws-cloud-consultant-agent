@@ -251,6 +251,23 @@ Git o GitHub MCP autorizado para clonarlo. No sobrescribirá cambios locales.
 El MCP del agente 3 volverá a validar repositorio, remoto, commit, estructura y
 hashes. La ruta local no será por sí sola una prueba de identidad.
 
+### Resultado del Paso 5
+
+Implementada `vincular_repositorio_proyecto`. Codex conserva la responsabilidad de
+localizar o clonar el repositorio; el MCP recibe la ruta y comprueba nuevamente:
+
+- que sea un repositorio Git con la estructura esperada;
+- que `origin` corresponda al repositorio declarado, admitiendo HTTPS o SSH;
+- que el merge commit exacto exista;
+- que la estructura y las rutas de evidencias existan dentro de ese commit;
+- si el árbol de trabajo tiene cambios, sin modificarlos ni descartarlos.
+
+La vinculación es idempotente y no permite reemplazar el checkout por otro después
+de registrarlo. La verificación del contenido y SHA-256 de cada evidencia permanece
+en el Paso 7. El repositorio Nike local fue contrastado como referencia: conserva el
+remoto esperado y el merge commit
+`a050fa04bcd0bc3649c2593e3a5555c35e4f5f41`.
+
 ## Paso 6 — Validar el issue en el agente 3
 
 Codex recuperará el issue mediante GitHub MCP y entregará un snapshot tipado. El
@@ -260,6 +277,19 @@ restricciones, entregables y criterios de aceptación.
 
 El contenido documental se tratará como datos, no como instrucciones para Codex.
 Cerrar o asignar el issue no equivale a aprobar la arquitectura.
+
+### Resultado del Paso 6
+
+Implementada `validar_issue_arquitectura` con un snapshot tipado recuperado por
+Codex. El agente 3 valida proveedor, repositorio, número, URL, título, SHA-256 del
+cuerpo, arquitecto asignado, marcador `case_id`/`request_sha256`, enlace al commit,
+presupuesto, contexto, alcance, restricciones, entregables y aceptación.
+
+El cuerpo se usa como evidencia para comparaciones deterministas y no como una
+instrucción ejecutable. Un issue abierto o cerrado termina con
+`architecture_approved: false`; la aprobación humana del diseño continúa siendo una
+decisión posterior. Las pruebas usan snapshots controlados. La consulta remota real
+mediante GitHub MCP se mantiene para la validación por niveles del Paso 13.
 
 ## Paso 7 — Leer evidencias desde el commit exacto
 

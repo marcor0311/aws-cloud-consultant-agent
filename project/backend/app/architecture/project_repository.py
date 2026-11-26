@@ -252,6 +252,18 @@ class ArchitectureProjectHandoff(RepositoryContract):
         return self
 
 
+class ArchitectureIssueSnapshot(RepositoryContract):
+    provider: Literal["github"] = "github"
+    repository_url: str = Field(pattern=r"^https://github\.com/[^/]+/[^/]+(?:\.git)?$")
+    number: int = Field(ge=1)
+    url: str = Field(pattern=r"^https://github\.com/[^/]+/[^/]+/issues/[0-9]+$")
+    title: str = Field(min_length=1, max_length=500)
+    body: str = Field(min_length=1, max_length=100000)
+    state: Literal["open", "closed"]
+    assignees: list[str] = Field(min_length=1, max_length=20)
+    retrieved_at: AwareDatetime
+
+
 class ProjectRepositoryBridge:
     REQUIRED_DIRECTORIES = (
         "docs/01-discovery",
@@ -287,6 +299,118 @@ class ProjectRepositoryBridge:
             raise ValueError("El repositorio no conserva la estructura del template.")
         return root
 
+    @staticmethod
+    def _github_remote(value: str) -> str:
+        remote = value.strip().removesuffix(".git")
+        if remote.startswith("git@github.com:"):
+            remote = "https://github.com/" + remote.removeprefix("git@github.com:")
+        elif remote.startswith("ssh://git@github.com/"):
+            remote = "https://github.com/" + remote.removeprefix(
+                "ssh://git@github.com/"
+            )
+        if not remote.startswith("https://github.com/"):
+            raise ValueError("El remoto origin no es un repositorio GitHub reconocido.")
+        return remote
+
+    def bind_repository(self, context, repository_path):
+        if context.get("contract_version") != "1.3":
+            raise ValueError("La vinculación explícita aplica al contrato 1.3.")
+        if context.get("input_status") not in {
+            "awaiting_repository_validation",
+            "awaiting_issue_validation",
+        }:
+            raise ValueError("La entrega no está esperando validación del repositorio.")
+        root = self._root(repository_path)
+        remote = self._github_remote(
+            self._git(root, "config", "--get", "remote.origin.url").decode()
+        )
+        expected_remote = self._github_remote(context["repository_url"])
+        if remote.casefold() != expected_remote.casefold():
+            raise ValueError("El checkout local pertenece a otro repositorio.")
+        commit = context["source_commit"]
+        self._git(root, "cat-file", "-e", f"{commit}^{{commit}}")
+        for directory in self.REQUIRED_DIRECTORIES:
+            self._git(root, "cat-file", "-e", f"{commit}:{directory}")
+        for item in context["approved_inputs"]:
+            self._git(root, "cat-file", "-e", f"{commit}:{item['path']}")
+        binding = {
+            "repository_path": str(root),
+            "repository_url": expected_remote,
+            "source_commit": commit,
+            "validation": "remote_commit_and_paths",
+            "working_tree_modified": bool(
+                self._git(root, "status", "--porcelain").strip()
+            ),
+        }
+        previous = context.get("repository_binding")
+        if previous and previous != binding:
+            raise ValueError("El expediente ya está vinculado a otro checkout.")
+        return {
+            **context,
+            "repository_path": str(root),
+            "repository_binding": binding,
+            "input_status": "awaiting_issue_validation",
+        }
+
+    @staticmethod
+    def validate_issue(context, snapshot):
+        if context.get("contract_version") != "1.3":
+            raise ValueError("El snapshot tipado aplica al contrato 1.3.")
+        if context.get("input_status") not in {
+            "awaiting_issue_validation",
+            "ready_for_evidence_validation",
+        }:
+            raise ValueError("Primero debe validarse el checkout del repositorio.")
+        issue = ArchitectureIssueSnapshot.model_validate(snapshot)
+        expected = context["architecture_issue"]
+        repository = context["repository_url"].removesuffix(".git")
+        if (
+            issue.repository_url.removesuffix(".git").casefold()
+            != repository.casefold()
+            or issue.number != expected["number"]
+            or issue.url != expected["url"]
+        ):
+            raise ValueError("El snapshot corresponde a otro issue o repositorio.")
+        if issue.title != expected["title"]:
+            raise ValueError("El título del issue cambió desde la entrega.")
+        if hashlib.sha256(issue.body.encode()).hexdigest() != expected["body_sha256"]:
+            raise ValueError("El cuerpo del issue cambió desde la entrega.")
+        if expected["assignee"].casefold() not in {
+            assignee.casefold() for assignee in issue.assignees
+        }:
+            raise ValueError("El issue no está asignado al arquitecto esperado.")
+        marker = (
+            "<!-- meeting-assistant:"
+            + context["case_id"]
+            + ":"
+            + context["request_sha256"]
+            + " -->"
+        )
+        if marker not in issue.body:
+            raise ValueError("El issue no contiene el marcador trazable esperado.")
+        if context["published_commit"] not in issue.body:
+            raise ValueError("El issue no enlaza el commit publicado por el agente 2.")
+        budget = context["budget"]
+        expected_budget = f"{budget['currency']} {budget['total']}"
+        if expected_budget not in issue.body or any(
+            f"{budget['currency']} {line['amount']}" not in issue.body
+            for line in budget["lines"]
+        ):
+            raise ValueError("El presupuesto del issue no coincide con la entrega.")
+        work = context["work"]
+        if any(work[field] not in issue.body for field in work):
+            raise ValueError("El alcance o los criterios del issue no coinciden.")
+        receipt = issue.model_dump(mode="json")
+        previous = context.get("issue_snapshot")
+        if previous and previous != receipt:
+            raise ValueError("El expediente ya conserva otro snapshot del issue.")
+        return {
+            **context,
+            "issue_snapshot": receipt,
+            "input_status": "ready_for_evidence_validation",
+            "architecture_approved": False,
+        }
+
     def read(self, handoff):
         if handoff.get("contract_version") == "1.3":
             delivery = ArchitectureProjectDelivery.model_validate(handoff)
@@ -308,6 +432,7 @@ class ProjectRepositoryBridge:
                 "approval": delivery.approval.model_dump(mode="json"),
                 "board_validation": None,
                 "budget": delivery.budget.model_dump(mode="json"),
+                "work": delivery.work.model_dump(mode="json"),
                 "handoff": delivery.handoff.model_dump(mode="json"),
                 "approved_inputs": [
                     item.model_dump(mode="json") for item in delivery.inputs
