@@ -3,6 +3,9 @@
 import hashlib
 import json
 
+from app.core.architecture_delivery import ArchitectureProjectDelivery
+from app.integrations.board_documents import board_documents
+from app.integrations.opening_documents import delivery_manifest
 from app.preparation.deliveries import files_digest
 from app.project_opening.models import project_identity, slug
 
@@ -318,6 +321,125 @@ class ProjectOpeningRepository:
             "handoffs": self.store.case_handoffs(case_id),
             "events": self.store.case_events(case_id),
         }
+
+    def architecture_delivery(self, case_id):
+        """Build the immutable Agent 2 -> Agent 3 transport from persisted receipts."""
+        record = self.get(case_id)
+        if record["status"] != "delivered":
+            raise ValueError("La apertura todavía no fue entregada a Arquitectura.")
+        required = ("repository", "commit", "pull_request", "issue", "board_approval")
+        if any(not record.get(key) for key in required):
+            raise ValueError("La apertura no conserva todos los recibos requeridos.")
+        if not record["pull_request"].get("merged"):
+            raise ValueError("La estructura inicial todavía no fue integrada.")
+
+        incoming = record.get("incoming_preparation") or {}
+        manifest = self.store.get(
+            f"artifact-files:{case_id}:{incoming.get('revision')}"
+        )
+        if not manifest:
+            raise ValueError("Falta el manifiesto aprobado del agente 1.")
+        manifest_bytes = delivery_manifest(manifest)
+        manifest_in_commit = bool(manifest.get("bundle_path"))
+        inputs = [
+            {
+                "path": "docs/01-discovery/" + item["name"],
+                "sha256": item["sha256"],
+                "media_type": {
+                    ".pdf": "application/pdf",
+                    ".html": "text/html",
+                    ".md": "text/markdown",
+                }["." + item["name"].rsplit(".", 1)[-1].lower()],
+            }
+            for item in record["files"]
+        ]
+
+        decision = record["board_approval"]
+        if decision.get("kind") == "direction_decision":
+            approval = {**decision, "simulated": False}
+        else:
+            documents = board_documents(decision)
+            path = f"docs/02-board/acta-junta-{decision['id']}.json"
+            data = documents[path]
+            inputs.append(
+                {
+                    "path": path,
+                    "sha256": hashlib.sha256(data).hexdigest(),
+                    "media_type": "application/json",
+                }
+            )
+            approval = {
+                "kind": "board_record",
+                "id": decision["id"],
+                "request_sha256": decision["request_sha256"],
+                "digest": decision["digest"],
+                "status": decision["status"],
+                "closed_at": decision["closed_at"],
+                "review_url": decision["review_url"],
+                "simulated": decision["is_simulated"],
+                "document_path": path,
+                "document_sha256": hashlib.sha256(data).hexdigest(),
+                "signature_verification": "declared_by_source",
+            }
+
+        handoff = next(
+            (
+                item
+                for item in self.store.case_handoffs(case_id)
+                if item["from_phase"] == "project-opening"
+                and item["to_phase"] == "architecture"
+                and item["artifact_sha256"] == decision["digest"]
+            ),
+            None,
+        )
+        if not handoff:
+            raise ValueError("Falta el handoff persistido hacia Arquitectura.")
+        payload = {
+            "contract_version": "1.3",
+            "source_stage": 2,
+            "case_id": case_id,
+            "project_id": record["repository_name"],
+            "request_sha256": record["request_sha256"],
+            "architect": record["architect"],
+            "repository": record["repository"],
+            "published_commit": record["commit"],
+            "initial_pull_request": record["pull_request"],
+            "architecture_issue": record["issue"],
+            "approved_package": {
+                "revision": manifest["revision"],
+                "artifact_sha256": manifest["artifact_sha256"],
+                "files_sha256": manifest["files_sha256"],
+                "path": "docs/01-discovery/manifest.json"
+                if manifest_in_commit
+                else None,
+                "sha256": hashlib.sha256(manifest_bytes).hexdigest()
+                if manifest_in_commit
+                else None,
+            },
+            "inputs": inputs,
+            "budget": record["budget"],
+            "work": record["work"],
+            "approval": approval,
+            "handoff": {
+                key: handoff[key]
+                for key in (
+                    "id",
+                    "from_actor",
+                    "to_actor",
+                    "from_phase",
+                    "to_phase",
+                    "revision",
+                    "artifact_sha256",
+                    "created_at",
+                    "accepted_at",
+                    "accepted_by",
+                )
+            },
+            "is_fictitious": record["is_fictitious"],
+        }
+        return ArchitectureProjectDelivery.model_validate(payload).model_dump(
+            mode="json"
+        )
 
     def update(self, case_id, **changes):
         record = {**self.get(case_id), **changes}

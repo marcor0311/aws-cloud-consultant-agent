@@ -17,6 +17,7 @@ google_oauth_client.json
 *.pfx
 .aws/
 project/data/
+project/backend/data/
 
 # Python environments, build output and caches
 .venv/
@@ -37,6 +38,7 @@ console-recordings/
 project/generated/
 insumos/
 *.zip
+project/backend/tools/awsdac/v*/
 .terraform/
 *.tfstate
 *.tfstate.*

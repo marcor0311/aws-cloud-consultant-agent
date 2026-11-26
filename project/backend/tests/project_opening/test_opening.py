@@ -159,9 +159,13 @@ class GitHub:
         issue = self.issues.setdefault(
             record["case_id"],
             {
-                "url": "https://github.com/example/repo/issues/1",
+                "url": record["repository"]["url"] + "/issues/1",
                 "number": 1,
+                "title": "[Arquitectura] " + record["title"],
                 "assignee": record.get("issue_assignee") or record["architect"],
+                "assignment_pending": False,
+                "template_sha256": hashlib.sha256(template.encode()).hexdigest(),
+                "body_sha256": hashlib.sha256(body.encode()).hexdigest(),
             },
         )
         return issue
@@ -169,7 +173,7 @@ class GitHub:
 
 @pytest.fixture
 def source(tmp_path):
-    request = json.loads(FIXTURE.read_text())
+    request = json.loads(FIXTURE.read_text(encoding="utf-8"))
     for file in request["files"]:
         value = ("Contenido ficticio " + file["name"]).encode()
         (tmp_path / file["name"]).write_bytes(value)
@@ -206,9 +210,11 @@ def make_service(store, saver, github, directory, *, board_choices=None):
 def seed_preparation(store, saver, request, directory):
     fixture = FIXTURE.parent
     transcript = MeetingTranscript.model_validate_json(
-        (fixture / "transcript.json").read_text()
+        (fixture / "transcript.json").read_text(encoding="utf-8")
     )
-    content = MeetingInsumos.model_validate_json((fixture / "content.json").read_text())
+    content = MeetingInsumos.model_validate_json(
+        (fixture / "content.json").read_text(encoding="utf-8")
+    )
     package = content.executive_package(transcript).model_dump()
     package["budget"] = {
         "text": "Presupuesto por conciliar: la transcripción indica un importe y las notas no lo confirman.",
@@ -729,7 +735,12 @@ def test_guided_mcp_opens_approved_preparation_from_postgres_records(tmp_path, s
 
         def merge_initial_structure(self, record):
             self.merged = True
-            return {"number": 1, "merged": True, "merge_sha": "b" * 40}
+            return {
+                "number": 1,
+                "url": record["repository"]["url"] + "/pull/1",
+                "merged": True,
+                "merge_sha": "b" * 40,
+            }
 
     github = ImmediateGitHub()
     repository = ProjectOpeningRepository(store)
@@ -811,6 +822,20 @@ def test_guided_mcp_opens_approved_preparation_from_postgres_records(tmp_path, s
 
         result = answer("sí")
         assert result["status"] == "delivered"
+        handoff = asyncio.run(
+            call(
+                "obtener_handoff_arquitectura",
+                {"expediente_id": source["case_id"]},
+            )
+        )
+        assert handoff["contract_version"] == "1.3"
+        assert handoff["request_sha256"] == result["request_sha256"]
+        assert handoff["initial_pull_request"]["merged"] is True
+        assert handoff["architecture_issue"]["body_sha256"] == hashlib.sha256(
+            github.body.encode()
+        ).hexdigest()
+        assert handoff["approval"]["kind"] == "direction_decision"
+        assert handoff["handoff"]["to_phase"] == "architecture"
         opening = service.get(source["case_id"])
         assert summary["repository"].endswith("/" + opening["repository_name"])
         metrics = asyncio.run(

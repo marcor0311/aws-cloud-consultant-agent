@@ -1,0 +1,43 @@
+"""The dedicated server exposes only the Cloud Architecture Agent boundary."""
+
+from app.architecture.mcp_server import create_server, create_service
+
+
+def test_dedicated_mcp_has_only_architecture_tools(tmp_path):
+    service, resources = create_service(
+        database_url=f"sqlite:///{tmp_path / 'workflow.sqlite3'}",
+        checkpoint_path=tmp_path / "checkpoints.sqlite3",
+    )
+    try:
+        registered = create_server(service)._tool_manager._tools
+        tools = set(registered)
+        assert tools == {
+            "consultar_catalogo_baselines",
+            "leer_entrega_agente_2",
+            "vincular_repositorio_proyecto",
+            "validar_issue_arquitectura",
+            "validar_evidencias_proyecto",
+            "publicar_arquitectura_local",
+            "preparar_publicacion_github",
+            "registrar_pull_request_github",
+            "registrar_aprobacion_pr_github",
+            "preparar_issue_finops",
+            "registrar_issue_finops_github",
+            "iniciar_arquitectura",
+            "consultar_arquitectura",
+            "consultar_historial_arquitectura",
+            "consultar_metricas_arquitectura",
+            "obtener_handoff_finops",
+            "registrar_aceptacion_handoff_finops",
+            "corregir_arquitectura",
+            "revisar_arquitectura",
+            "registrar_decision_arquitecto",
+            "solicitar_correccion_finops",
+            "aplicar_correccion_finops",
+        }
+        assert registered["obtener_handoff_finops"].output_schema["type"] == "object"
+        assert registered["registrar_aceptacion_handoff_finops"].output_schema[
+            "type"
+        ] == "object"
+    finally:
+        resources.close()

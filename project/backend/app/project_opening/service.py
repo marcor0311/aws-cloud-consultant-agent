@@ -50,6 +50,9 @@ class OpeningService:
     def audit(self, case_id):
         return self.repository.audit(case_id)
 
+    def architecture_handoff(self, case_id):
+        return self.repository.architecture_delivery(case_id)
+
     def metrics(self, case_id):
         return self.repository.metrics(case_id)
 

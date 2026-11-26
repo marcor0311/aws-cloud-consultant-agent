@@ -3,7 +3,11 @@
 import os
 import time
 from contextlib import ExitStack
+from pathlib import Path
 
+from app.architecture.catalog import BaselineCatalog
+from app.architecture.graph import build_graph as build_architecture_graph
+from app.architecture.service import ArchitectureService
 from app.clients.repository import ClientRepository
 from app.core.config import project_path
 from app.integrations.ai.preparer import OpenAIPreparer
@@ -262,6 +266,7 @@ def create_runtime(
     drafter=None,
     clock=time.time,
     client_lookup=None,
+    baseline_root=None,
 ):
     resources = ExitStack()
     try:
@@ -318,6 +323,25 @@ def create_runtime(
         process = ProcessService(
             LangGraphExecution(build_process_graph(saver)), store, settings.manager_id
         )
+        catalog = BaselineCatalog(
+            baseline_root
+            or Path(__file__).resolve().parents[4]
+            / "aws-cloud-consultant-baseline-modules"
+        )
+        architecture = ArchitectureService(
+            LangGraphExecution(build_architecture_graph(saver, catalog)),
+            catalog,
+            store,
+            process,
+            architect_id="cloud-solutions-architect",
+            github_required=True,
+        )
+        from app.finops.service import FinOpsService
+
+        finops = FinOpsService(
+            store,
+            output_dir=(settings.documents_dir or project_path("data")) / "finops",
+        )
         from app.integrations.processed_documents import ProcessedDocuments
         from app.preparation.processing import ProcessedMeeting
 
@@ -356,6 +380,8 @@ def create_runtime(
             drafter=drafter,
             worker_lock=LocalWorkerLock(settings.database_url),
             resources=resources,
+            architecture=architecture,
+            finops=finops,
             mock_clock=mock_clock,
             client_lookup=client_lookup,
         )

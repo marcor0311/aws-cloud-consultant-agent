@@ -1,0 +1,48 @@
+{
+	"Name": "My Estimate",
+	"Total Cost": {
+		"monthly": "3.24",
+		"upfront": "0.00",
+		"12 months": "38.88"
+	},
+	"Metadata": {
+		"Currency": "USD",
+		"Locale": "en_US",
+		"Created On": "9/11/2026",
+		"Legal Disclaimer": "AWS Pricing Calculator provides only an estimate of your AWS fees and doesn't include any taxes that might apply. Your actual fees depend on a variety of factors, including your actual usage of AWS services.",
+		"Share Url": "https://calculator.aws/#/estimate?id=bad2a0531379cb5d5aec0c4b36c820b57532c8bd"
+	},
+	"Groups": {
+		"Services": [
+			{
+				"Service Name": "S3 Standard",
+				"Region": "US East (N. Virginia)",
+				"Status": "",
+				"Service Cost": {
+					"monthly": "2.34",
+					"upfront": "0.00",
+					"12 months": "28.08"
+				},
+				"Properties": {
+					"S3 Standard storage": "100 GB per month",
+					"GET, SELECT, and all other requests from S3 Standard": "100000"
+				}
+			},
+			{
+				"Service Name": "Data Transfer",
+				"Region": "US East (N. Virginia)",
+				"Status": "",
+				"Service Cost": {
+					"monthly": "0.90",
+					"upfront": "0.00",
+					"12 months": "10.80"
+				},
+				"Properties": {
+					"DT Inbound: Not selected": "0 TB per month",
+					"DT Outbound: Internet": "10 GB per month",
+					"DT Outbound: Not selected": "0 TB per month"
+				}
+			}
+		]
+	}
+}

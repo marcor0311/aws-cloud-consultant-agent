@@ -1,0 +1,22 @@
+{
+  "agent": "cloud-architecture-agent",
+  "status": "ready_for_finops",
+  "revision": 1,
+  "artifact_sha256": "f372607a6d76810a21a2985d5b9e15815d9e356f3d303b5de5ddda2048b6a3fc",
+  "selected_baselines": [
+    "s3"
+  ],
+  "files": [
+    "adrs.md",
+    "architecture-package.json",
+    "architecture.md",
+    "architecture.mmd",
+    "handoff-finops.json",
+    "pricing-inputs.json",
+    "requirements.md",
+    "security.md"
+  ],
+  "output": "C:\\Users\\USUARIO\\Documents\\GitHub\\MultiAgent\\aws-cloud-consultant-agent\\project\\backend\\data\\architecture-demo",
+  "terraform_generated": false,
+  "aws_credentials_used": false
+}
