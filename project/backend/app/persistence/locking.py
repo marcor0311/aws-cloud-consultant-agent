@@ -34,10 +34,6 @@ class LocalWorkerLock:
 
     @contextmanager
     def hold(self):
-        # Reports and HTTP imports do not start a worker. Load its POSIX-only
-        # lock when it is actually requested, so those tools also run on Windows.
-        import fcntl
-
         if getattr(self.local, "active", False):
             yield
             return

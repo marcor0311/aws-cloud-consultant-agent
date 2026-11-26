@@ -147,7 +147,7 @@ def create_server(service, runtime=None):
             service.resume, expediente_id, "revise_speaker_notes", guion, revision
         )
 
-    if service.package_model is ExecutivePackage:
+    if service is not None and service.package_model is ExecutivePackage:
         server.tool()(registrar_archivos_presentacion)
         server.tool()(guardar_guion_revisado)
 
