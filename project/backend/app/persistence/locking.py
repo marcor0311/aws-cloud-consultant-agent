@@ -1,6 +1,5 @@
 """One local worker per SQL database, even when several entry points are open."""
 
-import fcntl
 import hashlib
 import os
 import tempfile
@@ -30,6 +29,10 @@ class LocalWorkerLock:
 
     @contextmanager
     def hold(self):
+        # Reports and HTTP imports do not start a worker. Load its POSIX-only
+        # lock when it is actually requested, so those tools also run on Windows.
+        import fcntl
+
         if getattr(self.local, "active", False):
             yield
             return

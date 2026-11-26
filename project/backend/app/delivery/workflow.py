@@ -228,6 +228,10 @@ class DeliveryWorkflow:
 
 
 def public_result(row):
+    if row["request"].get("kind") == "case_report":
+        from app.delivery.report import case_result
+
+        return case_result(row)
     handoff = row["handoff"]
     timings = (
         [PhaseTiming.model_validate(t) for t in handoff["timings"]] if handoff else []

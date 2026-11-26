@@ -14,17 +14,27 @@ import psycopg
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from mcp.server.mcpserver.exceptions import ToolError
 from psycopg import sql
-from psycopg.conninfo import make_conninfo
+from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from pydantic import ValidationError
 from pypdf import PdfReader
+from sqlalchemy import URL
 
-from app.api.delivery import configured_repository, repository, review_router, router
+from app.api.delivery import (
+    case_report_service,
+    configured_repository,
+    repository,
+    review_router,
+    router,
+)
+from app.bootstrap import create_report_runtime
 from app.delivery.mcp import create_server
 from app.delivery.metrics import calculate_metrics
 from app.delivery.models import DemoRequest, EmulatorEvidence, PhaseTiming
 from app.delivery.workflow import DeliveryWorkflow
 from app.persistence.delivery import DeliveryBusy, PostgresRepository
+from app.persistence.workflow import WorkflowStore
 
 
 @pytest.fixture
@@ -390,6 +400,212 @@ def test_report_revision_approval_and_close(
     (output / "report-decisions.json").write_text(
         json.dumps(history, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
+
+    # Continue the existing report journey with an independent case and measured
+    # workflow records. No engineering node or cloud simulation may execute here.
+    settings = conninfo_to_dict(repo.dsn)
+    workflow_url = URL.create(
+        "postgresql+psycopg",
+        username=settings.get("user"),
+        password=settings.get("password"),
+        host=settings.get("host"),
+        port=int(settings.get("port", "5432")),
+        database=settings.get("dbname"),
+        query={"options": settings["options"]},
+    ).render_as_string(hide_password=False)
+    clock = [1700000000.0]
+    workflow = WorkflowStore(workflow_url, clock=lambda: clock[0])
+    manager = "Operador de demostración"
+    case_id = "issue22-independent"
+    runtime = create_report_runtime(repo.dsn, workflow_url, manager)
+    runtime.service.sources.store.clock = lambda: clock[0]
+    try:
+        workflow.register_project(
+            case_id,
+            request.project_id,
+            request.project_name,
+            "Empresa ficticia",
+            manager,
+            is_fictitious=True,
+        )
+        workflow.put(
+            f"opening:{case_id}",
+            "opening",
+            {
+                "budget": {"currency": "USD", "total": "100.00"},
+                "is_fictitious": True,
+                "approval_reference": "Decisión ficticia del recorrido de informe",
+            },
+        )
+        workflow.phase(case_id, "stage-1", manager)
+        parent = workflow.start_work(case_id, "stage-1", manager, "human")
+        clock[0] += 5
+        detail = workflow.start_work(case_id, "preparation", manager, "human")
+        clock[0] += 5
+        workflow.stop_work(detail, manager)
+        clock[0] += 5
+        workflow.stop_work(parent, manager)
+        workflow.create_handoff(
+            "report-input",
+            case_id,
+            manager,
+            manager,
+            "stage-1",
+            "stage-2",
+            revision=1,
+            artifact_sha256="a" * 64,
+        )
+        clock[0] += 5
+        workflow.accept_handoff("report-input", manager)
+        workflow.phase(case_id, "stage-3", manager)
+        human = workflow.start_work(case_id, "stage-3", manager, "human")
+        clock[0] += 10
+        agent = workflow.start_work(case_id, "stage-3", "architect-agent", "agent")
+        clock[0] += 10
+        workflow.stop_work(human, manager)
+        clock[0] += 5
+        workflow.stop_work(agent, "architect-agent")
+        clock[0] += 15
+        workflow.complete_phase(case_id, "stage-3")
+        workflow.event(
+            "revision-requested",
+            case_id,
+            "process.transition",
+            {"kind": "stage.changes_requested", "actor": manager},
+        )
+        service = runtime.service
+        client.app.dependency_overrides[case_report_service] = lambda: service
+
+        def forbidden_engineering(*args, **kwargs):
+            pytest.fail("El informe por expediente no debe ejecutar ingeniería")
+
+        monkeypatch.setattr(DeliveryWorkflow, "run", forbidden_engineering)
+        case_input = {"report_id": str(uuid4()), "case_id": case_id}
+        initial = client.post("/api/delivery/reports", json=case_input)
+        assert initial.status_code == 200, initial.text
+        captured = initial.json()
+        assert captured["handoff"] is None
+        assert captured["closure_blockers"]
+        phases = {p["phase"]: p for p in captured["metrics"]["phases"]}
+        assert (
+            phases["discovery"]["process_time_seconds"] == 15
+        )  # No nested double count.
+        assert phases["architecture"]["lead_time_seconds"] == 40
+        assert phases["architecture"]["process_time_seconds"] == 35
+        assert phases["architecture"]["active_elapsed_seconds"] == 25
+        assert phases["architecture"]["unclassified_seconds"] == 15
+        assert phases["architecture"]["wait_seconds"] is None
+        assert phases["architecture"]["rework_effort_seconds"] is None
+        assert phases["finops"]["process_time_seconds"] is None
+        assert captured["metrics"]["handoffs"][0]["wait_seconds"] == 5
+        assert captured["metrics"]["process_rework_cycles"] == 1
+        clock[0] += 100
+        assert client.post("/api/delivery/reports", json=case_input).json() == captured
+
+        case_url = f"/api/delivery/runs/{case_input['report_id']}"
+        draft = captured["report"]
+        changed = client.post(
+            f"{case_url}/report/decisions",
+            json=decision(draft, "request_changes", "Precisar siguientes pasos"),
+        )
+        assert changed.status_code == 200
+        revise = decision(draft, "revise", "Corrección de secciones")
+        revise["sections"] = {
+            "results": "Resultados revisados desde el expediente.",
+            "next_steps": "Esperar la entrega aprobada del issue 21.",
+        }
+        revised = client.post(f"{case_url}/report/decisions", json=revise).json()[
+            "report"
+        ]
+        assert revised["version"] == 2
+        assert revised["sections"]["results"] == revise["sections"]["results"]
+        assert (
+            client.post(
+                f"{case_url}/report/decisions",
+                json=decision(draft, "approve", "Versión antigua"),
+            ).status_code
+            == 409
+        )
+        approved = client.post(
+            f"{case_url}/report/decisions",
+            json=decision(revised, "approve", "Aprobado como informe parcial"),
+        ).json()
+        blocked = client.post(
+            f"{case_url}/report/decisions",
+            json=decision(revised, "record_presentation", "Sesión registrada"),
+        )
+        assert blocked.status_code == 409
+        assert "#21" in blocked.json()["detail"]
+        assert (
+            workflow.get(f"process:{case_id}") is None
+        )  # Never fabricate a completed process.
+        assert len(repo.report_decisions(case_input["report_id"])) == 3
+        file = approved["report"]["approved_document"]
+        data = client.get(f"{case_url}/artifacts/{file['artifact_id']}").content
+        text = "\n".join(p.extract_text() for p in PdfReader(BytesIO(data)).pages)
+        assert "Resultados revisados desde el expediente." in text
+        assert "BORRADOR" not in text
+        assert "INFORME PARCIAL APROBADO" in text
+        assert "Sin medición" in text
+        assert "Entrega técnica pendiente" not in text  # Replaced, not appended.
+        assert (
+            client.get(
+                f"{case_url}/artifacts/{draft['artifact']['artifact_id']}"
+            ).status_code
+            == 200
+        )
+        (output / "informe-expediente-parcial.pdf").write_bytes(data)
+
+        # The same MCP tool consumes a persisted demo handoff, without rerunning it.
+        async def verify_case_mcp():
+            server = create_server(repo, manager, service)
+            linked_input = {
+                **case_input,
+                "report_id": str(uuid4()),
+                "engineering_delivery_id": payload["delivery_id"],
+            }
+            response = await server.call_tool(
+                "generar_informe", {"entrada": linked_input}
+            )
+            linked = response.structured_content
+            assert linked["handoff"]["handoff_id"] == handoff["handoff_id"]
+            assert linked["report"]["handoff_id"] == handoff["handoff_id"]
+            assert len(linked["closure_blockers"]) >= 2
+            ref = linked["report"]["sources"]
+            resource = list(
+                await server.read_resource(
+                    f"delivery://sources/{linked['delivery_id']}/{ref['artifact_id']}"
+                )
+            )[0]
+            raw = (
+                resource.content.encode()
+                if isinstance(resource.content, str)
+                else resource.content
+            )
+            assert sha256(raw).hexdigest() == ref["sha256"]
+            assert json.loads(raw)["technical"]["project_id"] == request.project_id
+            (output / "fuentes-informe-expediente.json").write_bytes(raw)
+            pdf_resource = list(await server.read_resource(linked["pdf_uri"]))[0]
+            (output / "informe-expediente-con-entrega.pdf").write_bytes(
+                pdf_resource.content
+            )
+            other = create_server(repo, "Otro operador")
+            with pytest.raises(ToolError, match="otro responsable"):
+                await other.call_tool(
+                    "consultar_informe", {"entrega_id": linked["delivery_id"]}
+                )
+            return linked
+
+        linked = asyncio.run(verify_case_mcp())
+        assert linked["captured_at"] != captured["captured_at"]
+        monkeypatch.setenv("DELIVERY_ENGAGEMENT_MANAGER", "Otro operador")
+        assert client.get(f"{case_url}/report").status_code == 403
+        assert (
+            client.get(f"{case_url}/artifacts/{file['artifact_id']}").status_code == 403
+        )
+    finally:
+        runtime.close()
+        workflow.engine.dispose()
 
 
 def test_missing_input_is_422(client, payload):

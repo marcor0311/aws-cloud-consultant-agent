@@ -33,3 +33,12 @@ Se eliminaron los casos unitarios, variantes y pruebas individuales de adaptador
 formatos, UI, archivos y estructura interna. No añadirlos de nuevo para cada cambio:
 actualizar el recorrido que ya cubre la integración. Ampliar solo por una conexión
 nueva o un fallo real que estos recorridos no detecten.
+
+El recorrido de revisión del informe ya existente en
+`tests/test_delivery.py::test_report_revision_approval_and_close` también comprueba
+el informe independiente por expediente: workflow y reportes en PostgreSQL aislado,
+fuentes congeladas, métricas de intervalos superpuestos, generación sin ingeniería,
+corrección de secciones, revisión exacta, descarga MCP y bloqueo del cierre parcial.
+Se conserva en el job dedicado de delivery; no añade casos unitarios ni simulaciones
+cloud a `make test`. Requiere `DELIVERY_TEST_DATABASE_URL`; una omisión no acredita
+la integración. El PDF del recorrido se exporta para inspección visual.
