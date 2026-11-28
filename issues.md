@@ -105,7 +105,7 @@ flowchart TB
         end
         subgraph baselines["Repo de baseline modules"]
             agenteBaselines["Agente de baselines<br/>Codex"]
-            cambios["Crear, modificar o eliminar módulos<br/>Pruebas y PR"]
+            cambios["Crear, modificar o eliminar módulos<br/>Validación con AWS Emulator y PR"]
             aprobacionBaseline["Arquitecto aprueba el PR"]
             catalogo["Catálogo y módulos versionados"]
             agenteBaselines --> cambios --> aprobacionBaseline --> catalogo
@@ -148,6 +148,8 @@ flowchart TB
 - [ ] Trabajar con el agente del repo del proyecto para documentar requisitos, plan, **diagrama de arquitectura AWS como código**, ADRs con tradeoffs, **políticas como código** y estimación inicial.
 - [ ] Consultar directamente el catálogo, código, documentación y versiones de baselines mediante GitHub MCP para seleccionar los módulos de la arquitectura.
 - [ ] Crear, modificar o eliminar módulos en `aws-cloud-consultant-baseline-modules` con su propio agente, pruebas, revisión del impacto en consumidores y PR.
+- [ ] El agente de baselines prepara AWS Emulator por su cuenta en el repo de baselines. Instala la [skill oficial `aws-emulator`](https://docs.aws.amazon.com/emulator/latest/userguide/getting-started-agent.html) y el emulador cuando falten, usa una versión fijada y configura Terraform y el SDK con endpoints locales y credenciales de prueba.
+- [ ] Antes de abrir cada PR de alta o cambio, valida los perfiles afectados del módulo con `terraform plan`, `apply`, una comprobación funcional y `destroy` en AWS Emulator. Limpia los recursos de prueba incluso ante fallos y adjunta al PR la versión, los resultados y las limitaciones de cobertura. Mantén las pruebas existentes de Terraform con proveedores simulados.
 - [ ] Los PRs de arquitectura y baselines requieren la aprobación del arquitecto.
 - [ ] El agente de Codex abre el PR de arquitectura al terminar el diseño y solicita la revisión del arquitecto, apoyándose en las herramientas AWS habilitadas.
 - [ ] Atender los issues de corrección abiertos por el agente FinOps. Actualizar los módulos y los documentos afectados, mantener coherentes el diagrama, las versiones, los supuestos y los costos, y solicitar la aprobación del arquitecto.
