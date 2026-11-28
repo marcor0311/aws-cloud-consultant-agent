@@ -111,7 +111,6 @@ flowchart TB
             agenteBaselines --> cambios --> aprobacionBaseline --> catalogo
         end
         arquitecto -.-> agenteProyecto
-        arquitecto -.-> agenteBaselines
         agenteProyecto <-->|GitHub MCP| catalogo
         diseno --> pr["El agente abre el PR de arquitectura"]
         pr --> aprobacion["Arquitecto revisa y aprueba"]
@@ -121,6 +120,8 @@ flowchart TB
         classDef handoff fill:#ecfdf5,stroke:#059669,color:#064e3b;
         class arquitecto inicio;
         class entrega handoff;
+        style proyecto stroke:#94a3b8;
+        style baselines stroke:#94a3b8;
     end
     style lienzo fill:#ffffff,stroke:#ffffff,stroke-width:128px;
 ```
